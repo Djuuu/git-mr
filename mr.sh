@@ -98,6 +98,15 @@ function print_mr_description
     local issue_key=$(extract_json_value "key" "$issue_content")
     local issue_title=$(extract_json_value "summary" "$issue_content")
 
+    if [ -z "$issue_key" ]; then
+        issue_key=${ISSUE_CODE^^}
+    fi
+    if [ -z "$issue_title" ]; then
+        echo "Unable to get issue title from Jira" >&2
+        echo "$issue_content" >&2
+        echo
+    fi
+
     local mr_title="${issue_key} ${issue_title}"
     local issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
 

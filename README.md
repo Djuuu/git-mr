@@ -11,7 +11,7 @@ mr.sh [issue_code] [base_branch]
 or
 
 ```bash
-git mr issue_code [base_branch]
+git mr [issue_code] [base_branch]
 ```
 
 ## Installation
