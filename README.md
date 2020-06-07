@@ -5,13 +5,13 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ## Usage
 
 ```bash
-mr.sh issue_code
+mr.sh issue_code [base_branch]
 ```
 
 or
 
 ```bash
-git mr issue_code
+git mr issue_code [base_branch]
 ```
 
 ## Installation

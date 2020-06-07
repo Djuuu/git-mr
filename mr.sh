@@ -10,7 +10,7 @@ function usage
 
 USAGE
 
-    mr issue_code
+    mr issue_code [base_branch]
 
 INSTALLATION
 
@@ -61,9 +61,21 @@ function extract_json_value
 function get_commits
 {
     local current_branch=$(git rev-parse --abbrev-ref HEAD)
-    local base_commit=$(git show-branch  --merge-base)
 
-    git log --oneline --reverse --no-decorate ${base_commit}..HEAD
+    # Base branch param
+    local base_branch=$BASE_BRANCH
+
+    # Nearest branch in commit history
+    if [ -z "$base_branch" ]; then
+        local base_branch=$(git show-branch | grep '*' | grep -v "${current_branch}" | head -n1 | sed 's/.*\[\(.*\)\].*/\1/' | sed 's/[\^~].*//')
+    fi
+
+    # First possible merge base
+    if [ -z "$base_branch" ]; then
+        base_branch=$(git show-branch  --merge-base | head -n1)
+    fi
+
+    git log --oneline --reverse --no-decorate ${base_branch}..${current_branch}
 }
 
 function print_mr_description
@@ -98,6 +110,7 @@ EOF
 # Run
 
 ISSUE_CODE=$1
+BASE_BRANCH=$2
 
 if [ -z "$JIRA_USER" ];     then echo "JIRA_USER not set"      >&2; usage; exit 1; fi
 if [ -z "$JIRA_INSTANCE" ]; then echo "JIRA_INSTANCE not set"  >&2; usage; exit 2; fi
