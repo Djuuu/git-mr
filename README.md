@@ -5,7 +5,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ## Usage
 
 ```bash
-mr.sh issue_code [base_branch]
+mr.sh [issue_code] [base_branch]
 ```
 
 or
@@ -37,6 +37,7 @@ You need to configure the following environment variables:
 export JIRA_USER="user.name@mycompany.com"
 export JIRA_INSTANCE="mycompany.atlassian.net"
 export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
+export JIRA_CODE_PATTERN="XY-[0-9]+"
 ```
 
 To create a Jira API Token, go to:

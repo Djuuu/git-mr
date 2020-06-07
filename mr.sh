@@ -10,7 +10,7 @@ function usage
 
 USAGE
 
-    mr issue_code [base_branch]
+    mr [issue_code] [base_branch]
 
 INSTALLATION
 
@@ -32,11 +32,24 @@ CONFIGURATION
         export JIRA_USER="user.name@mycompany.com"
         export JIRA_INSTANCE="mycompany.atlassian.net"
         export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
+        export JIRA_CODE_PATTERN="XY-[0-9]+"
 
     To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
     (Account Settings -> Security -> API Token -> Create and manage API tokens)
 
 EOF
+}
+
+function guess_issue_code
+{
+    if [ -z "$JIRA_CODE_PATTERN" ]; then
+        echo "JIRA_CODE_PATTERN not set" >&2;
+        return
+    fi
+
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    echo $(echo "${current_branch}" | grep -iEo $JIRA_CODE_PATTERN | tail -n1)
 }
 
 function get_jira_ticket_data
@@ -109,13 +122,13 @@ EOF
 ################################################################################
 # Run
 
-ISSUE_CODE=$1
+ISSUE_CODE=${1:-$(guess_issue_code)}
 BASE_BRANCH=$2
 
-if [ -z "$JIRA_USER" ];     then echo "JIRA_USER not set"      >&2; usage; exit 1; fi
-if [ -z "$JIRA_INSTANCE" ]; then echo "JIRA_INSTANCE not set"  >&2; usage; exit 2; fi
-if [ -z "$JIRA_TOKEN" ];    then echo "JIRA_TOKEN not set"     >&2; usage; exit 3; fi
-if [ -z "$ISSUE_CODE" ];    then echo "No issue code provided" >&2; usage; exit 4; fi
+if [ -z "$JIRA_USER" ];     then echo "JIRA_USER not set"          >&2; usage; exit 1; fi
+if [ -z "$JIRA_INSTANCE" ]; then echo "JIRA_INSTANCE not set"      >&2; usage; exit 2; fi
+if [ -z "$JIRA_TOKEN" ];    then echo "JIRA_TOKEN not set"         >&2; usage; exit 3; fi
+if [ -z "$ISSUE_CODE" ];    then echo "Unable to guess issue code" >&2; usage; exit 4; fi
 
 case $1 in
     help) usage ;;
