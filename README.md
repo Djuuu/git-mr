@@ -14,6 +14,15 @@ or
 git mr [issue_code] [base_branch]
 ```
 
+
+When `JIRA_CODE_PATTERN` is set in the environment, Jira issue code can be guessed from the git branch name:
+```bash
+JIRA_CODE_PATTERN="XY-[0-9]+"
+```
+`feature/xy-1234-my-feature-branch` -> `XY-1234`
+
+When not provided, base branch is guessed from commit history (first commit in current branch history also having a branch).
+
 ## Installation
 
 ### As a standalone script:
@@ -43,3 +52,25 @@ export JIRA_CODE_PATTERN="XY-[0-9]+"
 To create a Jira API Token, go to:
 * https://id.atlassian.com/manage-profile/security/api-tokens<br>
   (Account Settings -> Security -> API Token -> Create and manage API tokens)
+
+## Sample output
+
+```bash
+git mr
+```
+```
+--------------------------------------------------------------------------------
+
+# [XY-1234 Sample git mr output](https://mycompany.atlassian.net/browse/XY-1234)
+
+
+## Commits
+
+* **f485f6e Init**<br>
+* **f09ea0d readme**<br>
+* **0545488 Base branch determination improvement**<br>
+* **8d39347 Guess issue code from branch**<br>
+* **6e381cd Jira error case**<br>
+
+--------------------------------------------------------------------------------
+```
