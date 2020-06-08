@@ -80,7 +80,20 @@ function get_commits
 
     # Nearest branch in commit history
     if [ -z "$base_branch" ]; then
-        local base_branch=$(git show-branch | grep '*' | grep -v "${current_branch}" | head -n1 | sed 's/.*\[\(.*\)\].*/\1/' | sed 's/[\^~].*//')
+        # selects only commits with a branch or tag
+        # removes current head (and branch)
+        # selects only the closest decoration
+        # filters out everything but decorations
+        # splits decorations
+        # ignore "tag: ...", "origin/..." and ".../HEAD"
+        # keep only first decoration
+        local base_branch=$(git log --decorate --simplify-by-decoration --oneline \
+            | grep -v "(HEAD"            \
+            | head -n1                   \
+            | sed 's/.* (\(.*\)) .*/\1/' \
+            | sed -e 's/, /\n/g'         \
+            | grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' \
+            | head -n1)
     fi
 
     # First possible merge base
