@@ -47,11 +47,18 @@ export JIRA_USER="user.name@mycompany.com"
 export JIRA_INSTANCE="mycompany.atlassian.net"
 export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
 export JIRA_CODE_PATTERN="XY-[0-9]+"
+
+export GITLAB_DOMAIN="myapp.gitlab.com"
+export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 ```
 
 To create a Jira API Token, go to:
 * https://id.atlassian.com/manage-profile/security/api-tokens<br>
   (Account Settings -> Security -> API Token -> Create and manage API tokens)
+  
+To create a Gitlab API Token, go to:
+* https://myapp.gitlab.com/profile/personal_access_tokens<br>
+  (Settings -> Access Tokens)
 
 ## Sample output
 
@@ -73,4 +80,9 @@ git mr
 * **6e381cd Jira error case**<br>
 
 --------------------------------------------------------------------------------
+
+To create a new merge request:
+
+    https://myapp.gitlab.com/my/project/merge_requests/new?merge_request%5Bsource_branch%5D=feature/whatever&merge_request%5Btarget_branch%5D=develop
+
 ```
