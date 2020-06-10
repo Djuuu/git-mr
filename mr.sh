@@ -77,7 +77,7 @@ function extract_json_value
     local key=$1
     local content=$2
 
-    echo $content | grep -Po '"'${key}'"\s*:\s*"\K.*?[^\\]"' | perl -pe 's/\\"/"/g; s/"$//'
+    echo $content | grep -Po '"'${key}'"\s*:\s*"\K.*?[^\\]"' | sed 's/\\"/"/g' | sed 's/"$//'
 }
 
 function get_git_current_branch
