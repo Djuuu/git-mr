@@ -55,11 +55,13 @@ function guess_issue_code
 
     local current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-    echo $(echo "${current_branch}" | grep -iEo $JIRA_CODE_PATTERN | tail -n1)
+    echo "${current_branch}" | grep -iEo $JIRA_CODE_PATTERN | tail -n1
 }
 
 function get_jira_ticket_data
 {
+    if [ -z "$JIRA_USER" ] || [ -z "$JIRA_TOKEN" ] || [ -z "$JIRA_INSTANCE" ]; then return; fi
+
     local auth_token=$(echo -n ${JIRA_USER}:${JIRA_TOKEN} | base64 -w 0)
     local issue_url="https://${JIRA_INSTANCE}/rest/api/3/issue/${1}?fields=summary"
 
@@ -125,7 +127,6 @@ function get_git_commits
 # https://gist.github.com/cdown/1163649
 function urlencode
 {
-    # urlencode <string>
     old_lc_collate=$LC_COLLATE
     LC_COLLATE=C
 
@@ -186,29 +187,45 @@ function get_gitlab_new_merge_request_url
 
 function print_mr_description
 {
-    ### Jira issue - title
-
-    local issue_content=$(get_jira_ticket_data $ISSUE_CODE)
-
-    local issue_key=$(extract_json_value "key" "$issue_content")
-    local issue_title=$(extract_json_value "summary" "$issue_content")
-
-    if [ -z "$issue_key" ]; then
-        issue_key=${ISSUE_CODE^^}
-    fi
-    if [ -z "$issue_title" ]; then
-        echo "Unable to get issue title from Jira" >&2
-        echo "$issue_content" >&2
-        echo
-    fi
-
-    local mr_title="${issue_key} ${issue_title}"
-    local issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
-
-    ### Commits
-
     local current_branch=$(get_git_current_branch)
     local base_branch=$(get_git_base_branch)
+
+    ### Jira issue - title
+
+    local mr_name=${current_branch}
+    local issue_url
+    local mr_title
+
+    if [ ! -z "$ISSUE_CODE" ]; then
+        local issue_content=$(get_jira_ticket_data $ISSUE_CODE)
+
+        local issue_key=$(extract_json_value "key" "$issue_content")
+        local issue_title=$(extract_json_value "summary" "$issue_content")
+
+        if [ -z "$issue_key" ]; then
+            issue_key=${ISSUE_CODE^^}
+        fi
+
+        mr_name="${issue_key}"
+
+        if [ ! -z "$issue_title" ]; then
+            mr_name="${mr_name} ${issue_title}"
+            issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
+        else
+            echo "Unable to get issue title from Jira" >&2
+            if [ ! -z "$issue_content" ]; then
+                echo "  $issue_content" >&2
+            fi
+        fi
+    fi
+
+    if [ ! -z "$issue_url" ]; then
+        mr_title="[${mr_name}](${issue_url})"
+    else
+        mr_title=${mr_name}
+    fi
+
+    ### Commits
 
     local commits=$(get_git_commits ${current_branch} ${base_branch})
 
@@ -218,15 +235,11 @@ function print_mr_description
     commits=$(echo "$commits" | sed "s/^/${commit_prefix}/g")
     commits=$(echo "$commits" | sed "s/$/${commit_suffix}/g")
 
-    ### Gitlab merge request
-
-    local mr_url=$(get_gitlab_merge_request_url ${current_branch})
-    local new_mr_url=$(get_gitlab_new_merge_request_url ${current_branch} ${base_branch})
-
     cat << EOF
+
 --------------------------------------------------------------------------------
 
-# [${mr_title}](${issue_url})
+# ${mr_title}
 
 
 ## Commits
@@ -234,22 +247,29 @@ function print_mr_description
 ${commits}
 
 --------------------------------------------------------------------------------
+
 EOF
 
-    if [ ! -z "${mr_url}" ]; then
-        cat << EOF
+    ### Gitlab merge request
 
-Merge request:
+    local current_mr_url=$(get_gitlab_merge_request_url ${current_branch})
+    local new_mr_url=$(get_gitlab_new_merge_request_url ${current_branch} ${base_branch})
+    local mr_url_label
+    local mr_url
+
+    if [ ! -z "${current_mr_url}" ]; then
+        mr_url_label="Merge request:"
+        mr_url=$current_mr_url
+    elif [ ! -z "${new_mr_url}" ]; then
+        mr_url_label="To create a new merge request:"
+        mr_url=$new_mr_url
+    fi
+
+    if [ ! -z "$mr_url_label" ]; then
+        cat << EOF
+${mr_url_label}
 
   ${mr_url}
-
-EOF
-    elif [ ! -z "${new_mr_url}" ]; then
-        cat << EOF
-
-To create a new merge request:
-
-  ${new_mr_url}
 
 EOF
     fi
@@ -262,13 +282,13 @@ EOF
 ISSUE_CODE=${1:-$(guess_issue_code)}
 BASE_BRANCH=$2
 
-if [ -z "$JIRA_USER" ];     then echo "JIRA_USER not set"          >&2; usage; exit 1; fi
-if [ -z "$JIRA_INSTANCE" ]; then echo "JIRA_INSTANCE not set"      >&2; usage; exit 2; fi
-if [ -z "$JIRA_TOKEN" ];    then echo "JIRA_TOKEN not set"         >&2; usage; exit 3; fi
-if [ -z "$ISSUE_CODE" ];    then echo "Unable to guess issue code" >&2; usage; exit 4; fi
 
-if [ -z "$GITLAB_DOMAIN" ]; then echo "GITLAB_DOMAIN not set" >&2; fi
-if [ -z "$GITLAB_TOKEN" ];  then echo "GITLAB_TOKEN not set"  >&2; fi
+if [ -z "$JIRA_USER" ];     then echo "JIRA_USER not set"          >&2; fi
+if [ -z "$JIRA_INSTANCE" ]; then echo "JIRA_INSTANCE not set"      >&2; fi
+if [ -z "$JIRA_TOKEN" ];    then echo "JIRA_TOKEN not set"         >&2; fi
+if [ -z "$ISSUE_CODE" ];    then echo "Unable to guess issue code" >&2; fi
+if [ -z "$GITLAB_DOMAIN" ]; then echo "GITLAB_DOMAIN not set"      >&2; fi
+if [ -z "$GITLAB_TOKEN" ];  then echo "GITLAB_TOKEN not set"       >&2; fi
 
 case $1 in
     help) usage ;;
