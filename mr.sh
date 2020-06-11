@@ -162,6 +162,16 @@ function get_gitlab_merge_request_url
             -H "Content-Type: application/json" \
             "${gitlab_base_url}/projects/${project_id}/merge_requests?state=opened&view=simple&source_branch=${source_branch}")
 
+    local error=$(extract_json_value "error" "${merge_requests}")
+    local message=$(extract_json_value "message" "${merge_requests}")
+
+    if [ ! -z "$error" ] || [ ! -z "$message" ]; then
+        echo "Gitlab error:"       >&2
+        echo "  ${merge_requests}" >&2
+        echo                       >&2
+        return
+    fi
+
     extract_json_value "web_url" "${merge_requests}"
 }
 
