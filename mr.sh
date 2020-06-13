@@ -209,6 +209,46 @@ function gitlab_merge_requests
     echo "$merge_requests"
 }
 
+function gitlab_merge_request
+{
+    if [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
+
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+    local project_id=$(urlencode $(gitlab_project_url))
+    local mr_iid=$1
+
+    if [ -z "$mr_iid" ]; then return; fi
+    if [ -z "$project_id" ]; then return; fi
+
+    local merge_request=$(curl -Ss -X GET \
+        --max-time 3 \
+        -H "Private-Token: ${GITLAB_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${gitlab_base_url}/projects/${project_id}/merge_requests/$mr_iid")
+
+    echo "$merge_request"
+}
+
+function gitlab_merge_request_notes
+{
+    if [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
+
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+    local project_id=$(urlencode $(gitlab_project_url))
+    local mr_iid=$1
+
+    if [ -z "$mr_iid" ]; then return; fi
+    if [ -z "$project_id" ]; then return; fi
+
+    local notes=$(curl -Ss -X GET \
+        --max-time 3 \
+        -H "Private-Token: ${GITLAB_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${gitlab_base_url}/projects/${project_id}/merge_requests/$mr_iid/notes")
+
+    echo "$notes"
+}
+
 function gitlab_merge_request_url
 {
     local source_branch=${1:-$(git_current_branch)}
@@ -356,6 +396,7 @@ function mr_actions
 
     local merge_requests=$(gitlab_merge_requests "$current_branch")
 
+    local current_mr_iid=$(extract_json_int "iid" "${merge_requests}")
     local current_mr_url=$(gitlab_merge_request_url ${current_branch} "$merge_requests")
 
     if [ ! -z "${current_mr_url}" ]; then
@@ -365,7 +406,10 @@ Merge request:
   ${current_mr_url}
 
 EOF
-    return
+
+        mr_status ${current_mr_iid}
+
+        return
     fi
 
     local new_mr_url=$(gitlab_new_merge_request_url ${current_branch} ${base_branch})
@@ -376,6 +420,47 @@ To create a new merge request:
   ${new_mr_url}
 
 EOF
+}
+
+function mr_status
+{
+    mr_iid=$1
+
+    local merge_request=$(gitlab_merge_request $mr_iid)
+
+    local upvotes=$(extract_json_int "upvotes" "$merge_request")
+    local downvotes=$(extract_json_int "downvotes" "$merge_request")
+    local state=$(extract_json_string "state" "$merge_request")
+    local merge_status=$(extract_json_string "merge_status" "$merge_request")
+
+    local merge_status_icon
+    if [ "$merge_status" = "can_be_merged" ]; then
+        merge_status_icon="\U00002705"; # white heavy check mark
+    else
+        merge_status_icon="\U0000274C"; # cross mark
+    fi
+
+    local notes=$(gitlab_merge_request_notes $mr_iid \
+        | sed 's/\\n//g' \
+        | sed 's/[^:]{"id":/\n\n\n{"id":/g')
+
+    local threads=$(echo "$notes" | grep '"resolvable":true')
+    local resolved=$(echo "$notes" | grep '"resolved":true')
+
+    local thread_count=$(echo "$threads" | wc -l)
+    local resolved_count=$(echo "$resolved" | wc -l)
+
+    if [ -z "$threads" ];  then thread_count=0;   fi
+    if [ -z "$resolved" ]; then resolved_count=0; fi
+
+    echo -en "    \U0001F44D  ${upvotes}"   # thumbs up
+    echo -en "    \U0001F44E  ${downvotes}" # thumbs down
+    if [ "$thread_count" -gt 0 ]; then
+        echo -n "        Resolved threads: ${resolved_count}/${thread_count}"
+    fi
+    echo -en "        Can be merged: $merge_status_icon"
+    echo
+    echo
 }
 
 function print_mr
