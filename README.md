@@ -50,6 +50,9 @@ export JIRA_CODE_PATTERN="XY-[0-9]+"
 
 export GITLAB_DOMAIN="myapp.gitlab.com"
 export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
+
+export GITLAB_DEFAULT_LABELS="Review,My Team"      # Default labels for new merge requests
+export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1 # Check "Delete source branch" by default
 ```
 
 To create a Jira API Token, go to:

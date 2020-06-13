@@ -63,6 +63,16 @@ function extract_json_string
         | sed 's/"$//'
 }
 
+function extract_json_int
+{
+    local key=$1
+    local content=$2
+
+    echo $content \
+        | grep -Po '"'${key}'"\s*:\s*\K.*?[,}]' \
+        | sed 's/[,}]$//'
+}
+
 # https://gist.github.com/cdown/1163649
 function urlencode
 {
@@ -207,6 +217,36 @@ function gitlab_merge_request_url
     extract_json_string "web_url" "${merge_requests}"
 }
 
+function gitlab_default_label_ids
+{
+    if [ ! -z "$GITLAB_DEFAULT_LABEL_IDS" ] || [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
+
+    local project_id=$(urlencode $(gitlab_project_url))
+
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+
+    local gitlab_labels=$(curl -Ss -X GET \
+        --max-time 3 \
+        -H "Private-Token: ${GITLAB_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "${gitlab_base_url}/projects/${project_id}/labels")
+
+    # split in multiple lines
+    gitlab_labels=$(echo "$gitlab_labels" | sed "s/},/},\n/g")
+
+    # extact ids
+    oIFS="$IFS"; IFS=','; read -ra default_labels <<< "$GITLAB_DEFAULT_LABELS"; IFS="$oIFS"; unset oIFS
+    for label in "${default_labels[@]}"; do
+
+        local label_row=$(echo "$gitlab_labels" | grep "\"name\":\"$label\"")
+        local label_id=$(extract_json_int "id" "$label_row")
+
+        if [ ! -z "$label_id" ]; then
+            echo "$label_id"
+        fi
+    done
+}
+
 function gitlab_new_merge_request_url
 {
     if [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
@@ -223,6 +263,16 @@ function gitlab_new_merge_request_url
 
     gitlab_mr_url="${gitlab_mr_url}?"$(urlencode "merge_request[source_branch]")"=${source_branch}"
     gitlab_mr_url="${gitlab_mr_url}&"$(urlencode "merge_request[target_branch]")"=${target_branch}"
+
+    # default labels
+    for label_id in $(gitlab_default_label_ids); do
+        gitlab_mr_url="${gitlab_mr_url}&"$(urlencode "merge_request[label_ids][]")"=${label_id}"
+    done
+
+    # other options
+    if [ ! -z "$GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH" ] && [ "$GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH" -gt 0 ]; then
+        gitlab_mr_url="${gitlab_mr_url}&"$(urlencode "merge_request[force_remove_source_branch]")"=1"
+    fi
 
     echo $gitlab_mr_url
 }
@@ -369,6 +419,9 @@ CONFIGURATION
 
         export GITLAB_DOMAIN="myapp.gitlab.com"
         export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
+
+        export GITLAB_DEFAULT_LABELS="Review,My Team"      # Default labels for new merge requests
+        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1 # Check "Delete source branch" by default
 
     To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
     (Account Settings -> Security -> API Token -> Create and manage API tokens)
