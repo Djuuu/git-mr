@@ -37,7 +37,7 @@ function git_base_branch
         base_branch=$(git show-branch  --merge-base | head -n1)
     fi
 
-    echo $base_branch
+    echo "$base_branch"
 }
 
 function git_commits
@@ -57,7 +57,7 @@ function extract_json_string
     local key=$1
     local content=$2
 
-    echo $content \
+    echo "$content" \
         | grep -Po '"'${key}'"\s*:\s*"\K.*?[^\\]"' \
         | sed 's/\\"/"/g' \
         | sed 's/"$//'
@@ -68,7 +68,7 @@ function extract_json_int
     local key=$1
     local content=$2
 
-    echo $content \
+    echo "$content" \
         | grep -Po '"'${key}'"\s*:\s*\K.*?[,}]' \
         | sed 's/[,}]$//'
 }
@@ -175,7 +175,7 @@ function gitlab_project_url
     local gitlab_remote=$(git remote get-url --push origin)
     local project_url=$(git remote get-url --push origin | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
 
-    echo $project_url
+    echo "$project_url"
 }
 
 function gitlab_merge_requests
@@ -214,7 +214,7 @@ function gitlab_merge_request
     if [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
 
     local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
-    local project_id=$(urlencode $(gitlab_project_url))
+    local project_id=$(urlencode "$(gitlab_project_url)")
     local mr_iid=$1
 
     if [ -z "$mr_iid" ]; then return; fi
@@ -314,7 +314,7 @@ function gitlab_new_merge_request_url
         gitlab_mr_url="${gitlab_mr_url}&"$(urlencode "merge_request[force_remove_source_branch]")"=1"
     fi
 
-    echo $gitlab_mr_url
+    echo "$gitlab_mr_url"
 }
 
 
@@ -338,7 +338,7 @@ function mr_title
     local current_branch=${1:-$(git_current_branch)}
 
     if [ -z "$ISSUE_CODE" ]; then
-        echo $current_branch
+        echo "$current_branch"
         return
     fi
 
@@ -358,13 +358,13 @@ function mr_title
             echo_error "  $issue_content"
         fi
 
-        echo $issue_key
+        echo "$issue_key"
         return
     fi
 
     issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
 
-    echo $(markdown_link "${issue_key} ${issue_title}" "$issue_url")
+    markdown_link "${issue_key} ${issue_title}" "$issue_url"
 }
 
 function mr_description
