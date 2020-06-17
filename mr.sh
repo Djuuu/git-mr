@@ -353,6 +353,7 @@ function mr_title
 
     if [ -z "$issue_title" ]; then
         echo_error "Unable to get issue title from Jira"
+        echo_error "  ISSUE_CODE: $ISSUE_CODE"
         if [ ! -z "$issue_content" ]; then
             echo_error "  $issue_content"
         fi
@@ -424,9 +425,8 @@ EOF
 
 function mr_status
 {
-    mr_iid=$1
-
-    local merge_request=$(gitlab_merge_request $mr_iid)
+    local mr_iid=$1
+    local merge_request=${2:-$(gitlab_merge_request $mr_iid)}
 
     local upvotes=$(extract_json_int "upvotes" "$merge_request")
     local downvotes=$(extract_json_int "downvotes" "$merge_request")
@@ -521,17 +521,24 @@ EOF
 ################################################################################
 # Run
 
-ISSUE_CODE=${1:-$(guess_issue_code)}
-BASE_BRANCH=$2
 
 if [ -z "$JIRA_USER" ];     then echo_error "JIRA_USER not set";          fi
 if [ -z "$JIRA_INSTANCE" ]; then echo_error "JIRA_INSTANCE not set";      fi
 if [ -z "$JIRA_TOKEN" ];    then echo_error "JIRA_TOKEN not set";         fi
-if [ -z "$ISSUE_CODE" ];    then echo_error "Unable to guess issue code"; fi
 if [ -z "$GITLAB_DOMAIN" ]; then echo_error "GITLAB_DOMAIN not set";      fi
 if [ -z "$GITLAB_TOKEN" ];  then echo_error "GITLAB_TOKEN not set";       fi
 
 case $1 in
-    help) usage ;;
-    *)    print_mr ;;
+    help)
+        usage
+        ;;
+
+    *)
+        ISSUE_CODE=${1:-$(guess_issue_code)}
+        BASE_BRANCH=$2
+
+        if [ -z "$ISSUE_CODE" ]; then echo_error "Unable to guess issue code"; fi
+
+        print_mr
+        ;;
 esac
