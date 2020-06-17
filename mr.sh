@@ -104,6 +104,20 @@ function echo_error
     printf "${orange}${1}${nocolor}\n" >&2
 }
 
+function jq_build
+{
+    local key=${1}
+    local value=${2}
+    local initial_data=${3:-"{}"}
+
+    local current_object="$(jq --null-input --compact-output \
+        --arg value "$value"   "{\"${key}\": \$value}")"
+
+    jq --null-input --compact-output \
+            --argjson initial_data "$initial_data"     \
+            --argjson current_object "$current_object" \
+            '$initial_data + $current_object'
+}
 
 ################################################################################
 # Markdown formatting
@@ -328,15 +342,26 @@ function gitlab_merge_request_update
     local project_id=$1
     local mr_iid=$2
     local description=$3
+    local new_target=$4
 
     if [ -z "$project_id" ];  then echo_error "No project_id provided";  return; fi
     if [ -z "$mr_iid" ];      then echo_error "No mr_iid provided";      return; fi
-    if [ -z "$description" ]; then echo_error "No description provided"; return; fi
 
+    local mr_data='{}'
 
-    local mr_data="$(jq --null-input --compact-output --arg description "$description" '{"description": $description}')"
+    if [ ! -z "$description" ]; then
+        mr_data=$(jq_build "description" "$description" "$mr_data")
+    fi
 
-    echo "Updating merge request !$mr_iid ..."
+    if [ ! -z "$new_target" ]; then
+        mr_data=$(jq_build "target_branch" "$new_target" "$mr_data")
+    fi
+
+    if [ "$mr_data" = "{}" ]; then
+        echo_error "Nothing to update"
+        echo
+        return
+    fi
 
     local result=$(curl -Ss -X PUT \
         --max-time 5 \
@@ -545,6 +570,8 @@ function print_mr_update
         | sed 's/\\\\/\\/g' \
     )
 
+    local current_target=$(extract_json_string "target_branch" "$merge_request")
+
     # Init commit lists
 
     local commit_messages=$(git_commits $current_branch $base_branch)
@@ -623,30 +650,42 @@ function print_mr_update
     echo
 
     # Propose update if changes are detected
+
+    local new_description
+    local new_target
+
     if [ "$updated_commit_count" -gt 0 ] || [ "$new_commit_count" -gt 0 ]; then
+        read -r -p "Do you want to update the merge request description? [y/N] " response
+        case "$response" in
+            [yY][eE][sS]|[yY])
+                new_description="$new_description_content"
+                if [ "$new_commit_count" -gt 0 ]; then
+                    new_description=$(echo -e "${new_description}")
+                    new_description=$(echo -e "\n\n${new_description}## Update")
+                    new_description=$(echo -e "\n\n${new_description}$(markdown_list "$new_commit_messages_content" "**")")
+                fi
+                new_description=$(echo -e "${new_description}\n ")
+                ;;
+        esac
+    fi
 
+    if [ "$base_branch" != "$current_target" ]; then
+        read -r -p "Do you want to update the merge request target branch from '$current_target' to '$base_branch'? [y/N] " response
+        case "$response" in
+            [yY][eE][sS]|[yY])
+                new_target="$base_branch"
+                ;;
+        esac
+    fi
+
+    if [ ! -z "$new_description" ] || [ ! -z "$new_target" ]; then
         if [ -x "$(command -v jq)" ]; then
-
-            read -r -p "Do you want to update the merge request description? [y/N] " response
-            case "$response" in
-                [yY][eE][sS]|[yY])
-
-                    if [ "$new_commit_count" -gt 0 ]; then
-                        new_description_content=$(echo -e "${new_description_content}\n\n")
-                        new_description_content=$(echo -e "${new_description_content}## Update\n\n")
-                        new_description_content=$(echo -e "${new_description_content}$(markdown_list "$new_commit_messages_content" "**")\n")
-                    fi
-                    new_description_content=$(echo -e "${new_description_content}\n")
-
-                    gitlab_merge_request_update "$project_id" "$current_mr_iid" "$new_description_content"
-                    ;;
-                *)
-                    echo
-                    ;;
-            esac
+            gitlab_merge_request_update "$project_id" "$current_mr_iid" "$new_description" "$new_target"
         else
             echo_error "Please install jq to be able to update merge request"
         fi
+    else
+        echo
     fi
 
     echo "--------------------------------------------------------------------------------"
