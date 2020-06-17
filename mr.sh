@@ -472,6 +472,120 @@ function print_mr
     mr_actions     $current_branch $base_branch
 }
 
+function print_mr_update
+{
+    local current_branch=$(git_current_branch)
+    local base_branch=${1:-$(git_base_branch)}
+
+    # Search existing merge request
+
+    local merge_requests=$(gitlab_merge_requests "$current_branch")
+
+    local project_id=$(urlencode $(gitlab_project_url))
+    local current_mr_iid=$(extract_json_int "iid" "${merge_requests}")
+    local current_mr_url=$(gitlab_merge_request_url ${current_branch} "$merge_requests")
+
+    if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
+        echo_error "Merge request not found"
+        ISSUE_CODE=$(guess_issue_code)
+        print_mr ${current_branch} ${base_branch}
+        return
+    fi
+
+    # Load existing merge request details
+
+    local merge_request=$(gitlab_merge_request $current_mr_iid)
+
+    local current_description=$(extract_json_string "description" "$merge_request" \
+        | sed 's/\\r//g' \
+        | sed 's/\\n/\n/g' \
+        | sed 's/\\u003c/</g' \
+        | sed 's/\\u003e/>/g' \
+        | sed 's/\\\\/\\/g' \
+    )
+
+    # Init commit lists
+
+    local commit_messages=$(git_commits $current_branch $base_branch)
+
+    local current_commits=$(echo "$commit_messages" | cut -d ' ' -f1)
+    local old_commits=$(echo "$current_description" \
+        | grep -Po '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' \
+        | sed -r 's/^[^0-9a-fA-F]*([0-9a-fA-F]{7,})\s/\1/g' \
+    )
+
+    local current_commits_array=($(echo "$current_commits" | tr "\n" " "))
+    local old_commits_array=($(echo "$old_commits" | tr "\n" " "))
+
+    local updated_commit_count=0
+    local new_commit_messages_display=()
+    local new_commit_messages_content=()
+
+    local new_description_display="$current_description"
+    local new_description_content="$current_description"
+
+    local green='\033[0;32m'
+    local orange='\033[0;33m'
+    local bblue='\033[0;94m'
+    local nocolor='\033[0m'
+
+    local sameColor="${bblue}"
+    local updatedColor="${orange}"
+    local newColor="${green}"
+
+    # Iterate over commit lists, compare sha-1 and update description
+    for i in ${!current_commits_array[*]}; do
+
+        local curr=${current_commits_array[$i]}
+        local old=${old_commits_array[$i]}
+
+        if [ ! -z "$old" ]; then
+            if [ "$old" = "$curr" ]; then
+                # same sha-1 - only decorate
+                new_description_display=$(echo "$new_description_display" | sed "s/${old}/\\${sameColor}${curr}\\${nocolor}/" )
+                new_description_content=$(echo "$new_description_content" | sed "s/${old}/${curr}/" )
+            else
+                # different sha-1 - replace & decorate
+                new_description_display=$(echo "$new_description_display" | sed "s/${old}/\\${updatedColor}${curr}\\${nocolor}/" )
+                new_description_content=$(echo "$new_description_content" | sed "s/${old}/${curr}/" )
+                updated_commit_count=$((updated_commit_count+1))
+            fi
+        else
+            # new commits
+            new_commit_messages_display+=("$(echo "$commit_messages" | grep "${curr}" | sed "s/${curr}/\\${newColor}${curr}\\${nocolor}/")")
+            new_commit_messages_content+=("$(echo "$commit_messages" | grep "${curr}" | sed "s/${curr}/${curr}/")")
+        fi
+    done
+
+    local new_commit_count=${#new_commit_messages_display[@]}
+
+    # implode arrays
+    new_commit_messages_display=$(printf "%s\n" "${new_commit_messages_display[@]}")
+    new_commit_messages_content=$(printf "%s\n" "${new_commit_messages_content[@]}")
+
+    # Print updated merge request description
+    echo
+    echo "-------------------------------------------------------------------"
+    echo -e "$new_description_display"
+    echo
+    echo
+    if [ "$new_commit_count" -gt 0 ]; then
+        echo "## Update"
+        echo
+        echo -e "$(markdown_list "$new_commit_messages_display" "**")"
+        echo
+    fi
+    echo "--------------------------------------------------------------------------------"
+    echo
+    echo -e "  updated commits: ${updatedColor}${updated_commit_count}${nocolor}"
+    echo -e "      new commits: ${newColor}${new_commit_count}${nocolor}"
+    echo
+
+    echo "--------------------------------------------------------------------------------"
+    echo
+    mr_actions $current_branch $base_branch
+}
+
 function usage
 {
     cat << EOF
@@ -479,6 +593,8 @@ function usage
 USAGE
 
     mr [issue_code] [base_branch]
+
+    mr update [base_branch]
 
 INSTALLATION
 
@@ -531,6 +647,10 @@ if [ -z "$GITLAB_TOKEN" ];  then echo_error "GITLAB_TOKEN not set";       fi
 case $1 in
     help)
         usage
+        ;;
+
+    update)
+        print_mr_update "${@:2}"
         ;;
 
     *)
