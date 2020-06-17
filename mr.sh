@@ -317,6 +317,47 @@ function gitlab_new_merge_request_url
     echo "$gitlab_mr_url"
 }
 
+function gitlab_merge_request_update
+{
+    if [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
+
+    command -v jq >/dev/null 2>&1 || { echo_error "Please install jq to be able to update merge request"; return; }
+
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+
+    local project_id=$1
+    local mr_iid=$2
+    local description=$3
+
+    if [ -z "$project_id" ];  then echo_error "No project_id provided";  return; fi
+    if [ -z "$mr_iid" ];      then echo_error "No mr_iid provided";      return; fi
+    if [ -z "$description" ]; then echo_error "No description provided"; return; fi
+
+
+    local mr_data="$(jq --null-input --compact-output --arg description "$description" '{"description": $description}')"
+
+    echo "Updating merge request !$mr_iid ..."
+
+    local result=$(curl -Ss -X PUT \
+        --max-time 5 \
+        -H "Private-Token: ${GITLAB_TOKEN}" \
+        -H "Content-Type: application/json" \
+        --data "${mr_data}" \
+        "${gitlab_base_url}/projects/${project_id}/merge_requests/${mr_iid}")
+
+    local error=$(extract_json_string "error" "${result}")
+    local message=$(extract_json_string "message" "${result}")
+
+    if [ ! -z "$error" ] || [ ! -z "$message" ]; then
+        echo_error "Gitlab error:"
+        echo_error "  ${result}"
+        echo_error
+        return
+    fi
+
+    echo "OK"
+    echo
+}
 
 ################################################################################
 # Merge request
@@ -580,6 +621,33 @@ function print_mr_update
     echo -e "  updated commits: ${updatedColor}${updated_commit_count}${nocolor}"
     echo -e "      new commits: ${newColor}${new_commit_count}${nocolor}"
     echo
+
+    # Propose update if changes are detected
+    if [ "$updated_commit_count" -gt 0 ] || [ "$new_commit_count" -gt 0 ]; then
+
+        if [ -x "$(command -v jq)" ]; then
+
+            read -r -p "Do you want to update the merge request description? [y/N] " response
+            case "$response" in
+                [yY][eE][sS]|[yY])
+
+                    if [ "$new_commit_count" -gt 0 ]; then
+                        new_description_content=$(echo -e "${new_description_content}\n\n")
+                        new_description_content=$(echo -e "${new_description_content}## Update\n\n")
+                        new_description_content=$(echo -e "${new_description_content}$(markdown_list "$new_commit_messages_content" "**")\n")
+                    fi
+                    new_description_content=$(echo -e "${new_description_content}\n")
+
+                    gitlab_merge_request_update "$project_id" "$current_mr_iid" "$new_description_content"
+                    ;;
+                *)
+                    echo
+                    ;;
+            esac
+        else
+            echo_error "Please install jq to be able to update merge request"
+        fi
+    fi
 
     echo "--------------------------------------------------------------------------------"
     echo
