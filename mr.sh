@@ -104,6 +104,16 @@ function echo_error
     printf "${orange}${1}${nocolor}\n" >&2
 }
 
+function confirm
+{
+    local question=$1
+    read -r -p "$question [y/N] " response
+    case "$response" in
+        [yY][eE][sS]|[yY]) echo "yes" ;;
+        *)                 echo "no" ;;
+    esac
+}
+
 function jq_build
 {
     local key=${1}
