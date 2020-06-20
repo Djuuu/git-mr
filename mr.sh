@@ -116,6 +116,11 @@ function confirm
 
 function jq_build
 {
+    if [ ! -x "$(command -v jq)" ]; then
+        echo_error "jq is required for this operation"
+        exit 1
+    fi
+
     local key=${1}
     local value=${2}
     local initial_data=${3:-"{}"}
@@ -768,6 +773,10 @@ if [ -z "$JIRA_INSTANCE" ]; then echo_error "JIRA_INSTANCE not set";      fi
 if [ -z "$JIRA_TOKEN" ];    then echo_error "JIRA_TOKEN not set";         fi
 if [ -z "$GITLAB_DOMAIN" ]; then echo_error "GITLAB_DOMAIN not set";      fi
 if [ -z "$GITLAB_TOKEN" ];  then echo_error "GITLAB_TOKEN not set";       fi
+
+if [ ! -x "$(command -v jq)" ]; then
+    echo_error "Please install jq for full actions support (update, merge, ...)."
+fi
 
 case $1 in
     help)
