@@ -5,23 +5,56 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ## Usage
 
 ```bash
-mr.sh [issue_code] [base_branch]
+[git] mr [issue_code] [base_branch]
 ```
 
-or
+This will print a merge request description, with a link to Jira ticket and current branch commit list.
+* `issue_code` can be guessed from the branch name according to `JIRA_CODE_PATTERN` 
+* `base_branch` is determined by going up the commit history and finding the first one attached to a branch 
+
+If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
+
+Otherwise, a link to create a new merge request will be provided. Default labels and "Delete source branch" status 
+can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH` environment variables.
+
+----------------------------------------------------------------
 
 ```bash
-git mr [issue_code] [base_branch]
+[git] mr update [base_branch]
 ```
 
+This will:
+* fetch and display the current merge request description from Gitlab.
+* compare the commit lists and update the SHA-1 references in the description
 
-When `JIRA_CODE_PATTERN` is set in the environment, Jira issue code can be guessed from the git branch name:
+If some commits were changed (after a rebase) or added, you will be prompted if you want to post the updated description to Gitlab.
+
+You can also update the source branche if it is different from the current one.  
+
+----------------------------------------------------------------
+
 ```bash
-JIRA_CODE_PATTERN="XY-[0-9]+"
+[git] mr unwip
 ```
-`feature/xy-1234-my-feature-branch` -> `XY-1234`
 
-When not provided, base branch is guessed from commit history (first commit in current branch history also having a branch).
+This will resolve the _Work in Progress_ status.
+
+----------------------------------------------------------------
+
+```bash
+[git] mr merge
+```
+
+This will:
+* check merge status
+* check open threads
+* check WiP status
+
+and if applicable, will prompt you to:
+* resolve WIP status
+* trigger the merge
+* checkout local target branch, update it and delete local merged branch
+
 
 ## Installation
 
