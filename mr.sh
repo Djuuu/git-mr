@@ -192,6 +192,22 @@ function gitlab_project_url
     echo "$project_url"
 }
 
+function gitlab_check_error
+{
+    local result=$1
+
+    local error=$(extract_json_string "error" "${result}")
+    local message=$(extract_json_string "message" "${result}")
+
+    if [ ! -z "$error" ] || [ ! -z "$message" ]; then
+        echo_error "Gitlab error:"
+        echo_error "  ${result}"
+        echo_error
+
+        echo "ko"
+    fi
+}
+
 function gitlab_merge_requests
 {
     if [ -z "$GITLAB_DOMAIN" ] || [ -z "$GITLAB_TOKEN" ]; then return; fi
@@ -210,15 +226,7 @@ function gitlab_merge_requests
         -H "Content-Type: application/json" \
         "${gitlab_base_url}/projects/${project_id}/merge_requests?state=opened&view=simple&source_branch=${source_branch}")
 
-    local error=$(extract_json_string "error" "${merge_requests}")
-    local message=$(extract_json_string "message" "${merge_requests}")
-
-    if [ ! -z "$error" ] || [ ! -z "$message" ]; then
-        echo_error "Gitlab error:"
-        echo_error "  ${merge_requests}"
-        echo_error
-        return
-    fi
+    if [ ! -z "$(gitlab_check_error "$merge_requests")" ]; then return; fi
 
     echo "$merge_requests"
 }
