@@ -913,16 +913,20 @@ USAGE
 
 INSTALLATION
 
-    As a standalone script:
+    Add the git-mr directory to your PATH
 
-        alias mr=/path/to/mr.sh
+        PATH="\${PATH}:/path/to/git-mr"
 
-    As a git alias:
+    OR
 
-        Define this alias in your .gitconfig:
+    Define it as a git alias:
 
-        [alias]
-            mr = "!bash /path/to/mr.sh"
+        git config --global alias.mr '!bash /path/to/git-mr/git-mr'
+
+        or edit your ~/.gitconfig directly:
+
+            [alias]
+                mr = "!bash /path/to/git-mr/git-mr"
 
 CONFIGURATION
 
