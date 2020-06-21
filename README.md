@@ -20,6 +20,14 @@ can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REM
 ----------------------------------------------------------------
 
 ```bash
+git mr open [issue_code] [base_branch]
+```
+
+Similar to `git mr`, but will open browser directly.
+
+----------------------------------------------------------------
+
+```bash
 git mr update [base_branch]
 ```
 

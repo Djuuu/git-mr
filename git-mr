@@ -134,6 +134,23 @@ function jq_build
             '$initial_data + $current_object'
 }
 
+function open_in_browser
+{
+    local url=$1
+
+    if [ -z "$url" ]; then
+        return;
+    fi
+
+    if [ ! -x "$(command -v xdg-open)" ]; then
+        echo "  ${url}"
+        echo
+        return;
+    fi
+
+    xdg-open "${url}" > /dev/null 2>&1
+}
+
 ################################################################################
 # Markdown formatting
 
@@ -733,6 +750,41 @@ function print_mr
     mr_actions     "$current_branch" "$base_branch"
 }
 
+function mr_open
+{
+    local current_branch=${1:-$(git_current_branch)}
+    local base_branch=${2:-$(git_base_branch)}
+
+    local merge_request_summary=${3}
+    if [ -z "$merge_request_summary" ]; then
+        merge_request_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    fi
+
+    local current_mr_url;
+    current_mr_url=$(gitlab_extract_url "$merge_request_summary")
+
+    if [ ! -z "${current_mr_url}" ]; then
+
+        local current_mr_iid;
+        current_mr_iid=$(extract_json_int "iid" "${merge_request_summary}")
+
+        echo
+        mr_status "${current_mr_iid}"
+
+        open_in_browser "${current_mr_url}"
+        return
+    fi
+
+    mr_description "$current_branch" "$base_branch"
+
+    local new_mr_url
+    new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
+
+    if [ ! -z "${new_mr_url}" ]; then
+        open_in_browser "${new_mr_url}"
+    fi
+}
+
 function mr_update
 {
     gitlab_check_env || exit $?
@@ -907,6 +959,8 @@ USAGE
 
     mr [issue_code] [base_branch]
 
+    mr open [issue_code] [base_branch]
+
     mr update [base_branch]
     mr merge
     mr unwip
@@ -967,6 +1021,13 @@ case $1 in
     update) mr_update "${@:2}" ;;
     merge)  gitlab_merge ;;
     unwip)  gitlab_unwip ;;
+
+    open)
+        ISSUE_CODE=${2:-$(guess_issue_code)}
+        BASE_BRANCH=$3
+
+        mr_open
+        ;;
 
     *)
         ISSUE_CODE=${1:-$(guess_issue_code)}
