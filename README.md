@@ -5,7 +5,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ## Usage
 
 ```bash
-[git] mr [issue_code] [base_branch]
+git mr [issue_code] [base_branch]
 ```
 
 This will print a merge request description, with a link to Jira ticket and current branch commit list.
@@ -20,7 +20,7 @@ can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REM
 ----------------------------------------------------------------
 
 ```bash
-[git] mr update [base_branch]
+git mr update [base_branch]
 ```
 
 This will:
@@ -34,7 +34,7 @@ You can also update the source branche if it is different from the current one.
 ----------------------------------------------------------------
 
 ```bash
-[git] mr unwip
+git mr unwip
 ```
 
 This will resolve the _Work in Progress_ status.
@@ -42,7 +42,7 @@ This will resolve the _Work in Progress_ status.
 ----------------------------------------------------------------
 
 ```bash
-[git] mr merge
+git mr merge
 ```
 
 This will:
@@ -58,19 +58,24 @@ and if applicable, will prompt you to:
 
 ## Installation
 
-### As a standalone script:
+* Add the `git-mr` directory to your `PATH`<br>
+  in one of your shell startup scripts:
+  ```bash
+  PATH="${PATH}:/path/to/git-mr"
+  ```
 
-```bash
-alias mr=/path/to/mr.sh
-```
+_OR_ 
 
-### As a git alias:
-
-Define this alias in your .gitconfig:
-```
-[alias]
-	mr = "!bash /path/to/mr.sh"
-```
+* Define it as a git alias:<br>
+  run:
+  ```bash
+  git config --global alias.mr '!bash /path/to/git-mr/git-mr'
+  ```
+  or edit your `~/.gitconfig` directly:
+  ```
+  [alias]
+  	mr = "!bash /path/to/git-mr/git-mr"
+  ```
 
 ## Configuration
 
