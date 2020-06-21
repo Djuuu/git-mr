@@ -151,6 +151,7 @@ function open_in_browser
     xdg-open "${url}" > /dev/null 2>&1
 }
 
+
 ################################################################################
 # Markdown formatting
 
@@ -409,8 +410,6 @@ function gitlab_default_label_ids
 {
     gitlab_check_env || exit $?
 
-    if [ ! -z "$GITLAB_DEFAULT_LABEL_IDS" ]; then return; fi
-
     local gitlab_labels; gitlab_labels=$(gitlab_request "labels")
 
     # split in multiple lines
@@ -592,6 +591,7 @@ function gitlab_merge
 
     echo
 }
+
 
 ################################################################################
 # Merge request
@@ -1005,6 +1005,7 @@ CONFIGURATION
 
 EOF
 }
+
 
 ################################################################################
 # Run
