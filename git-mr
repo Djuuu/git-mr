@@ -99,6 +99,21 @@ function echo_error
     printf "${orange}%s${nocolor}\n" "${1}" >&2
 }
 
+function echo_debug
+{
+    if [ -z "$GIT_MR_VERBOSE" ]; then return; fi
+
+    local gray
+    local nocolor
+
+    if which tput > /dev/null 2>&1 && [ ! -z "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
+        gray='\033[0;90m'
+        nocolor='\033[0m'
+    fi
+
+    printf "${gray}%s${nocolor}\n\n" "${1}" >&2
+}
+
 function confirm
 {
     local question=$1
@@ -204,6 +219,8 @@ function jira_ticket_data
 
     local issue_url="https://${JIRA_INSTANCE}/rest/api/3/issue/${1}?fields=summary"
 
+    echo_debug "Jira - GET ${issue_url}"
+
     curl -Ss -X GET \
         --max-time 5 \
         -H "Authorization: Basic ${auth_token}" \
@@ -255,6 +272,8 @@ function gitlab_request
     local request_url=$1
     local request_verb=${2:-"GET"}
     local request_data=${3}
+
+    echo_debug "GitLab - $request_verb $request_url"
 
     result=$(curl -Ss \
         -X "${request_verb}" \
@@ -1022,6 +1041,13 @@ EOF
 if [ ! -x "$(command -v jq)" ]; then
     echo_error "Please install jq for full actions support (update, merge, ...)."
 fi
+
+
+while getopts ":-:" optchar; do
+case "${OPTARG}" in
+    v|verbose) GIT_MR_VERBOSE=1; shift; ;;
+esac
+done
 
 
 case $1 in
