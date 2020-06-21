@@ -117,7 +117,7 @@ function jq_build
 {
     if [ ! -x "$(command -v jq)" ]; then
         echo_error "jq is required for this operation"
-        exit 1
+        exit 3
     fi
 
     local key=${1}
@@ -203,8 +203,8 @@ function jira_ticket_data
 
 function gitlab_check_env
 {
-    if [ -z "$GITLAB_DOMAIN" ]; then echo_error "GITLAB_DOMAIN is not set"; exit 1; fi
-    if [ -z "$GITLAB_TOKEN" ];  then echo_error "GITLAB_TOKEN is not set";  exit 1; fi
+    if [ -z "$GITLAB_DOMAIN" ]; then echo_error "GITLAB_DOMAIN is not set"; exit 2; fi
+    if [ -z "$GITLAB_TOKEN" ];  then echo_error "GITLAB_TOKEN is not set";  exit 2; fi
 }
 
 function gitlab_project_url
@@ -213,7 +213,14 @@ function gitlab_project_url
 
     local project_url
 
-    project_url=$(git remote get-url --push origin | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+    project_url=$(git remote get-url --push origin \
+        | grep "${GITLAB_DOMAIN}" \
+        | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+
+    if [ -z "$project_url" ]; then
+        echo_error "Unable to determine Gitlab project URL. Check GITLAB_DOMAIN configuration"
+        exit 4
+    fi
 
     echo "$project_url"
 }
@@ -222,7 +229,8 @@ function gitlab_request
 {
     gitlab_check_env || exit $?
 
-    local project_id; project_id=$(urlencode "$(gitlab_project_url)")
+    local project_url; project_url=$(gitlab_project_url) || exit $?
+    local project_id;  project_id=$(urlencode "$project_url")
 
     if [ -z "$project_id" ]; then return; fi
 
@@ -267,7 +275,7 @@ function gitlab_new_merge_request_url
 {
     gitlab_check_env || exit $?
 
-    local project_url;   project_url=$(gitlab_project_url)
+    local project_url;   project_url=$(gitlab_project_url) || exit $?
 
     if [ -z "$project_url" ]; then return; fi
 
