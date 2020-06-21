@@ -10,26 +10,22 @@ function git_current_branch
 
 function git_base_branch
 {
-    # Base branch param
-    local base_branch=$BASE_BRANCH
-
     # Nearest branch in commit history
-    if [ -z "$base_branch" ]; then
-        # selects only commits with a branch or tag
-        # removes current head (and branch)
-        # selects only the closest decoration
-        # filters out everything but decorations
-        # splits decorations
-        # ignore "tag: ...", "origin/..." and ".../HEAD"
-        # keep only first decoration
-        base_branch=$(git log --decorate --simplify-by-decoration --oneline \
-            | grep -v "(HEAD"            \
-            | head -n1                   \
-            | sed 's/.* (\(.*\)) .*/\1/' \
-            | sed -e 's/, /\n/g'         \
-            | grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' \
-            | head -n1)
-    fi
+
+    # selects only commits with a branch or tag
+    # removes current head (and branch)
+    # selects only the closest decoration
+    # filters out everything but decorations
+    # splits decorations
+    # ignore "tag: ...", "origin/..." and ".../HEAD"
+    # keep only first decoration
+    base_branch=$(git log --decorate --simplify-by-decoration --oneline \
+        | grep -v "(HEAD"            \
+        | head -n1                   \
+        | sed 's/.* (\(.*\)) .*/\1/' \
+        | sed -e 's/, /\n/g'         \
+        | grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' \
+        | head -n1)
 
     # First possible merge base
     if [ -z "$base_branch" ]; then
@@ -502,7 +498,7 @@ function gitlab_merge
     local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
 
     local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=$(git_base_branch)
+    local base_branch;    base_branch=${1:-$(git_base_branch)}
 
     # Search existing merge request
 
@@ -599,13 +595,22 @@ function gitlab_merge
 function guess_issue_code
 {
     if [ -z "$JIRA_CODE_PATTERN" ]; then
-        echo_error "JIRA_CODE_PATTERN not set"
+        echo_error "JIRA_CODE_PATTERN not set - unable to guess issue code"
         return
     fi
 
     local current_branch; current_branch=$(git_current_branch)
 
-    echo "${current_branch}" | grep -iEo "$JIRA_CODE_PATTERN" | tail -n1
+    local issue_code=$(echo "${current_branch}" \
+        | grep -iEo "$JIRA_CODE_PATTERN" \
+        | tail -n1)
+
+    if [ -z "$issue_code" ]; then
+        echo_error "Unable to guess issue code"
+        return
+    fi
+
+    echo "$issue_code"
 }
 
 function mr_title
@@ -743,7 +748,9 @@ function mr_status
 
 function print_mr
 {
-    local current_branch=${1:-$(git_current_branch)}
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    local current_branch=$(git_current_branch)
     local base_branch=${2:-$(git_base_branch)}
 
     mr_description "$current_branch" "$base_branch"
@@ -752,7 +759,7 @@ function print_mr
 
 function mr_open
 {
-    local current_branch=${1:-$(git_current_branch)}
+    local current_branch=$(git_current_branch)
     local base_branch=${2:-$(git_base_branch)}
 
     local merge_request_summary=${3}
@@ -775,6 +782,7 @@ function mr_open
         return
     fi
 
+    ISSUE_CODE=${1:-$(guess_issue_code)}
     mr_description "$current_branch" "$base_branch"
 
     local new_mr_url
@@ -1017,25 +1025,14 @@ fi
 
 
 case $1 in
+
     help|usage) usage ;;
 
-    update) mr_update "${@:2}" ;;
-    merge)  gitlab_merge ;;
-    unwip)  gitlab_unwip ;;
+    open)   mr_open      "${@:2}" ;;
+    update) mr_update    "${@:2}" ;;
+    merge)  gitlab_merge "${@:2}" ;;
+    unwip)  gitlab_unwip          ;;
 
-    open)
-        ISSUE_CODE=${2:-$(guess_issue_code)}
-        BASE_BRANCH=$3
+    *) print_mr "$@" ;;
 
-        mr_open
-        ;;
-
-    *)
-        ISSUE_CODE=${1:-$(guess_issue_code)}
-        BASE_BRANCH=$2
-
-        if [ -z "$ISSUE_CODE" ]; then echo_error "Unable to guess issue code"; fi
-
-        print_mr
-        ;;
 esac
