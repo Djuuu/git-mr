@@ -43,6 +43,30 @@ function git_commits
     git log --oneline --reverse --no-decorate "${base_branch}".."${current_branch}"
 }
 
+function git_titlize_branch
+{
+    local branch=${1:-$(git_current_branch)}
+
+    # Split reference & label part
+
+    local branch_split_pattern="^(.*)($JIRA_CODE_PATTERN)[^a-zA-Z0-9]?(.*)$"
+
+    local title_ref=$(echo "$branch" | sed -r "s/$branch_split_pattern/\1\2/") # ex: 'feature/XY-1234'
+    local title_label=$(echo "$branch" | sed -r "s/$branch_split_pattern/\3/") # ex: 'my-branch-name'
+
+    # Uppercase 1st letters
+    title_ref="${title_ref^}"
+    title_label="${title_label^}"
+
+    # substitute dashes & underscores
+    title_label=$(echo "$title_label" | sed 's/[-_]/ /g')
+
+    # Wip prefix
+    local wip_prefix="WIP: "
+
+    echo "${wip_prefix}${title_ref} ${title_label}"
+}
+
 
 ################################################################################
 # Misc. utilities
@@ -326,9 +350,12 @@ function gitlab_new_merge_request_url
     done
 
     # other options
-    if [ ! -z "$GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH" ] && [ "$GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH" -gt 0 ]; then
+    if [ "${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" -eq 1 ]; then
         gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[force_remove_source_branch]")=1"
     fi
+
+    # title
+    gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[title]")=$(git_titlize_branch "$source_branch")"
 
     echo "$gitlab_mr_url"
 }
@@ -588,7 +615,7 @@ function gitlab_merge
 
     if [ "$(confirm "Do you want to merge '$current_branch'?")" = "yes" ]; then
         local result
-        result=$(gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-0}" "PUT")
+        result=$(gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT")
 
         if [ ! -z "$result" ]; then
             echo "OK";
