@@ -92,6 +92,18 @@ function extract_json_int
         | sed 's/[,}]$//'
 }
 
+function extract_json_array
+{
+    local key=$1
+    local content=$2
+
+    echo "$content" \
+        | grep -Po '"'"${key}"'"\s*:\s*\[\K.*?[^\]]\]' \
+        | sed 's/]$//' \
+        | sed 's/"//g' \
+        | tr "," "\n"
+}
+
 # https://gist.github.com/cdown/1163649
 function urlencode
 {
@@ -766,6 +778,15 @@ function mr_status
     local upvotes;       upvotes=$(extract_json_int "upvotes" "$merge_request")
     local downvotes;     downvotes=$(extract_json_int "downvotes" "$merge_request")
     local merge_status;  merge_status=$(extract_json_string "merge_status" "$merge_request")
+    local labels;        labels=$(extract_json_array "labels" "$merge_request")
+
+    local label_icon="\U0001F3F7"
+    local labels_display=$(echo "[$labels]" \
+        | tr "\n" "," \
+        | sed 's/,$//' \
+        | sed 's/,/] [/g' \
+    );
+    echo -e "    ${label_icon}  ${labels_display}\n"
 
     local merge_status_icon
     if [ "$merge_status" = "can_be_merged" ]; then
