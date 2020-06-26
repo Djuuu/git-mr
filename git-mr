@@ -355,7 +355,10 @@ function gitlab_new_merge_request_url
     fi
 
     # title
-    gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[title]")=$(git_titlize_branch "$source_branch")"
+    local title
+    title=$(git_titlize_branch "$source_branch")
+    title=$(urlencode "$title")
+    gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[title]")=${title}"
 
     echo "$gitlab_mr_url"
 }
