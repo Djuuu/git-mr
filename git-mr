@@ -559,8 +559,7 @@ function gitlab_merge
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        ISSUE_CODE=$(guess_issue_code)
-        print_mr "${current_branch}" "${base_branch}"
+        print_mr "$(guess_issue_code)" "${base_branch}"
         return
     fi
 
@@ -860,8 +859,7 @@ function mr_update
 
     if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
         echo_error "Merge request not found"
-        ISSUE_CODE=$(guess_issue_code)
-        print_mr "${current_branch}" "${base_branch}"
+        print_mr "$(guess_issue_code)" "${base_branch}"
         return
     fi
 
