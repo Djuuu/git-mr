@@ -1071,11 +1071,15 @@ if [ ! -x "$(command -v jq)" ]; then
 fi
 
 
-while getopts ":-:" optchar; do
-case "${OPTARG}" in
-    v|verbose) GIT_MR_VERBOSE=1; shift; ;;
-esac
+args=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -v) GIT_MR_VERBOSE=1 ;;
+        *)  args+=("${1}")   ;;
+    esac
+    shift
 done
+set -- "${args[@]}"
 
 
 case $1 in
