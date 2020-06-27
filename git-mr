@@ -51,8 +51,8 @@ function git_titlize_branch
 
     local branch_split_pattern="^(.*)($JIRA_CODE_PATTERN)[^a-zA-Z0-9]?(.*)$"
 
-    local title_ref=$(echo "$branch" | sed -r "s/$branch_split_pattern/\1\2/") # ex: 'feature/XY-1234'
-    local title_label=$(echo "$branch" | sed -r "s/$branch_split_pattern/\3/") # ex: 'my-branch-name'
+    local title_ref;   title_ref=$(echo "$branch" | sed -r "s/$branch_split_pattern/\1\2/") # ex: 'feature/XY-1234'
+    local title_label; title_label=$(echo "$branch" | sed -r "s/$branch_split_pattern/\3/") # ex: 'my-branch-name'
 
     # Uppercase 1st letters
     title_ref="${title_ref^}"
@@ -404,23 +404,31 @@ function gitlab_merge_request
 
 function gitlab_extract_url
 {
-    local merge_request_summary=$1
+    local mr_summary=$1
 
-    extract_json_string "web_url" "${merge_request_summary}"
+    extract_json_string "web_url" "${mr_summary}"
 }
 
 function gitlab_extract_title
 {
-    local merge_request_summary=$1
+    local mr_summary=$1
 
-    local current_title
-    current_title=$(extract_json_string "title" "$merge_request_summary" \
+    extract_json_string "title" "$mr_summary" \
         | sed 's/\\u003c/</g' \
         | sed 's/\\u003e/>/g' \
-        | sed 's/\\\\/\\/g' \
-    )
+        | sed 's/\\\\/\\/g'
+}
 
-    echo "$current_title"
+function gitlab_extract_description
+{
+    local mr_detail=$1
+
+    extract_json_string "description" "$mr_detail" \
+        | sed 's/\\r//g' \
+        | sed 's/\\n/\n/g' \
+        | sed 's/\\u003c/</g' \
+        | sed 's/\\u003e/>/g' \
+        | sed 's/\\\\/\\/g'
 }
 
 function gitlab_merge_request_discussions
@@ -507,38 +515,37 @@ function gitlab_unwip
 
     # Search existing merge request
 
-    local merge_requests; merge_requests=$(gitlab_merge_requests "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
-    if [ -z "$merge_requests" ]; then
+    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
+        print_mr "$(guess_issue_code)" "${base_branch}"
         return
     fi
 
     # Load existing merge request details
 
-    local mr_iid; mr_iid=$(extract_json_int "iid" "${merge_requests}")
-    local mr_url; mr_url=$(gitlab_extract_url "$merge_requests")
-
     local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
-
-    local current_title; current_title=$(gitlab_extract_title "$merge_request")
+    local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
 
     echo
     echo "-------------------------------------------------------------------"
-    echo "$current_title"
+    echo "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
-    mr_actions "$current_branch" "$base_branch" "$merge_requests" "$merge_request"
+    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
     echo
 
-    local wip; wip=$(echo "$current_title" | grep -o '^WIP:')
+    local wip; wip=$(echo "$mr_title" | grep -o '^WIP:')
     if [ -z "$wip" ]; then
         echo_error "Merge request is not a Work in Progress"
         echo_error
         return
     fi
 
-    local unwipped_title; unwipped_title=$(echo "$current_title" | sed 's/^WIP:\s*//')
+    local unwipped_title; unwipped_title=$(echo "$mr_title" | sed 's/^WIP:\s*//')
 
     if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
 
@@ -563,11 +570,9 @@ function gitlab_merge
 
     # Search existing merge request
 
-    local merge_requests; merge_requests=$(gitlab_merge_requests "$current_branch")
-
-    local project_id; project_id=$(urlencode "$(gitlab_project_url)")
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "${merge_requests}")
-    local mr_url;     mr_url=$(gitlab_extract_url "$merge_requests")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
@@ -588,7 +593,7 @@ function gitlab_merge
     echo "$title"
     echo "-------------------------------------------------------------------"
     echo
-    mr_actions "$current_branch" "$base_branch" "$merge_requests" "$merge_request"
+    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
 
     # test merge status
     if [ "$merge_status" != "can_be_merged" ]; then
@@ -661,7 +666,7 @@ function guess_issue_code
 
     local current_branch; current_branch=$(git_current_branch)
 
-    local issue_code=$(echo "${current_branch}" \
+    local issue_code; issue_code=$(echo "${current_branch}" \
         | grep -iEo "$JIRA_CODE_PATTERN" \
         | tail -n1)
 
@@ -734,25 +739,25 @@ function mr_actions
 {
     local current_branch=${1:-$(git_current_branch)}
     local base_branch=${2:-$(git_base_branch)}
-    local merge_request_summary=${3}
-    local merge_request_detail=${4}
+    local mr_summary=${3}
+    local mr_detail=${4}
 
-    if [ -z "$merge_request_summary" ]; then
-        merge_request_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    if [ -z "$mr_summary" ]; then
+        mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
     fi
 
-    local current_mr_iid; current_mr_iid=$(extract_json_int "iid" "${merge_request_summary}")
-    local current_mr_url; current_mr_url=$(gitlab_extract_url "$merge_request_summary")
+    local mr_iid; mr_iid=$(extract_json_int "iid" "${mr_summary}")
+    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
 
-    if [ ! -z "${current_mr_url}" ]; then
+    if [ ! -z "${mr_url}" ]; then
         cat << EOF
 Merge request:
 
-  ${current_mr_url}
+  ${mr_url}
 
 EOF
 
-        mr_status "${current_mr_iid}" "$merge_request_detail"
+        mr_status "${mr_iid}" "$mr_detail"
 
         return
     fi
@@ -781,7 +786,7 @@ function mr_status
     local labels;        labels=$(extract_json_array "labels" "$merge_request")
 
     local label_icon="\U0001F3F7"
-    local labels_display=$(echo "[$labels]" \
+    local labels_display; labels_display=$(echo "[$labels]" \
         | tr "\n" "," \
         | sed 's/,$//' \
         | sed 's/,/] [/g' \
@@ -819,7 +824,7 @@ function print_mr
 {
     ISSUE_CODE=${1:-$(guess_issue_code)}
 
-    local current_branch=$(git_current_branch)
+    local current_branch; current_branch=$(git_current_branch)
     local base_branch=${2:-$(git_base_branch)}
 
     mr_description "$current_branch" "$base_branch"
@@ -828,26 +833,26 @@ function print_mr
 
 function mr_open
 {
-    local current_branch=$(git_current_branch)
+    local current_branch; current_branch=$(git_current_branch)
     local base_branch=${2:-$(git_base_branch)}
+    local mr_summary=${3}
 
-    local merge_request_summary=${3}
-    if [ -z "$merge_request_summary" ]; then
-        merge_request_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    if [ -z "$mr_summary" ]; then
+        mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
     fi
 
-    local current_mr_url;
-    current_mr_url=$(gitlab_extract_url "$merge_request_summary")
+    local mr_url;
+    mr_url=$(gitlab_extract_url "$mr_summary")
 
-    if [ ! -z "${current_mr_url}" ]; then
+    if [ ! -z "${mr_url}" ]; then
 
-        local current_mr_iid;
-        current_mr_iid=$(extract_json_int "iid" "${merge_request_summary}")
+        local mr_iid;
+        mr_iid=$(extract_json_int "iid" "${mr_summary}")
 
         echo
-        mr_status "${current_mr_iid}"
+        mr_status "${mr_iid}"
 
-        open_in_browser "${current_mr_url}"
+        open_in_browser "${mr_url}"
         return
     fi
 
@@ -871,14 +876,11 @@ function mr_update
 
     # Search existing merge request
 
-    local merge_request_summary
-    merge_request_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
-    local project_id;     project_id=$(urlencode "$(gitlab_project_url)")
-    local current_mr_iid; current_mr_iid=$(extract_json_int "iid" "${merge_request_summary}")
-    local current_mr_url; current_mr_url=$(gitlab_extract_url "$merge_request_summary")
-
-    if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
+    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
         print_mr "$(guess_issue_code)" "${base_branch}"
         return
@@ -886,25 +888,9 @@ function mr_update
 
     # Load existing merge request details
 
-    local merge_request
-    merge_request=$(gitlab_merge_request "$current_mr_iid")
-
-    local current_title
-    current_title=$(extract_json_string "title" "$merge_request" \
-        | sed 's/\\u003c/</g' \
-        | sed 's/\\u003e/>/g' \
-        | sed 's/\\\\/\\/g' \
-    )
-
-    local current_description
-    current_description=$(extract_json_string "description" "$merge_request" \
-        | sed 's/\\r//g' \
-        | sed 's/\\n/\n/g' \
-        | sed 's/\\u003c/</g' \
-        | sed 's/\\u003e/>/g' \
-        | sed 's/\\\\/\\/g' \
-    )
-
+    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
+    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
+    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
     local current_target; current_target=$(extract_json_string "target_branch" "$merge_request")
 
     # Init commit lists
@@ -912,7 +898,7 @@ function mr_update
     local commit_messages; commit_messages=$(git_commits "$current_branch" "$base_branch")
 
     local current_commits; current_commits=$(echo "$commit_messages" | cut -d ' ' -f1)
-    local old_commits;     old_commits=$(echo "$current_description" \
+    local old_commits;     old_commits=$(echo "$mr_description" \
         | grep -Po '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' \
         | sed -r 's/^[^0-9a-fA-F]*([0-9a-fA-F]{7,})\s/\1/g' \
     )
@@ -924,8 +910,8 @@ function mr_update
     local new_commit_messages_display=()
     local new_commit_messages_content=()
 
-    local new_description_display="$current_description"
-    local new_description_content="$current_description"
+    local new_description_display="$mr_description"
+    local new_description_content="$mr_description"
 
     local green='\033[0;32m'
     local orange='\033[0;33m'
@@ -969,7 +955,7 @@ function mr_update
     # Print updated merge request description
     echo
     echo "-------------------------------------------------------------------"
-    echo "$current_title"
+    echo "$mr_title"
     echo "-------------------------------------------------------------------"
     echo -e "$new_description_display"
     echo
@@ -1015,7 +1001,7 @@ function mr_update
         fi
 
         if [ "$mr_update_data" != "{}" ]; then
-            local result; result=$(gitlab_merge_request_update "$current_mr_iid" "$mr_update_data")
+            local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
 
             if [ ! -z "$result" ]; then echo "OK"; fi
         fi
@@ -1024,7 +1010,7 @@ function mr_update
     echo "--------------------------------------------------------------------------------"
     echo
 
-    mr_actions "$current_branch" "$base_branch" "$merge_request_summary" "$merge_request"
+    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
 }
 
 function usage
