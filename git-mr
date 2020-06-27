@@ -507,6 +507,15 @@ function gitlab_merge_request_update
     gitlab_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
 
+function gitlab_merge_request_merge
+{
+    gitlab_check_env || exit $?
+
+    local mr_iid=$1;  if [ -z "$mr_iid" ]; then echo_error "No mr_iid provided"; return; fi
+
+    gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
+}
+
 function gitlab_unwip
 {
     gitlab_check_env || exit $?
@@ -636,8 +645,7 @@ function gitlab_merge
     if [ "$(confirm "Do you want to merge '$current_branch'?")" = "yes" ]; then
         echo -n "Merging '$current_branch'... "
 
-        local result
-        result=$(gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT")
+        local result; result=$(gitlab_merge_request_merge "${mr_iid}")
 
         if [ ! -z "$result" ]; then
             echo -e "OK\n";
