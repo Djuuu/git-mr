@@ -159,6 +159,12 @@ function confirm
         cyan='\e[36m'; lightcyan='\e[96m'; nocolor='\033[0m'; bold='\e[1m'; nobold='\e[21m'
     fi
 
+    if [ "$GIT_MR_YES" = "1" ]; then
+        echo_error "${cyan}${question}${nocolor} -> yes"
+        echo "yes"
+        return
+    fi
+
     read -r -p "$(echo -e "${lightcyan}${bold}${question}${nobold}${nocolor} [y/N] ")" response
     case "$response" in
         [yY][eE][sS]|[yY]) echo "yes" ;;
@@ -1027,15 +1033,18 @@ function usage
 {
     cat << EOF
 
-USAGE
+SYNOPSIS
 
-    mr [issue_code] [base_branch]
+    mr [OPTIONS]        [ISSUE_CODE] [BASE_BRANCH]
+    mr [OPTIONS] open   [ISSUE_CODE] [BASE_BRANCH]
+    mr [OPTIONS] update [BASE_BRANCH]
+    mr [OPTIONS] merge
+    mr [OPTIONS] unwip
 
-    mr open [issue_code] [base_branch]
+OPTIONS
 
-    mr update [base_branch]
-    mr merge
-    mr unwip
+    -v  Verbose output (displays called API URLs)
+    -y  Bypass confirmation prompts ("yes")
 
 INSTALLATION
 
@@ -1054,6 +1063,8 @@ INSTALLATION
             [alias]
                 mr = "!bash /path/to/git-mr/git-mr"
 
+    Ensure jq is installed to be able to update or merge.
+
 CONFIGURATION
 
     You need to configure the following environment variables:
@@ -1066,14 +1077,18 @@ CONFIGURATION
         export GITLAB_DOMAIN="myapp.gitlab.com"
         export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 
-        export GITLAB_DEFAULT_LABELS="Review,My Team"      # Default labels for new merge requests
-        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1 # Check "Delete source branch" by default
-
     To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
     (Account Settings -> Security -> API Token -> Create and manage API tokens)
 
     To create a Gitlab API Token, go to: https://myapp.gitlab.com/profile/personal_access_tokens<br>
     (Settings -> Access Tokens)
+
+    Optional configuration variables:
+
+        export GITLAB_DEFAULT_LABELS="Review,My Team"       # Default labels for new merge requests
+        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1  # Check "Delete source branch" by default
+
+        export GIT_MR_TIMEOUT=5  # Timeout for HTTP API calls
 
 EOF
 }
@@ -1091,8 +1106,10 @@ fi
 args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -v) GIT_MR_VERBOSE=1 ;;
-        *)  args+=("${1}")   ;;
+        -v|-V) GIT_MR_VERBOSE=1 ;;
+        -y|-Y) GIT_MR_YES=1     ;;
+
+        *) args+=("${1}") ;;
     esac
     shift
 done
