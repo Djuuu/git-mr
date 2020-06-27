@@ -99,6 +99,8 @@ export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 
 export GITLAB_DEFAULT_LABELS="Review,My Team"      # Default labels for new merge requests
 export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1 # Check "Delete source branch" by default
+
+export GIT_MR_TIMEOUT=5 # Network timeout
 ```
 
 To create a Jira API Token, go to:

@@ -258,7 +258,7 @@ function jira_ticket_data
     echo_debug "Jira - GET ${issue_url}"
 
     curl -Ss -X GET \
-        --max-time 5 \
+        --max-time ${GIT_MR_TIMEOUT:-5} \
         -H "Authorization: Basic ${auth_token}" \
         -H "Content-Type: application/json" \
         "${issue_url}"
@@ -316,7 +316,7 @@ function gitlab_request
         -H "Private-Token: ${GITLAB_TOKEN}" \
         -H "Content-Type: application/json" \
         --data "${request_data}" \
-        --max-time 5 \
+        --max-time ${GIT_MR_TIMEOUT:-5} \
         "${gitlab_project_url}/${request_url}")
 
     if [ ! -z "$(gitlab_check_error "$result")" ]; then return; fi
