@@ -132,7 +132,7 @@ function echo_error
         nocolor='\033[0m'
     fi
 
-    printf "${orange}%s${nocolor}\n" "${1}" >&2
+    printf "${orange}%s${nocolor}\n" "$(echo -e "$1")" >&2
 }
 
 function echo_debug
@@ -153,7 +153,13 @@ function echo_debug
 function confirm
 {
     local question=$1
-    read -r -p "$question [y/N] " response
+
+    local cyan; local lightcyan; local nocolor; local bold; local nobold
+    if which tput > /dev/null 2>&1 && [ ! -z "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
+        cyan='\e[36m'; lightcyan='\e[96m'; nocolor='\033[0m'; bold='\e[1m'; nobold='\e[21m'
+    fi
+
+    read -r -p "$(echo -e "${lightcyan}${bold}${question}${nobold}${nocolor} [y/N] ")" response
     case "$response" in
         [yY][eE][sS]|[yY]) echo "yes" ;;
         *)                 echo "no" ;;
@@ -332,9 +338,7 @@ function gitlab_check_error
     local message; message=$(extract_json_string "message" "${result}")
 
     if [ ! -z "$error" ] || [ ! -z "$message" ]; then
-        echo_error "Gitlab error:"
-        echo_error "  ${result}"
-        echo_error
+        echo_error "\nGitlab error:\n  ${result}"
 
         echo "ko"
     fi
@@ -497,11 +501,8 @@ function gitlab_merge_request_update
 {
     gitlab_check_env || exit $?
 
-    local mr_iid=$1
-    local mr_data=$2
-
-    if [ -z "$mr_iid" ];  then echo_error "No mr_iid provided"; return; fi
-    if [ -z "$mr_data" ]; then echo_error "No data provided";   return; fi
+    local mr_iid=$1;   if [ -z "$mr_iid" ];  then echo_error "No mr_iid provided"; return; fi
+    local mr_data=$2;  if [ -z "$mr_data" ]; then echo_error "No data provided";   return; fi
 
     gitlab_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
@@ -548,12 +549,12 @@ function gitlab_unwip
     local unwipped_title; unwipped_title=$(echo "$mr_title" | sed 's/^WIP:\s*//')
 
     if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
+        echo -n "Resolving WIP status... "
 
         mr_data=$(jq_build "title" "$unwipped_title")
-
         local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
 
-        if [ ! -z "$result" ]; then echo "OK"; fi
+        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
     fi
 
     echo
@@ -583,10 +584,8 @@ function gitlab_merge
     # Load existing merge request details
 
     local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
-
-    local title; title=$(gitlab_extract_title "$merge_request")
-
-    local merge_status; merge_status=$(extract_json_string "merge_status" "$merge_request")
+    local title;         title=$(gitlab_extract_title "$merge_request")
+    local merge_status;  merge_status=$(extract_json_string "merge_status" "$merge_request")
 
     echo
     echo "-------------------------------------------------------------------"
@@ -620,12 +619,14 @@ function gitlab_merge
     if [ ! -z "$wip" ]; then
         echo_error "Merge request is a Work in Progress"
         if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
+            echo -n "Resolving WIP status... "
 
             local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
             local mr_data;        mr_data=$(jq_build "title" "$unwipped_title")
-            local result;         result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
 
-            if [ ! -z "$result" ]; then echo "OK";
+            local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+
+            if [ ! -z "$result" ]; then echo -e "OK\n";
             else echo_error; return; fi
         else
             echo_error; return;
@@ -633,17 +634,23 @@ function gitlab_merge
     fi
 
     if [ "$(confirm "Do you want to merge '$current_branch'?")" = "yes" ]; then
+        echo -n "Merging '$current_branch'... "
+
         local result
         result=$(gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT")
 
         if [ ! -z "$result" ]; then
-            echo "OK";
+            echo -e "OK\n";
 
             if [ "$(confirm "Do you want to checkout '$base_branch' and pull changes?")" = "yes" ]; then
+                echo "git checkout $base_branch && git pull --rebase"
+
                 git checkout "$base_branch" && git pull --rebase
                 echo
 
                 if [ "$(confirm "Do you want to delete local branch '$current_branch'")" = "yes" ]; then
+                    echo "git branch -d $current_branch"
+
                     git branch -d "$current_branch"
                 fi
             fi
@@ -754,7 +761,6 @@ function mr_actions
 Merge request:
 
   ${mr_url}
-
 EOF
 
         mr_status "${mr_iid}" "$mr_detail"
@@ -784,6 +790,8 @@ function mr_status
     local downvotes;     downvotes=$(extract_json_int "downvotes" "$merge_request")
     local merge_status;  merge_status=$(extract_json_string "merge_status" "$merge_request")
     local labels;        labels=$(extract_json_array "labels" "$merge_request")
+
+    echo
 
     local label_icon="\U0001F3F7"
     local labels_display; labels_display=$(echo "[$labels]" \
@@ -834,20 +842,14 @@ function print_mr
 function mr_open
 {
     local current_branch; current_branch=$(git_current_branch)
-    local base_branch=${2:-$(git_base_branch)}
-    local mr_summary=${3}
+    local base_branch;    base_branch=${2:-$(git_base_branch)}
 
-    if [ -z "$mr_summary" ]; then
-        mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    fi
-
-    local mr_url;
-    mr_url=$(gitlab_extract_url "$mr_summary")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
 
-        local mr_iid;
-        mr_iid=$(extract_json_int "iid" "${mr_summary}")
+        local mr_iid; mr_iid=$(extract_json_int "iid" "${mr_summary}")
 
         echo
         mr_status "${mr_iid}"
@@ -859,8 +861,7 @@ function mr_open
     ISSUE_CODE=${1:-$(guess_issue_code)}
     mr_description "$current_branch" "$base_branch"
 
-    local new_mr_url
-    new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
+    local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
 
     if [ ! -z "${new_mr_url}" ]; then
         open_in_browser "${new_mr_url}"
@@ -982,6 +983,7 @@ function mr_update
 
         if [ $((updated_commit_count + new_commit_count)) -gt 0 ] \
         && [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
+            echo -n "Updating merge request description... "
 
             local new_description
             new_description=$(echo -e "${new_description_content}")
@@ -1003,7 +1005,7 @@ function mr_update
         if [ "$mr_update_data" != "{}" ]; then
             local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
 
-            if [ ! -z "$result" ]; then echo "OK"; fi
+            if [ ! -z "$result" ]; then echo -e "OK\n"; fi
         fi
     fi
 
