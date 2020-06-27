@@ -12,20 +12,14 @@ function git_base_branch
 {
     # Nearest branch in commit history
 
-    # selects only commits with a branch or tag
-    # removes current head (and branch)
-    # selects only the closest decoration
-    # filters out everything but decorations
-    # splits decorations
-    # ignore "tag: ...", "origin/..." and ".../HEAD"
-    # keep only first decoration
-    base_branch=$(git log --decorate --simplify-by-decoration --oneline \
-        | grep -v "(HEAD"            \
-        | head -n1                   \
-        | sed 's/.* (\(.*\)) .*/\1/' \
-        | sed -e 's/, /\n/g'         \
-        | grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' \
-        | head -n1)
+    base_branch=$( \
+        git log --decorate --simplify-by-decoration --oneline | # selects only commits with a branch or tag
+        grep -v "(HEAD"                                        | # removes current head (and branch)
+        head -n1                                                | # selects only the closest decoration
+        sed 's/.* (\(.*\)) .*/\1/'                               | # filters out everything but decorations
+        sed -e 's/, /\n/g'                                        | # splits decorations
+        grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' | # ignore "tag: ...", "origin/..." and ".../HEAD"
+        head -n1)                                                     # keep only first decoration
 
     # First possible merge base
     if [ -z "$base_branch" ]; then
@@ -76,10 +70,10 @@ function extract_json_string
     local key=$1
     local content=$2
 
-    echo "$content" \
-        | grep -Po '"'"${key}"'"\s*:\s*"\K.*?[^\\]"' \
-        | sed 's/\\"/"/g' \
-        | sed 's/"$//'
+    echo "$content" |
+        grep -Po '"'"${key}"'"\s*:\s*"\K.*?[^\\]"' | # extract string
+        sed 's/\\"/"/g' | # unescape double quotes
+        sed 's/"$//' # remove trailing double quotes
 }
 
 function extract_json_int
@@ -87,9 +81,9 @@ function extract_json_int
     local key=$1
     local content=$2
 
-    echo "$content" \
-        | grep -Po '"'"${key}"'"\s*:\s*\K.*?[,}]' \
-        | sed 's/[,}]$//'
+    echo "$content" |
+        grep -Po '"'"${key}"'"\s*:\s*\K.*?[,}]' | # extract int
+        sed 's/[,}]$//' # remove trailing comma or brace
 }
 
 function extract_json_array
@@ -97,11 +91,11 @@ function extract_json_array
     local key=$1
     local content=$2
 
-    echo "$content" \
-        | grep -Po '"'"${key}"'"\s*:\s*\[\K.*?[^\]]\]' \
-        | sed 's/]$//' \
-        | sed 's/"//g' \
-        | tr "," "\n"
+    echo "$content" |
+        grep -Po '"'"${key}"'"\s*:\s*\[\K.*?[^\]]\]' | # extract array content
+        sed 's/]$//' | # remove trailing bracket
+        sed 's/"//g' | # remove double quotes
+        tr "," "\n" # convert commas to newlines (1 item per line)
 }
 
 # https://gist.github.com/cdown/1163649
@@ -247,9 +241,9 @@ function markdown_list
     local prefix="* ${wrap}"
     local suffix="${wrap}<br>"
 
-    echo "$content" \
-        | sed "s/^/${prefix}/g" \
-        | sed "s/$/${suffix}/g"
+    echo "$content" |
+        sed "s/^/${prefix}/g" |
+        sed "s/$/${suffix}/g"
 }
 
 
@@ -292,9 +286,9 @@ function gitlab_project_url
 
     local project_url
 
-    project_url=$(git remote get-url --push origin \
-        | grep "${GITLAB_DOMAIN}" \
-        | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+    project_url=$(git remote get-url --push origin |
+        grep "${GITLAB_DOMAIN}" |
+        sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
 
     if [ -z "$project_url" ]; then
         echo_error "Unable to determine Gitlab project URL. Check GITLAB_DOMAIN configuration"
@@ -423,22 +417,22 @@ function gitlab_extract_title
 {
     local mr_summary=$1
 
-    extract_json_string "title" "$mr_summary" \
-        | sed 's/\\u003c/</g' \
-        | sed 's/\\u003e/>/g' \
-        | sed 's/\\\\/\\/g'
+    extract_json_string "title" "$mr_summary" |
+        sed 's/\\u003c/</g' |
+        sed 's/\\u003e/>/g' |
+        sed 's/\\\\/\\/g'
 }
 
 function gitlab_extract_description
 {
     local mr_detail=$1
 
-    extract_json_string "description" "$mr_detail" \
-        | sed 's/\\r//g' \
-        | sed 's/\\n/\n/g' \
-        | sed 's/\\u003c/</g' \
-        | sed 's/\\u003e/>/g' \
-        | sed 's/\\\\/\\/g'
+    extract_json_string "description" "$mr_detail" |
+        sed 's/\\r//g' |
+        sed 's/\\n/\n/g' |
+        sed 's/\\u003c/</g' |
+        sed 's/\\u003e/>/g' |
+        sed 's/\\\\/\\/g'
 }
 
 function gitlab_merge_request_discussions
@@ -458,10 +452,10 @@ function gitlab_merge_request_discussions
 
         # fetch page
         local notes_page
-        notes_page=$(gitlab_request "merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" \
-            | sed 's/\\r//g' \
-            | sed 's/\\n/\\\\n/g' \
-            | sed 's/"noteable_iid":\([0-9]*\)}]},/"noteable_iid":\1}]},\n/g')
+        notes_page=$(gitlab_request "merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" |
+            sed 's/\\r//g' |
+            sed 's/\\n/\\\\n/g' |
+            sed 's/"noteable_iid":\([0-9]*\)}]},/"noteable_iid":\1}]},\n/g')
 
         if [ "$notes_page" != "[]" ]; then
             # append page
@@ -618,9 +612,9 @@ function gitlab_merge
 
     # test open threads
     local unresolved_thread_count;
-    unresolved_thread_count=$(gitlab_merge_request_discussions "$mr_iid" \
-        | grep '"resolvable":true' \
-        | grep -c '"resolved":false')
+    unresolved_thread_count=$(gitlab_merge_request_discussions "$mr_iid" |
+        grep '"resolvable":true' |
+        grep -c '"resolved":false')
 
     if [ "$unresolved_thread_count" -gt 0 ]; then
         echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging."
@@ -687,9 +681,9 @@ function guess_issue_code
 
     local current_branch; current_branch=$(git_current_branch)
 
-    local issue_code; issue_code=$(echo "${current_branch}" \
-        | grep -iEo "$JIRA_CODE_PATTERN" \
-        | tail -n1)
+    local issue_code; issue_code=$(echo "${current_branch}" |
+        grep -iEo "$JIRA_CODE_PATTERN" |
+        tail -n1)
 
     if [ -z "$issue_code" ]; then
         echo_error "Unable to guess issue code"
@@ -913,10 +907,9 @@ function mr_update
     local commit_messages; commit_messages=$(git_commits "$current_branch" "$base_branch")
 
     local current_commits; current_commits=$(echo "$commit_messages" | cut -d ' ' -f1)
-    local old_commits;     old_commits=$(echo "$mr_description" \
-        | grep -Po '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' \
-        | sed -r 's/^[^0-9a-fA-F]*([0-9a-fA-F]{7,})\s/\1/g' \
-    )
+    local old_commits;     old_commits=$(echo "$mr_description" |
+        grep -Po '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' |
+        sed -r 's/^[^0-9a-fA-F]*([0-9a-fA-F]{7,})\s/\1/g')
 
     local current_commits_array; current_commits_array=($(echo "$current_commits" | tr "\n" " "))
     local old_commits_array;     old_commits_array=($(echo "$old_commits" | tr "\n" " "))
