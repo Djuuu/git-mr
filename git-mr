@@ -71,7 +71,7 @@ function exit_error
 	local msg="$2"
 
 	echo_error "$msg"
-	exit $code
+	exit "$code"
 }
 
 function extract_json_string
@@ -326,7 +326,7 @@ function jira_request
         -H "Authorization: Basic ${auth_token}" \
         -H "Content-Type: application/json" \
         --data "${request_data}" \
-        --max-time ${GIT_MR_TIMEOUT:-5} \
+        --max-time "${GIT_MR_TIMEOUT:-5}" \
         "${jira_base_url}/${request_url}" || exit_error 20 "Jira request error"
 }
 
@@ -346,8 +346,8 @@ function jira_transition
     local issue_code=$1;     [ ! -z "$issue_code"    ] || exit_error 0 "issue_code required"
     local transition_id=$2;  [ ! -z "$transition_id" ] || exit_error 0 "transition_id required"
 
-    local transition=$(jq_build "id" "$transition_id")        || exit $?
-    local request_data=$(jq_build "transition" "$transition") || exit $?
+    local transition;   transition=$(jq_build "id" "$transition_id")        || exit $?
+    local request_data; request_data=$(jq_build "transition" "$transition") || exit $?
 
     jira_request "issue/${issue_code}/transitions" "POST" "$request_data" || exit $?
 }
@@ -372,8 +372,8 @@ function gitlab_project_url
         sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
 
     if [ -z "$project_url" ]; then
-        local remote=$(git remote get-url --push origin)
-        local domain=$(echo $remote | sed 's/.*@\(.*\):.*/\1/')
+        local remote; remote=$(git remote get-url --push origin)
+        local domain; domain=$(echo "$remote" | sed 's/.*@\(.*\):.*/\1/')
         read -r -d '' message <<EOF
 Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
   origin:     $remote
@@ -410,7 +410,7 @@ function gitlab_request
         -H "Private-Token: ${GITLAB_TOKEN}" \
         -H "Content-Type: application/json" \
         --data "${request_data}" \
-        --max-time ${GIT_MR_TIMEOUT:-5} \
+        --max-time "${GIT_MR_TIMEOUT:-5}" \
         "${gitlab_project_url}/${request_url}") || exit_error 10 "Gitlab request error"
 
     if [ ! -z "$(gitlab_check_error "$result")" ]; then return; fi
@@ -775,13 +775,13 @@ function is_status_label
 {
     local label=$1
 
-    local system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
+    local system_labels; system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
         sed 's/,,/,/g' |
         sed 's/^,//' | sed 's/,$//' |
         tr "," "\n")
 
-    match="$( echo "$label"         | grep "$system_labels")" || return
-    reverse=$(echo "$system_labels" | grep "$match")          || return
+    local match;   match="$( echo "$label"         | grep "$system_labels")" || return
+    local reverse; reverse=$(echo "$system_labels" | grep "$match")          || return
     # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
 
     echo "$match"
@@ -804,8 +804,8 @@ function mr_format_labels
         fi
     done
 
-    local status_labels_str="$(printf "%s " "${status_labels[@]}")"
-    local other_labels_str="$(printf "%s " "${other_labels[@]}")"
+    local status_labels_str; status_labels_str="$(printf "%s " "${status_labels[@]}")"
+    local other_labels_str;  other_labels_str="$(printf "%s " "${other_labels[@]}")"
 
     echo "${status_labels_str}${other_labels_str}" |
         sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
@@ -821,7 +821,7 @@ function mr_status
 
     # Labels
     local labels; labels=$(extract_json_array "labels" "$merge_request")
-    local labels_display=$(mr_format_labels "$labels")
+    local labels_display; labels_display=$(mr_format_labels "$labels")
 
     # Votes
 
