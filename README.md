@@ -2,15 +2,16 @@
 
 Prepares a merge request description, with link to Jira ticket and current branch commit list.
 
+
 ## Usage
 
 ```bash
-git mr [issue_code] [base_branch]
+git mr [OPTIONS] [ISSUE_CODE] [BASE_BRANCH]
 ```
 
 This will print a merge request description, with a link to Jira ticket and current branch commit list.
-* `issue_code` can be guessed from the branch name according to `JIRA_CODE_PATTERN` 
-* `base_branch` is determined by going up the commit history and finding the first one attached to a branch 
+* `ISSUE_CODE` can be guessed from the branch name according to `JIRA_CODE_PATTERN` 
+* `BASE_BRANCH` is determined by going up the commit history and finding the first one attached to a branch 
 
 If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
 
@@ -20,7 +21,7 @@ can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REM
 ----------------------------------------------------------------
 
 ```bash
-git mr open [issue_code] [base_branch]
+git mr [OPTIONS] open [ISSUE_CODE] [BASE_BRANCH]
 ```
 
 Similar to `git mr`, but will open browser directly.
@@ -28,7 +29,7 @@ Similar to `git mr`, but will open browser directly.
 ----------------------------------------------------------------
 
 ```bash
-git mr update [base_branch]
+git mr [OPTIONS] update [BASE_BRANCH]
 ```
 
 This will:
@@ -42,15 +43,47 @@ You can also update the source branche if it is different from the current one.
 ----------------------------------------------------------------
 
 ```bash
-git mr unwip
+git mr [OPTIONS] unwip
 ```
 
-This will resolve the _Work in Progress_ status.
+This will resolve the Gitlab  _Work in Progress_ status.
 
 ----------------------------------------------------------------
 
 ```bash
-git mr merge
+mr [OPTIONS]  ip  [ISSUE_CODE]
+```
+
+This will:
+* remove Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS` 
+* set Jira ticket to status ID defined in `JIRA_IP_ID`
+
+----------------------------------------------------------------
+
+```bash
+mr [OPTIONS]  cr  [ISSUE_CODE]
+```
+
+This will:
+* remove Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS` 
+* add Gitlab labels defined in `GITLAB_CR_LABELS`
+* set Jira ticket to status ID defined in `JIRA_CR_ID`
+
+----------------------------------------------------------------
+
+```bash
+mr [OPTIONS]  qa  [ISSUE_CODE]
+```
+
+This will:
+* remove Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS` 
+* add Gitlab labels defined in `GITLAB_QA_LABELS`
+* set Jira ticket to status ID defined in `JIRA_QA_ID`
+
+----------------------------------------------------------------
+
+```bash
+git mr [OPTIONS] merge
 ```
 
 This will:
@@ -62,6 +95,12 @@ and if applicable, will prompt you to:
 * resolve WIP status
 * trigger the merge
 * checkout local target branch, update it and delete local merged branch
+
+
+## Options
+
+* `-v` Verbose output (displays called API URLs)
+* `-y` Bypass confirmation prompts (always answer "yes")
 
 
 ## Installation
@@ -85,6 +124,9 @@ _OR_
   	mr = "!bash /path/to/git-mr/git-mr"
   ```
 
+* Install `jq` to be able to update or merge.
+
+
 ## Configuration
 
 You need to configure the following environment variables:
@@ -96,9 +138,6 @@ export JIRA_CODE_PATTERN="XY-[0-9]+"
 
 export GITLAB_DOMAIN="myapp.gitlab.com"
 export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
-
-export GITLAB_DEFAULT_LABELS="Review,My Team"      # Default labels for new merge requests
-export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1 # Check "Delete source branch" by default
 ```
 
 To create a Jira API Token, go to:
@@ -108,6 +147,28 @@ To create a Jira API Token, go to:
 To create a Gitlab API Token, go to:
 * https://myapp.gitlab.com/profile/personal_access_tokens<br>
   (Settings -> Access Tokens)
+
+Other optional configuration variables:
+```bash
+# Default labels for new merge requests
+export GITLAB_DEFAULT_LABELS="Review,My Team"
+
+# Check "Delete source branch" by default (defaults to 1)
+export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
+
+# Network timeout (in seconds, defaults to 5)
+export GIT_MR_TIMEOUT=5
+
+# Gitlab status labels (comma-separated, without spaces in between)
+export GITLAB_OK_LABELS="Validated,Accepted" # Gitlab labels removed on IP, CR or QA steps
+export GITLAB_CR_LABELS="Review"             # Gitlab labels set on CR step
+export GITLAB_QA_LABELS="Testing"            # Gitlab labels set on QA step
+
+# Jira status IDs
+export JIRA_IP_ID="xx" # Jira "In progress" status ID
+export JIRA_CR_ID="xx" # Jira "Code review" status ID
+export JIRA_QA_ID="xx" # Jira "Quality Assurance" status ID
+```
 
 
 ## Sample output
@@ -218,4 +279,3 @@ Do you want to delete local branch &apos;feature/xy-1234-ipsum&apos; [y/N] y
 Deleted branch feature/xy-1234-ipsum (was e9642b7).
  
 </pre>
-
