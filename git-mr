@@ -65,6 +65,15 @@ function git_titlize_branch
 ################################################################################
 # Misc. utilities
 
+function exit_error
+{
+	local code=$1
+	local msg="$2"
+
+	echo_error "$msg"
+	exit $code
+}
+
 function extract_json_string
 {
     local key=$1
@@ -176,10 +185,7 @@ function confirm
 
 function jq_build
 {
-    if [ ! -x "$(command -v jq)" ]; then
-        echo_error "jq is required for this operation"
-        exit 3
-    fi
+    [ -x "$(command -v jq)" ] || exit_error 2 "jq is required for this operation"
 
     local key=${1}
     local value=${2}
@@ -260,9 +266,9 @@ function markdown_list
 
 function jira_ticket_data
 {
-    if [ -z "$JIRA_USER" ];     then echo_error "JIRA_USER is not set";     exit 1; fi
-    if [ -z "$JIRA_TOKEN" ];    then echo_error "JIRA_TOKEN is not set";    exit 1; fi
-    if [ -z "$JIRA_INSTANCE" ]; then echo_error "JIRA_INSTANCE is not set"; exit 1; fi
+    [ ! -z "$JIRA_USER" ]     || exit_error 21 "JIRA_USER is not set"
+    [ ! -z "$JIRA_TOKEN" ]    || exit_error 21 "JIRA_TOKEN is not set"
+    [ ! -z "$JIRA_INSTANCE" ] || exit_error 21 "JIRA_INSTANCE is not set"
 
     local auth_token
     auth_token=$(echo -n "${JIRA_USER}:${JIRA_TOKEN}" | base64 -w 0)
@@ -275,7 +281,7 @@ function jira_ticket_data
         --max-time ${GIT_MR_TIMEOUT:-5} \
         -H "Authorization: Basic ${auth_token}" \
         -H "Content-Type: application/json" \
-        "${issue_url}"
+        "${issue_url}" || exit_error 20 "Jira request error"
 }
 
 
@@ -284,13 +290,13 @@ function jira_ticket_data
 
 function gitlab_check_env
 {
-    if [ -z "$GITLAB_DOMAIN" ]; then echo_error "GITLAB_DOMAIN is not set"; exit 2; fi
-    if [ -z "$GITLAB_TOKEN" ];  then echo_error "GITLAB_TOKEN is not set";  exit 2; fi
+    [ ! -z "$GITLAB_DOMAIN" ] || exit_error 11 "GITLAB_DOMAIN is not set"
+    [ ! -z "$GITLAB_TOKEN" ]  || exit_error 11 "GITLAB_TOKEN is not set"
 }
 
 function gitlab_project_url
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local project_url
 
@@ -299,8 +305,15 @@ function gitlab_project_url
         sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
 
     if [ -z "$project_url" ]; then
-        echo_error "Unable to determine Gitlab project URL. Check GITLAB_DOMAIN configuration"
-        exit 4
+        local remote=$(git remote get-url --push origin)
+        local domain=$(echo $remote | sed 's/.*@\(.*\):.*/\1/')
+        read -r -d '' message <<EOF
+Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
+  origin:     $remote
+  current:    GITLAB_DOMAIN="$GITLAB_DOMAIN"
+  Suggestion: GITLAB_DOMAIN="$domain"
+EOF
+        exit_error 12 "$message" # Unable to determine Gitlab project URL
     fi
 
     echo "$project_url"
@@ -308,7 +321,7 @@ function gitlab_project_url
 
 function gitlab_request
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local project_url; project_url=$(gitlab_project_url) || exit $?
     local project_id;  project_id=$(urlencode "$project_url")
@@ -331,7 +344,7 @@ function gitlab_request
         -H "Content-Type: application/json" \
         --data "${request_data}" \
         --max-time ${GIT_MR_TIMEOUT:-5} \
-        "${gitlab_project_url}/${request_url}")
+        "${gitlab_project_url}/${request_url}") || exit_error 10 "Gitlab request error"
 
     if [ ! -z "$(gitlab_check_error "$result")" ]; then return; fi
 
@@ -354,7 +367,7 @@ function gitlab_check_error
 
 function gitlab_new_merge_request_url
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local project_url;   project_url=$(gitlab_project_url) || exit $?
 
@@ -389,7 +402,7 @@ function gitlab_new_merge_request_url
 
 function gitlab_merge_requests
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
 
@@ -405,7 +418,7 @@ function gitlab_merge_requests
 
 function gitlab_merge_request
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local mr_iid=$1
 
@@ -445,7 +458,7 @@ function gitlab_extract_description
 
 function gitlab_merge_request_discussions
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local mr_iid=$1
 
@@ -485,7 +498,7 @@ function gitlab_merge_request_discussions
 
 function gitlab_default_label_ids
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local gitlab_labels; gitlab_labels=$(gitlab_request "labels")
 
@@ -507,7 +520,7 @@ function gitlab_default_label_ids
 
 function gitlab_merge_request_update
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local mr_iid=$1;   if [ -z "$mr_iid" ];  then echo_error "No mr_iid provided"; return; fi
     local mr_data=$2;  if [ -z "$mr_data" ]; then echo_error "No data provided";   return; fi
@@ -517,7 +530,7 @@ function gitlab_merge_request_update
 
 function gitlab_merge_request_merge
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local mr_iid=$1;  if [ -z "$mr_iid" ]; then echo_error "No mr_iid provided"; return; fi
 
@@ -526,14 +539,14 @@ function gitlab_merge_request_merge
 
 function gitlab_unwip
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local current_branch; current_branch=$(git_current_branch)
     local base_branch;    base_branch=$(git_base_branch)
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -568,7 +581,7 @@ function gitlab_unwip
     if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
         echo -n "Resolving WIP status... "
 
-        mr_data=$(jq_build "title" "$unwipped_title")
+        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
         local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
 
         if [ ! -z "$result" ]; then echo -e "OK\n"; fi
@@ -579,7 +592,7 @@ function gitlab_unwip
 
 function gitlab_merge
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
 
@@ -588,7 +601,7 @@ function gitlab_merge
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -639,7 +652,7 @@ function gitlab_merge
             echo -n "Resolving WIP status... "
 
             local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
-            local mr_data;        mr_data=$(jq_build "title" "$unwipped_title")
+            local mr_data;        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
 
             local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
 
@@ -682,10 +695,7 @@ function gitlab_merge
 
 function guess_issue_code
 {
-    if [ -z "$JIRA_CODE_PATTERN" ]; then
-        echo_error "JIRA_CODE_PATTERN not set - unable to guess issue code"
-        return
-    fi
+    [ ! -z "$JIRA_CODE_PATTERN" ] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
 
     local current_branch; current_branch=$(git_current_branch)
 
@@ -740,7 +750,7 @@ function mr_description
     local current_branch=${1:-$(git_current_branch)}
     local base_branch=${2:-$(git_base_branch)}
 
-    local title;   title=$(mr_title "$current_branch")
+    local title;   title=$(mr_title "$current_branch") || exit $?
     local commits; commits=$(git_commits "$current_branch" "$base_branch")
 
     cat << EOF
@@ -875,7 +885,7 @@ function mr_open
     local current_branch; current_branch=$(git_current_branch)
     local base_branch;    base_branch=${2:-$(git_base_branch)}
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
@@ -900,14 +910,14 @@ function mr_open
 
 function mr_update
 {
-    gitlab_check_env || exit $?
+    gitlab_check_env
 
     local current_branch; current_branch=$(git_current_branch)
     local base_branch;    base_branch=${1:-$(git_base_branch)}
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -1018,12 +1028,12 @@ function mr_update
             fi
             new_description=$(echo -e "${new_description}\n ")
 
-            mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data")
+            mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
         fi
 
         if [ "$base_branch" != "$current_target" ] \
         && [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$base_branch'?")" = "yes" ]; then
-            mr_update_data=$(jq_build "target_branch" "$base_branch" "$mr_update_data")
+            mr_update_data=$(jq_build "target_branch" "$base_branch" "$mr_update_data") || exit $?
         fi
 
         if [ "$mr_update_data" != "{}" ]; then
@@ -1107,12 +1117,16 @@ EOF
 ################################################################################
 # Run
 
+# Init
+
+git rev-parse > /dev/null 2>&1 || exit_error 1 "Not a git repository"
 
 if [ ! -x "$(command -v jq)" ]; then
     echo_error "Please install jq for full actions support (update, merge, ...)."
 fi
 
 
+# Parse options
 args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1126,6 +1140,7 @@ done
 set -- "${args[@]}"
 
 
+# Run
 case $1 in
 
     help|usage) usage ;;
@@ -1138,3 +1153,18 @@ case $1 in
     *) print_mr "$@" ;;
 
 esac
+
+
+################################################################################
+# Error code reference:
+#
+#   1   Not a git repository
+#   2   jq is required for this operation
+#
+#  10   Gitlab request error
+#  11   GITLAB_DOMAIN|GITLAB_TOKEN is not set
+#  12   Unable to determine Gitlab project URL
+#
+#  20   Jira request error
+#  21   JIRA_USER|JIRA_TOKEN|JIRA_INSTANCE is not set
+#
