@@ -552,7 +552,7 @@ function gitlab_unwip
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        print_mr "$(guess_issue_code)" "${base_branch}"
+        mr_print "$(guess_issue_code)" "${base_branch}"
         return
     fi
 
@@ -590,108 +590,9 @@ function gitlab_unwip
     echo
 }
 
-function gitlab_merge
-{
-    gitlab_check_env
-
-    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
-
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
-
-    # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
-        echo_error "Merge request not found"
-        print_mr "$(guess_issue_code)" "${base_branch}"
-        return
-    fi
-
-    # Load existing merge request details
-
-    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
-    local title;         title=$(gitlab_extract_title "$merge_request")
-    local merge_status;  merge_status=$(extract_json_string "merge_status" "$merge_request")
-
-    echo
-    echo "-------------------------------------------------------------------"
-    echo "$title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
-
-    # test merge status
-    if [ "$merge_status" != "can_be_merged" ]; then
-        echo_error "Merge request can not be merged. You probably need to rebase the branch and resolve conflicts."
-        echo_error
-        return
-    fi
-
-    # test open threads
-    local unresolved_thread_count;
-    unresolved_thread_count=$(gitlab_merge_request_discussions "$mr_iid" |
-        grep '"resolvable":true' |
-        grep -c '"resolved":false')
-
-    if [ "$unresolved_thread_count" -gt 0 ]; then
-        echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging."
-        echo_error
-        return
-    fi
-
-    # test WIP status
-    local wip; wip=$(echo "$title" | grep -o '^WIP:')
-
-    if [ ! -z "$wip" ]; then
-        echo_error "Merge request is a Work in Progress"
-        if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
-            echo -n "Resolving WIP status... "
-
-            local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
-            local mr_data;        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
-
-            local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
-
-            if [ ! -z "$result" ]; then echo -e "OK\n";
-            else echo_error; return; fi
-        else
-            echo_error; return;
-        fi
-    fi
-
-    if [ "$(confirm "Do you want to merge '$current_branch'?")" = "yes" ]; then
-        echo -n "Merging '$current_branch'... "
-
-        local result; result=$(gitlab_merge_request_merge "${mr_iid}")
-
-        if [ ! -z "$result" ]; then
-            echo -e "OK\n";
-
-            if [ "$(confirm "Do you want to checkout '$base_branch' and pull changes?")" = "yes" ]; then
-                echo "git checkout $base_branch && git pull --rebase"
-
-                git checkout "$base_branch" && git pull --rebase
-                echo
-
-                if [ "$(confirm "Do you want to delete local branch '$current_branch'")" = "yes" ]; then
-                    echo "git branch -d $current_branch"
-
-                    git branch -d "$current_branch"
-                fi
-            fi
-        fi
-    fi
-
-    echo
-}
-
 
 ################################################################################
-# Merge request
+# Merge request utility functions
 
 function guess_issue_code
 {
@@ -788,16 +689,14 @@ Merge request:
 
   ${mr_url}
 EOF
-
         mr_status "${mr_iid}" "$mr_detail"
-
         return
     fi
 
     local new_mr_url
     new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
 
-cat << EOF
+    cat << EOF
 To create a new merge request:
 
   ${new_mr_url}
@@ -808,6 +707,8 @@ EOF
 function mr_status
 {
     local mr_iid=$1
+
+    [ ! -z "$mr_iid" ] || exit_error 0 "mr_iid not provided"
 
     local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
 
@@ -869,7 +770,11 @@ function mr_status
     echo -e "\n"
 }
 
-function print_mr
+
+################################################################################
+# Merge request top-level functions
+
+function mr_print
 {
     ISSUE_CODE=${1:-$(guess_issue_code)}
 
@@ -886,14 +791,11 @@ function mr_open
     local base_branch;    base_branch=${2:-$(git_base_branch)}
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "${mr_summary}")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
-
-        local mr_iid; mr_iid=$(extract_json_int "iid" "${mr_summary}")
-
         mr_status "${mr_iid}"
-
         open_in_browser "${mr_url}"
         return
     fi
@@ -923,7 +825,7 @@ function mr_update
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        print_mr "$(guess_issue_code)" "${base_branch}"
+        mr_print "$(guess_issue_code)" "${base_branch}"
         return
     fi
 
@@ -1049,6 +951,105 @@ function mr_update
     mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
 }
 
+function mr_merge
+{
+    gitlab_check_env
+
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+
+    local current_branch; current_branch=$(git_current_branch)
+    local base_branch;    base_branch=${1:-$(git_base_branch)}
+
+    # Search existing merge request
+
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
+
+    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+        echo_error "Merge request not found"
+        mr_print "$(guess_issue_code)" "${base_branch}"
+        return
+    fi
+
+    # Load existing merge request details
+
+    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
+    local title;         title=$(gitlab_extract_title "$merge_request")
+    local merge_status;  merge_status=$(extract_json_string "merge_status" "$merge_request")
+
+    echo
+    echo "-------------------------------------------------------------------"
+    echo "$title"
+    echo "-------------------------------------------------------------------"
+    echo
+    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+
+    # test merge status
+    if [ "$merge_status" != "can_be_merged" ]; then
+        echo_error "Merge request can not be merged. You probably need to rebase the branch and resolve conflicts."
+        echo_error
+        return
+    fi
+
+    # test open threads
+    local unresolved_thread_count;
+    unresolved_thread_count=$(gitlab_merge_request_discussions "$mr_iid" |
+        grep '"resolvable":true' |
+        grep -c '"resolved":false')
+
+    if [ "$unresolved_thread_count" -gt 0 ]; then
+        echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging."
+        echo_error
+        return
+    fi
+
+    # test WIP status
+    local wip; wip=$(echo "$title" | grep -o '^WIP:')
+
+    if [ ! -z "$wip" ]; then
+        echo_error "Merge request is a Work in Progress"
+        if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
+            echo -n "Resolving WIP status... "
+
+            local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
+            local mr_data;        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
+
+            local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+
+            if [ ! -z "$result" ]; then echo -e "OK\n";
+            else echo_error; return; fi
+        else
+            echo_error; return;
+        fi
+    fi
+
+    if [ "$(confirm "Do you want to merge '$current_branch'?")" = "yes" ]; then
+        echo -n "Merging '$current_branch'... "
+
+        local result; result=$(gitlab_merge_request_merge "${mr_iid}")
+
+        if [ ! -z "$result" ]; then
+            echo -e "OK\n";
+
+            if [ "$(confirm "Do you want to checkout '$base_branch' and pull changes?")" = "yes" ]; then
+                echo "git checkout $base_branch && git pull --rebase"
+
+                git checkout "$base_branch" && git pull --rebase
+                echo
+
+                if [ "$(confirm "Do you want to delete local branch '$current_branch'")" = "yes" ]; then
+                    echo "git branch -d $current_branch"
+
+                    git branch -d "$current_branch"
+                fi
+            fi
+        fi
+    fi
+
+    echo
+}
+
 function usage
 {
     cat << EOF
@@ -1145,12 +1146,13 @@ case $1 in
 
     help|usage) usage ;;
 
-    open)   mr_open      "${@:2}" ;;
-    update) mr_update    "${@:2}" ;;
-    merge)  gitlab_merge "${@:2}" ;;
-    unwip)  gitlab_unwip          ;;
+    open)   mr_open   "${@:2}" ;;
+    update) mr_update "${@:2}" ;;
+    merge)  mr_merge  "${@:2}" ;;
 
-    *) print_mr "$@" ;;
+    unwip)  gitlab_unwip ;;
+
+    *) mr_print "$@" ;;
 
 esac
 
