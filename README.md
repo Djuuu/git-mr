@@ -46,7 +46,39 @@ You can also update the source branche if it is different from the current one.
 git mr [OPTIONS] unwip
 ```
 
-This will resolve the _Work in Progress_ status.
+This will resolve the Gitlab  _Work in Progress_ status.
+
+----------------------------------------------------------------
+
+```bash
+mr [OPTIONS]  ip  [ISSUE_CODE]
+```
+
+This will:
+* remove Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS` 
+* set Jira ticket to status ID defined in `JIRA_IP_ID`
+
+----------------------------------------------------------------
+
+```bash
+mr [OPTIONS]  cr  [ISSUE_CODE]
+```
+
+This will:
+* remove Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS` 
+* add Gitlab labels defined in `GITLAB_CR_LABELS`
+* set Jira ticket to status ID defined in `JIRA_CR_ID`
+
+----------------------------------------------------------------
+
+```bash
+mr [OPTIONS]  qa  [ISSUE_CODE]
+```
+
+This will:
+* remove Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS` 
+* add Gitlab labels defined in `GITLAB_QA_LABELS`
+* set Jira ticket to status ID defined in `JIRA_QA_ID`
 
 ----------------------------------------------------------------
 
@@ -68,7 +100,7 @@ and if applicable, will prompt you to:
 ## Options
 
 * `-v` Verbose output (displays called API URLs)
-* `-y` Bypass confirmation prompts ("yes")
+* `-y` Bypass confirmation prompts (always answer "yes")
 
 
 ## Installation
@@ -126,6 +158,16 @@ export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
 
 # Network timeout (in seconds, defaults to 5)
 export GIT_MR_TIMEOUT=5
+
+# Gitlab status labels (comma-separated, without spaces in between)
+export GITLAB_OK_LABELS="Validated,Accepted" # Gitlab labels removed on IP, CR or QA steps
+export GITLAB_CR_LABELS="Review"             # Gitlab labels set on CR step
+export GITLAB_QA_LABELS="Testing"            # Gitlab labels set on QA step
+
+# Jira status IDs
+export JIRA_IP_ID="xx" # Jira "In progress" status ID
+export JIRA_CR_ID="xx" # Jira "Code review" status ID
+export JIRA_QA_ID="xx" # Jira "Quality Assurance" status ID
 ```
 
 

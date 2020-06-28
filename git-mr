@@ -190,14 +190,51 @@ function jq_build
     local value=${2}
     local initial_data=${3:-"{}"}
 
+    is_obj=$(echo "$value" | grep  '^\{.*\}$')
+    is_num=$(echo "$value" | grep  '^[0-9]*$')
+
     local current_object;
-    current_object="$(jq --null-input --compact-output \
-        --arg value "$value"   "{\"${key}\": \$value}")"
+
+    if [ ! -z "$is_obj" ] || [ ! -z "$is_num" ]; then
+        current_object="$(jq --null-input --compact-output --argjson value "$value"   "{\"${key}\": \$value}")"
+    else
+        current_object="$(jq --null-input --compact-output --arg     value "$value"   "{\"${key}\": \$value}")"
+    fi
 
     jq --null-input --compact-output \
             --argjson initial_data "$initial_data"     \
             --argjson current_object "$current_object" \
             '$initial_data + $current_object'
+}
+
+function replace_labels
+{
+    local labels=$1
+    local to_remove=$2
+    local to_add=$3
+
+    echo_debug "replace_labels - original labels  : $labels"
+    echo_debug "replace_labels - labels to remove : $to_remove"
+    echo_debug "replace_labels - labels to add    : $to_add"
+
+    # split
+    labels=$(    echo "$labels"    | tr "," "\n")
+    to_remove=$( echo "$to_remove" | tr "," "\n")
+    to_add=$(    echo "$to_add"    | tr "," "\n")
+
+    # remove
+    [ ! -z "$to_remove" ] && labels=$(echo "$labels" | grep -v "$to_remove")
+    [ ! -z "$to_add" ]    && labels=$(echo "$labels" | grep -v "$to_add")
+
+    # add
+    [ ! -z "$to_add" ] && labels=$(echo -e "${labels}\n${to_add}")
+
+    # implode
+    labels=$(echo "$labels" | tr "\n" "," | sed 's/^,//' | sed 's/,$//')
+
+    echo_debug "replace_labels - result    : $labels"
+
+    echo "$labels"
 }
 
 function open_in_browser
@@ -263,26 +300,57 @@ function markdown_list
 ################################################################################
 # Jira functions
 
-function jira_ticket_data
+function jira_check_env
 {
     [ ! -z "$JIRA_USER" ]     || exit_error 21 "JIRA_USER is not set"
     [ ! -z "$JIRA_TOKEN" ]    || exit_error 21 "JIRA_TOKEN is not set"
     [ ! -z "$JIRA_INSTANCE" ] || exit_error 21 "JIRA_INSTANCE is not set"
-
-    local auth_token
-    auth_token=$(echo -n "${JIRA_USER}:${JIRA_TOKEN}" | base64 -w 0)
-
-    local issue_url="https://${JIRA_INSTANCE}/rest/api/3/issue/${1}?fields=summary"
-
-    echo_debug "Jira - GET ${issue_url}"
-
-    curl -Ss -X GET \
-        --max-time ${GIT_MR_TIMEOUT:-5} \
-        -H "Authorization: Basic ${auth_token}" \
-        -H "Content-Type: application/json" \
-        "${issue_url}" || exit_error 20 "Jira request error"
 }
 
+function jira_request
+{
+    jira_check_env
+
+    local request_url=$1
+    local request_verb=${2:-"GET"}
+    local request_data=${3}
+
+    local jira_base_url="https://${JIRA_INSTANCE}/rest/api/3"
+
+    local auth_token; auth_token=$(echo -n "${JIRA_USER}:${JIRA_TOKEN}" | base64 -w 0)
+
+    echo_debug "Jira - ${request_verb} ${request_url} ${request_data}"
+
+    curl -Ss \
+        -X "${request_verb}" \
+        -H "Authorization: Basic ${auth_token}" \
+        -H "Content-Type: application/json" \
+        --data "${request_data}" \
+        --max-time ${GIT_MR_TIMEOUT:-5} \
+        "${jira_base_url}/${request_url}" || exit_error 20 "Jira request error"
+}
+
+function jira_ticket_data
+{
+    jira_check_env
+
+    local issue_code=$1;  [ ! -z "$issue_code" ] || exit_error 0 "issue_code required"
+
+    jira_request "issue/${issue_code}?fields=summary" || exit $?
+}
+
+function jira_transition
+{
+    jira_check_env
+
+    local issue_code=$1;     [ ! -z "$issue_code"    ] || exit_error 0 "issue_code required"
+    local transition_id=$2;  [ ! -z "$transition_id" ] || exit_error 0 "transition_id required"
+
+    local transition=$(jq_build "id" "$transition_id")        || exit $?
+    local request_data=$(jq_build "transition" "$transition") || exit $?
+
+    jira_request "issue/${issue_code}/transitions" "POST" "$request_data" || exit $?
+}
 
 ################################################################################
 # Gitlab functions
@@ -327,15 +395,15 @@ function gitlab_request
 
     if [ -z "$project_id" ]; then return; fi
 
-    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
-
-    local gitlab_project_url="${gitlab_base_url}/projects/${project_id}"
-
     local request_url=$1
     local request_verb=${2:-"GET"}
     local request_data=${3}
 
-    echo_debug "GitLab - $request_verb $request_url"
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+
+    local gitlab_project_url="${gitlab_base_url}/projects/${project_id}"
+
+    echo_debug "GitLab - ${request_verb} ${request_url} ${request_data}"
 
     result=$(curl -Ss \
         -X "${request_verb}" \
@@ -806,6 +874,57 @@ function mr_status
     echo -e "\n"
 }
 
+function mr_update_labels
+{
+    local current_branch; current_branch=$(git_current_branch)
+    local base_branch;    base_branch=$(git_base_branch)
+
+    # Search existing merge request
+
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
+
+    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+        echo_error "Merge request not found"
+        mr_print "$(guess_issue_code)" "${base_branch}"
+        return
+    fi
+
+    # Load existing merge request details
+
+    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
+    local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
+    local labels;        labels=$(extract_json_array "labels" "$merge_request")
+
+    # Print merge request status summary
+    echo
+    echo "-------------------------------------------------------------------"
+    echo "$mr_title"
+    echo "-------------------------------------------------------------------"
+    echo
+    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    echo
+
+    # strip leading & trailing label commas
+    local to_remove; to_remove=$(echo -e "$1" | sed 's/^,*//' | sed 's/,*$//')
+    local to_add;    to_add=$(echo -e "$2" | sed 's/^,*//' | sed 's/,*$//')
+
+    if [ -z "$to_remove" ] && [ -z "$to_add" ]; then
+        echo_error "No label to add or remove"; return
+    fi
+
+    local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
+    if [ "$(confirm "Do you want to update the merge request labels to \"$new_labels\"?")" = "yes" ]; then
+        echo -n "Updating merge request labels... "
+
+        mr_data=$(jq_build "labels" "$new_labels") || exit $?
+        local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+
+        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+    fi
+}
+
 
 ################################################################################
 # Merge request top-level functions
@@ -1086,6 +1205,63 @@ function mr_merge
     echo
 }
 
+function mr_ip
+{
+    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
+
+    if [ ! -z "$JIRA_IP_ID" ] \
+    && [ "$(confirm "Do you want to update the Jira ticket status to \"In Progress\"?")" = "yes" ]; then
+        echo -n "Updating Jira ticket status... "
+
+        jira_transition "$ISSUE_CODE" "$JIRA_IP_ID" && echo -e "OK\n"
+    fi
+    if [ -z "$JIRA_IP_ID" ]; then echo_error "Set JIRA_IP_ID to be able to update Jira status\n"; fi
+}
+
+function mr_cr
+{
+    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
+
+    if [ ! -z "$JIRA_CR_ID" ] \
+    && [ "$(confirm "Do you want to update the Jira ticket status to \"Code Review\"?")" = "yes" ]; then
+        echo -n "Updating Jira ticket status... "
+
+        jira_transition "$ISSUE_CODE" "$JIRA_CR_ID" && echo -e "OK\n"
+    fi
+    if [ -z "$JIRA_CR_ID" ]; then echo_error "Set JIRA_CR_ID to be able to update Jira status\n"; fi
+}
+
+function mr_qa
+{
+    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
+
+    if [ ! -z "$JIRA_QA_ID" ] \
+    && [ "$(confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?")" = "yes" ]; then
+        echo -n "Updating Jira ticket status... "
+
+        jira_transition "$ISSUE_CODE" "$JIRA_QA_ID" && echo -e "OK\n"
+    fi
+    if [ -z "$JIRA_QA_ID" ]; then echo_error "Set JIRA_QA_ID to be able to update Jira status\n"; fi
+}
+
 function usage
 {
     cat << EOF
@@ -1096,7 +1272,12 @@ SYNOPSIS
     mr [OPTIONS] open   [ISSUE_CODE] [BASE_BRANCH]
     mr [OPTIONS] update [BASE_BRANCH]
     mr [OPTIONS] merge
+
     mr [OPTIONS] unwip
+
+    mr [OPTIONS] ip     [ISSUE_CODE]
+    mr [OPTIONS] cr     [ISSUE_CODE]
+    mr [OPTIONS] qa     [ISSUE_CODE]
 
 OPTIONS
 
@@ -1147,6 +1328,14 @@ CONFIGURATION
 
         export GIT_MR_TIMEOUT=5  # Timeout for HTTP API calls
 
+        export GITLAB_OK_LABELS="Validated,Accepted" # Gitlab labels removed on IP, CR or QA steps
+        export GITLAB_CR_LABELS="Review"             # Gitlab labels set on CR step
+        export GITLAB_QA_LABELS="Testing"            # Gitlab labels set on QA step
+
+        export JIRA_IP_ID="xx" # Jira In Progress status ID
+        export JIRA_CR_ID="xx" # Jira Code Review status ID
+        export JIRA_QA_ID="xx" # Jira Quality Assurance status ID
+
 EOF
 }
 
@@ -1187,6 +1376,10 @@ case $1 in
     merge)  mr_merge  "${@:2}" ;;
 
     unwip)  gitlab_unwip ;;
+
+    ip|IP) mr_ip "${@:2}" ;;
+    cr|CR) mr_cr "${@:2}" ;;
+    qa|QA) mr_qa "${@:2}" ;;
 
     *) mr_print "$@" ;;
 
