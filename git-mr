@@ -103,8 +103,7 @@ function extract_json_array
     echo "$content" |
         grep -Po '"'"${key}"'"\s*:\s*\[\K.*?[^\]]\]' | # extract array content
         sed 's/]$//' | # remove trailing bracket
-        sed 's/"//g' | # remove double quotes
-        tr "," "\n" # convert commas to newlines (1 item per line)
+        sed 's/"//g'   # remove double quotes
 }
 
 # https://gist.github.com/cdown/1163649
@@ -704,6 +703,46 @@ To create a new merge request:
 EOF
 }
 
+function is_status_label
+{
+    local label=$1
+
+    local system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
+        sed 's/,,/,/g' |
+        sed 's/^,//' | sed 's/,$//' |
+        tr "," "\n")
+
+    match="$( echo "$label"         | grep "$system_labels")" || return
+    reverse=$(echo "$system_labels" | grep "$match")          || return
+    # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
+
+    echo "$match"
+}
+
+function mr_format_labels
+{
+    local labels=$1
+
+    IFS=',' read -r -a labels_array <<< "$labels"
+
+    local status_labels=()
+    local other_labels=()
+
+    for label in "${labels_array[@]}"; do
+        if [ ! -z "$(is_status_label "$label")" ]; then
+            status_labels+=($(colorize "[$label]" "lightpurple" "bold"))
+        else
+            other_labels+=("[$label]")
+        fi
+    done
+
+    local status_labels_str="$(printf "%s " "${status_labels[@]}")"
+    local other_labels_str="$(printf "%s " "${other_labels[@]}")"
+
+    echo "${status_labels_str}${other_labels_str}" |
+        sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
+}
+
 function mr_status
 {
     local mr_iid=$1
@@ -714,10 +753,7 @@ function mr_status
 
     # Labels
     local labels; labels=$(extract_json_array "labels" "$merge_request")
-    local labels_display; labels_display=$(echo "[$labels]" |
-        tr "\n" "," |
-        sed 's/,$//' |
-        sed 's/,/] [/g');
+    local labels_display=$(mr_format_labels "$labels")
 
     # Votes
 
