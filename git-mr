@@ -1161,47 +1161,45 @@ function mr_merge
 
     # test WIP status
     local wip; wip=$(echo "$title" | grep -o '^WIP:')
-
     if [ ! -z "$wip" ]; then
         echo_error "Merge request is a Work in Progress"
-        if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
-            echo -n "Resolving WIP status... "
 
-            local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
-            local mr_data;        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
+        if [ "$(confirm "Do you want to resolve WIP status?")" != "yes" ]; then echo_error; return; fi
 
-            local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+        echo -n "Resolving WIP status... "
 
-            if [ ! -z "$result" ]; then echo -e "OK\n";
-            else echo_error; return; fi
-        else
-            echo_error; return;
-        fi
+        local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
+        local mr_data;        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
+
+        local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+
+        if [ ! -z "$result" ]; then echo -e "OK\n";
+        else echo_error; return; fi
     fi
 
-    if [ "$(confirm "Do you want to merge '$current_branch'?")" = "yes" ]; then
-        echo -n "Merging '$current_branch'... "
+    # Merge
 
-        local result; result=$(gitlab_merge_request_merge "${mr_iid}")
+    if [ "$(confirm "Do you want to merge '$current_branch'?")" != "yes" ]; then echo; return; fi
 
-        if [ ! -z "$result" ]; then
-            echo -e "OK\n";
+    echo -n "Merging '$current_branch'... "
+    local result; result=$(gitlab_merge_request_merge "${mr_iid}")
+    if [ -z "$result" ]; then echo; return;
+    else echo -e "OK\n"; fi
 
-            if [ "$(confirm "Do you want to checkout '$base_branch' and pull changes?")" = "yes" ]; then
-                echo "git checkout $base_branch && git pull --rebase"
+    # checkout target branch
 
-                git checkout "$base_branch" && git pull --rebase
-                echo
+    if [ "$(confirm "Do you want to checkout '$base_branch' and pull changes?")" != "yes" ]; then echo; return; fi
 
-                if [ "$(confirm "Do you want to delete local branch '$current_branch'")" = "yes" ]; then
-                    echo "git branch -d $current_branch"
+    echo "git checkout $base_branch && git pull --rebase"
+    git checkout "$base_branch" && git pull --rebase
+    echo
 
-                    git branch -d "$current_branch"
-                fi
-            fi
-        fi
-    fi
+    # delete local branch
 
+    if [ "$(confirm "Do you want to delete local branch '$current_branch'")" != "yes" ]; then echo; return; fi
+
+    echo "git branch -d $current_branch"
+    git branch -d "$current_branch"
     echo
 }
 
