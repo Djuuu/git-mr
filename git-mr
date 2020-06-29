@@ -722,16 +722,12 @@ function mr_description
     local commits; commits=$(git_commits "$current_branch" "$base_branch")
 
     cat << EOF
-
---------------------------------------------------------------------------------
 $(markdown_title "$title")
 
 
 ## Commits
 
 $(markdown_list "$commits" "**")
-
---------------------------------------------------------------------------------
 
 EOF
 }
@@ -936,8 +932,16 @@ function mr_print
     local current_branch; current_branch=$(git_current_branch)
     local base_branch=${2:-$(git_base_branch)}
 
-    mr_description "$current_branch" "$base_branch"
-    mr_actions     "$current_branch" "$base_branch"
+    cat << EOF
+
+--------------------------------------------------------------------------------
+$(mr_description "$current_branch" "$base_branch")
+
+--------------------------------------------------------------------------------
+
+EOF
+
+    mr_actions "$current_branch" "$base_branch"
 }
 
 function mr_open
@@ -956,11 +960,25 @@ function mr_open
     fi
 
     ISSUE_CODE=${1:-$(guess_issue_code)}
-    mr_description "$current_branch" "$base_branch"
+
+    local description; description=$(mr_description "$current_branch" "$base_branch")
+
+    cat << EOF
+
+--------------------------------------------------------------------------------
+${description}
+
+--------------------------------------------------------------------------------
+
+EOF
 
     local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
 
     if [ ! -z "${new_mr_url}" ]; then
+
+        # add description
+        new_mr_url="${new_mr_url}&$(urlencode "merge_request[description]")=$(urlencode "$description")"
+
         open_in_browser "${new_mr_url}"
     fi
 }
