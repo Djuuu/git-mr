@@ -1147,9 +1147,10 @@ function mr_merge
 
     # Load existing merge request details
 
-    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
-    local title;         title=$(gitlab_extract_title "$merge_request")
-    local merge_status;  merge_status=$(extract_json_string "merge_status" "$merge_request")
+    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
+    local title;          title=$(gitlab_extract_title "$merge_request")
+    local merge_status;   merge_status=$(extract_json_string "merge_status" "$merge_request")
+    local current_target; current_target=$(extract_json_string "target_branch" "$merge_request")
 
     echo
     echo "-------------------------------------------------------------------"
@@ -1197,7 +1198,7 @@ function mr_merge
 
     # Merge
 
-    if [ "$(confirm "Do you want to merge '$current_branch'?")" != "yes" ]; then echo; return; fi
+    if [ "$(confirm "Do you want to merge '$current_branch' into '$current_target'?")" != "yes" ]; then echo; return; fi
 
     echo -n "Merging '$current_branch'... "
     local result; result=$(gitlab_merge_request_merge "${mr_iid}")
