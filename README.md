@@ -2,102 +2,44 @@
 
 Prepares a merge request description, with link to Jira ticket and current branch commit list.
 
+----------------------------------------------------------------
 
-## Usage
-
-```bash
-git mr [OPTIONS] [ISSUE_CODE] [BASE_BRANCH]
-```
-
-This will print a merge request description, with a link to Jira ticket and current branch commit list.
-* `ISSUE_CODE` can be guessed from the branch name according to `JIRA_CODE_PATTERN` 
-* `BASE_BRANCH` is determined by going up the commit history and finding the first one attached to a branch 
-
-If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
-
-Otherwise, a link to create a new merge request will be provided. Default labels and "Delete source branch" status 
-can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH` environment variables.
+* [Synopsis](#synopsis)
+* [Installation](#installation)
+* [Configuration](#configuration)
+* [Usage](#usage)
+    + [`git mr`](#git-mr-1)
+    + [`git mr open`](#git-mr-open)
+    + [`git mr update`](#git-mr-update)
+    + [`git mr unwip`](#git-mr-unwip)
+    + [`git mr ip`](#git-mr-ip)
+    + [`git mr qa`](#git-mr-qa)
+    + [`git mr merge`](#git-mr-merge)
+* [Sample output](#sample-output)
 
 ----------------------------------------------------------------
 
-```bash
-git mr [OPTIONS] open [ISSUE_CODE] [BASE_BRANCH]
-```
+## Synopsis
 
-Similar to `git mr`, but will open browser directly.
+<pre>
+<b>git mr</b>  <i>[OPTIONS]</i>          <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>open</b>    <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BASE_BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>
 
-----------------------------------------------------------------
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>unwip</b>
 
-```bash
-git mr [OPTIONS] update [BASE_BRANCH]
-```
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>   <i>[ISSUE_CODE]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>   <i>[ISSUE_CODE]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>qa</b>   <i>[ISSUE_CODE]</i>
+</pre>
 
-This will:
-* fetch and display the current merge request description from Gitlab.
-* compare the commit lists and update the SHA-1 references in the description
+### Arguments
 
-If some commits were changed (after a rebase) or added, you will be prompted if you want to post the updated description to Gitlab.
+* `ISSUE_CODE` Force Jira issue code, if not detected properly
+* `BASE_BRANCH` Force base branch, if not detected properly
 
-You can also update the source branche if it is different from the current one.  
-
-----------------------------------------------------------------
-
-```bash
-git mr [OPTIONS] unwip
-```
-
-This will resolve the Gitlab  _Work in Progress_ status.
-
-----------------------------------------------------------------
-
-```bash
-mr [OPTIONS]  ip  [ISSUE_CODE]
-```
-
-This will:
-* remove Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS` 
-* set Jira ticket to status ID defined in `JIRA_IP_ID`
-
-----------------------------------------------------------------
-
-```bash
-mr [OPTIONS]  cr  [ISSUE_CODE]
-```
-
-This will:
-* remove Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS` 
-* add Gitlab labels defined in `GITLAB_CR_LABELS`
-* set Jira ticket to status ID defined in `JIRA_CR_ID`
-
-----------------------------------------------------------------
-
-```bash
-mr [OPTIONS]  qa  [ISSUE_CODE]
-```
-
-This will:
-* remove Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS` 
-* add Gitlab labels defined in `GITLAB_QA_LABELS`
-* set Jira ticket to status ID defined in `JIRA_QA_ID`
-
-----------------------------------------------------------------
-
-```bash
-git mr [OPTIONS] merge
-```
-
-This will:
-* check merge status
-* check open threads
-* check WiP status
-
-and if applicable, will prompt you to:
-* resolve WIP status
-* trigger the merge
-* checkout local target branch, update it and delete local merged branch
-
-
-## Options
+### Options
 
 * `-v` Verbose output (displays called API URLs)
 * `-y` Bypass confirmation prompts (always answer "yes")
@@ -124,7 +66,9 @@ _OR_
   	mr = "!bash /path/to/git-mr/git-mr"
   ```
 
-* Install `jq` to be able to update or merge.
+### Dependencies
+
+* Install [**`jq`**](https://stedolan.github.io/jq/) to be able to update or merge.
 
 
 ## Configuration
@@ -143,7 +87,7 @@ export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 To create a Jira API Token, go to:
 * https://id.atlassian.com/manage-profile/security/api-tokens<br>
   (Account Settings -> Security -> API Token -> Create and manage API tokens)
-  
+
 To create a Gitlab API Token, go to:
 * https://myapp.gitlab.com/profile/personal_access_tokens<br>
   (Settings -> Access Tokens)
@@ -160,15 +104,123 @@ export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
 export GIT_MR_TIMEOUT=5
 
 # Gitlab status labels (comma-separated, without spaces in between)
-export GITLAB_OK_LABELS="Validated,Accepted" # Gitlab labels removed on IP, CR or QA steps
-export GITLAB_CR_LABELS="Review"             # Gitlab labels set on CR step
-export GITLAB_QA_LABELS="Testing"            # Gitlab labels set on QA step
+export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
+export GITLAB_CR_LABELS="Review"             # Labels set on CR step
+export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
 
 # Jira status IDs
-export JIRA_IP_ID="xx" # Jira "In progress" status ID
-export JIRA_CR_ID="xx" # Jira "Code review" status ID
-export JIRA_QA_ID="xx" # Jira "Quality Assurance" status ID
+export JIRA_IP_ID="xx" # "In progress" status ID
+export JIRA_CR_ID="xx" # "Code review" status ID
+export JIRA_QA_ID="xx" # "Quality Assurance" status ID
 ```
+
+
+## Usage
+
+### `git mr`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+</pre>
+
+This will print a merge request description, with a link to Jira ticket and current branch commit list.
+* `ISSUE_CODE` can be guessed from the branch name according to `JIRA_CODE_PATTERN` 
+* `BASE_BRANCH` is determined by going up the commit history and finding the first one attached to a branch 
+
+If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
+
+Otherwise, a link to create a new merge request will be provided. Default labels and "Delete source branch" status 
+can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH` environment variables.
+
+----------------------------------------------------------------
+
+### `git mr open`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>open</b> <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+</pre>
+
+Similar to `git mr`, but will open browser directly.
+
+----------------------------------------------------------------
+
+### `git mr update`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>update</b> <i>[BASE_BRANCH]</i>
+</pre>
+
+This will:
+* fetch and display the current merge request description from Gitlab.
+* compare the commit lists and update the SHA-1 references in the description
+
+If some commits were changed (after a rebase) or added, you will be prompted if you want to post the updated description to Gitlab.
+
+You can also update the source branche if it is different from the current one.
+
+----------------------------------------------------------------
+
+### `git mr unwip`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>unwip</b>
+</pre>
+
+This will resolve the Gitlab _Work in Progress_ status.
+
+----------------------------------------------------------------
+
+### `git mr ip` 
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>ip</b> <i>[ISSUE_CODE]</i>
+</pre>
+
+This will:
+* remove Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS` 
+* set Jira ticket to status ID defined in `JIRA_IP_ID`
+
+----------------------------------------------------------------
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>cr</b> <i>[ISSUE_CODE]</i>
+</pre>
+
+This will:
+* remove Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS` 
+* add Gitlab labels defined in `GITLAB_CR_LABELS`
+* set Jira ticket to status ID defined in `JIRA_CR_ID`
+
+----------------------------------------------------------------
+
+### `git mr qa` 
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>qa</b> <i>[ISSUE_CODE]</i>
+</pre>
+
+This will:
+* remove Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS` 
+* add Gitlab labels defined in `GITLAB_QA_LABELS`
+* set Jira ticket to status ID defined in `JIRA_QA_ID`
+
+----------------------------------------------------------------
+
+### `git mr merge`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>merge</b>
+</pre>
+
+This will:
+* check merge status
+* check open threads
+* check WiP status
+
+and if applicable, will prompt you to:
+* resolve WIP status
+* trigger the merge
+* checkout local target branch, update it and delete local merged branch
 
 
 ## Sample output

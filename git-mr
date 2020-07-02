@@ -1340,18 +1340,24 @@ CONFIGURATION
 
     Optional configuration variables:
 
-        export GITLAB_DEFAULT_LABELS="Review,My Team"       # Default labels for new merge requests
-        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1  # Check "Delete source branch" by default
+        # Default labels for new merge requests
+        export GITLAB_DEFAULT_LABELS="Review,My Team"
 
-        export GIT_MR_TIMEOUT=5  # Timeout for HTTP API calls
+        # Check "Delete source branch" by default (defaults to 1)
+        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
 
-        export GITLAB_OK_LABELS="Validated,Accepted" # Gitlab labels removed on IP, CR or QA steps
-        export GITLAB_CR_LABELS="Review"             # Gitlab labels set on CR step
-        export GITLAB_QA_LABELS="Testing"            # Gitlab labels set on QA step
+        # Network timeout (in seconds, defaults to 5)
+        export GIT_MR_TIMEOUT=5
 
-        export JIRA_IP_ID="xx" # Jira In Progress status ID
-        export JIRA_CR_ID="xx" # Jira Code Review status ID
-        export JIRA_QA_ID="xx" # Jira Quality Assurance status ID
+        # Gitlab status labels (comma-separated, without spaces in between)
+        export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
+        export GITLAB_CR_LABELS="Review"             # Labels set on CR step
+        export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
+
+        # Jira status IDs
+        export JIRA_IP_ID="xx" # "In Progress" status ID
+        export JIRA_CR_ID="xx" # "Code Review" status ID
+        export JIRA_QA_ID="xx" # "Quality Assurance" status ID
 
 EOF
 }
