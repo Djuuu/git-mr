@@ -516,11 +516,13 @@ function gitlab_extract_description
     local mr_detail=$1
 
     extract_json_string "description" "$mr_detail" |
-        sed 's/\\r//g' |
-        sed 's/\\n/\n/g' |
-        sed 's/\\u003c/</g' |
-        sed 's/\\u003e/>/g' |
-        sed 's/\\\\/\\/g'
+        sed 's/\\r//g'          | # cleanup newline characters
+        sed -r 's/^(\\n|\s)*//' | # cleanup leading spaces or newlines
+        sed -r 's/(\\n|\s)*$//' | # cleanup trailing spaces or newlines
+        sed 's/\\n/\n/g'        | # convert newline characters
+        sed 's/\\u003c/</g'     | # convert HTML entities
+        sed 's/\\u003e/>/g'     | # convert HTML entities
+        sed 's/\\\\/\\/g'         # convert backslashes
 }
 
 function gitlab_merge_request_discussions
@@ -1101,7 +1103,7 @@ function mr_update
                 new_description=$(echo -e "${new_description}\n\n## Update")
                 new_description=$(echo -e "${new_description}\n\n$(markdown_list "$new_commit_messages_content_str" "**")")
             fi
-            new_description=$(echo -e "${new_description}\n ")
+            new_description=$(echo -e "${new_description}")$'\n'
 
             mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
         fi
