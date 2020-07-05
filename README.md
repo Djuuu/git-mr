@@ -13,6 +13,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr update`](#git-mr-update)
     + [`git mr unwip`](#git-mr-unwip)
     + [`git mr ip`](#git-mr-ip)
+    + [`git mr cr`](#git-mr-cr)
     + [`git mr qa`](#git-mr-qa)
     + [`git mr merge`](#git-mr-merge)
 * [Sample output](#sample-output)
@@ -181,6 +182,8 @@ This will:
 * set Jira ticket to status ID defined in `JIRA_IP_ID`
 
 ----------------------------------------------------------------
+
+### `git mr cr` 
 
 <pre>
 <b>git mr</b> <i>[OPTIONS]</i> <b>cr</b> <i>[ISSUE_CODE]</i>
