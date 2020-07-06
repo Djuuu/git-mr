@@ -41,24 +41,39 @@ function git_titlize_branch
 {
     local branch=${1:-$(git_current_branch)}
 
-    # Split reference & label part
+    # Split prefix, issue id & label parts
 
     local branch_split_pattern="^(.*)($JIRA_CODE_PATTERN)[^a-zA-Z0-9]?(.*)$"
 
-    local title_ref;   title_ref=$(echo "$branch" | sed -r "s/$branch_split_pattern/\1\2/") # ex: 'feature/XY-1234'
-    local title_label; title_label=$(echo "$branch" | sed -r "s/$branch_split_pattern/\3/") # ex: 'my-branch-name'
+    local prefix;   prefix=$(  echo "$branch" | sed -r "s/$branch_split_pattern/\1/") # ex: 'feature/'
+    local issue_id; issue_id=$(echo "$branch" | sed -r "s/$branch_split_pattern/\2/") # ex: 'XY-1234'
+    local label;    label=$(   echo "$branch" | sed -r "s/$branch_split_pattern/\3/") # ex: 'my-branch-name'
 
-    # Uppercase 1st letters
-    title_ref="${title_ref^}"
-    title_label="${title_label^}"
+    # When Jira code pattern is not matched
+    if [ "$prefix" = "$issue_id" ]; then
+        # Split prefix & label parts
+        branch_split_pattern="^([^\/]*\/?)(.*)$"
+        prefix=$(echo "$branch" | sed -r "s/$branch_split_pattern/\1/")
+        label=$( echo "$branch" | sed -r "s/$branch_split_pattern/\2/")
+        issue_id=
+    else
+        issue_id="$issue_id " # add space
+    fi
 
-    # substitute dashes & underscores
-    title_label=$(echo "$title_label" | sed 's/[-_]/ /g')
+    # When Jira code pattern and prefix are not matched
+    if [ -z "$label" ]; then
+        label="$prefix"
+        prefix=
+    fi
+
+    # Formatting
+    local title_ref;   title_ref="${prefix^}${issue_id}"
+    local title_label; title_label="$(echo "${label^}" | sed 's/[-_]/ /g')"
 
     # Wip prefix
     local wip_prefix="WIP: "
 
-    echo "${wip_prefix}${title_ref} ${title_label}"
+    echo "${wip_prefix}${title_ref}${title_label}"
 }
 
 
