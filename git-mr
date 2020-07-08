@@ -1249,7 +1249,8 @@ function mr_ip
 
     mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
 
-    if [ ! -z "$JIRA_IP_ID" ] \
+    if [ ! -z "$ISSUE_CODE" ] \
+    && [ ! -z "$JIRA_IP_ID" ] \
     && [ "$(confirm "Do you want to update the Jira ticket status to \"In Progress\"?")" = "yes" ]; then
         echo -n "Updating Jira ticket status... "
 
@@ -1268,7 +1269,8 @@ function mr_cr
 
     mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
 
-    if [ ! -z "$JIRA_CR_ID" ] \
+    if [ ! -z "$ISSUE_CODE" ] \
+    && [ ! -z "$JIRA_CR_ID" ] \
     && [ "$(confirm "Do you want to update the Jira ticket status to \"Code Review\"?")" = "yes" ]; then
         echo -n "Updating Jira ticket status... "
 
@@ -1287,7 +1289,8 @@ function mr_qa
 
     mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
 
-    if [ ! -z "$JIRA_QA_ID" ] \
+    if [ ! -z "$ISSUE_CODE" ] \
+    && [ ! -z "$JIRA_QA_ID" ] \
     && [ "$(confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?")" = "yes" ]; then
         echo -n "Updating Jira ticket status... "
 
