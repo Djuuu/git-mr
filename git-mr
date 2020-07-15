@@ -1143,7 +1143,6 @@ function mr_update
 
         if [ $((updated_commit_count + new_commit_count)) -gt 0 ] \
         && [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
-            echo -n "Updating merge request description... "
 
             local new_description
             new_description=$(echo -e "${new_description_content}")
@@ -1163,6 +1162,9 @@ function mr_update
         fi
 
         if [ "$mr_update_data" != "{}" ]; then
+
+            echo -n "Updating merge request..."
+
             local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
 
             if [ ! -z "$result" ]; then echo -e "OK\n"; fi
