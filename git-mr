@@ -769,7 +769,7 @@ Merge request:
 
   ${mr_url}
 EOF
-        mr_status "${mr_iid}" "$mr_detail"
+        mr_print_status "${mr_iid}" "$mr_detail"
         return
     fi
 
@@ -824,7 +824,7 @@ function mr_format_labels
         sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
 }
 
-function mr_status
+function mr_print_status
 {
     local mr_iid=$1
 
@@ -971,7 +971,7 @@ function mr_open
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
-        mr_status "${mr_iid}"
+        mr_print_status "${mr_iid}"
         open_in_browser "${mr_url}"
         return
     fi
@@ -998,6 +998,40 @@ EOF
 
         open_in_browser "${new_mr_url}"
     fi
+}
+
+function mr_status
+{
+    gitlab_check_env
+
+    local current_branch; current_branch=$(git_current_branch)
+    local base_branch;    base_branch=${1:-$(git_base_branch)}
+
+    # Search existing merge request
+
+    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
+
+    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+        echo_error "Merge request not found"
+        mr_print "$(guess_issue_code)" "${base_branch}"
+        return
+    fi
+
+    # Load existing merge request details
+
+    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
+    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
+    local current_target; current_target=$(extract_json_string "target_branch" "$merge_request")
+
+    # Print merge request title & status
+    echo
+    echo "-------------------------------------------------------------------"
+    echo "$mr_title"
+    echo "-------------------------------------------------------------------"
+    echo
+    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
 }
 
 function mr_update
@@ -1109,7 +1143,6 @@ function mr_update
 
         if [ $((updated_commit_count + new_commit_count)) -gt 0 ] \
         && [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
-            echo -n "Updating merge request description... "
 
             local new_description
             new_description=$(echo -e "${new_description_content}")
@@ -1129,6 +1162,9 @@ function mr_update
         fi
 
         if [ "$mr_update_data" != "{}" ]; then
+
+            echo -n "Updating merge request..."
+
             local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
 
             if [ ! -z "$result" ]; then echo -e "OK\n"; fi
@@ -1414,15 +1450,16 @@ case $1 in
 
     help|usage) usage ;;
 
-    open)   mr_open   "${@:2}" ;;
-    update) mr_update "${@:2}" ;;
-    merge)  mr_merge  "${@:2}" ;;
+    o|op|open)   mr_open   "${@:2}" ;;
+    s|st|status) mr_status "${@:2}" ;;
+    u|up|update) mr_update "${@:2}" ;;
+    m|mg|merge)  mr_merge  "${@:2}" ;;
 
     unwip)  gitlab_unwip ;;
 
-    ip|IP) mr_ip "${@:2}" ;;
-    cr|CR) mr_cr "${@:2}" ;;
-    qa|QA) mr_qa "${@:2}" ;;
+    p|ip|IP) mr_ip "${@:2}" ;;
+    r|cr|CR) mr_cr "${@:2}" ;;
+    q|qa|QA) mr_qa "${@:2}" ;;
 
     *) mr_print "$@" ;;
 
