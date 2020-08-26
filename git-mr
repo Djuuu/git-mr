@@ -260,13 +260,20 @@ function open_in_browser
         return;
     fi
 
-    if [ ! -x "$(command -v xdg-open)" ]; then
-        echo "  ${url}"
-        echo
+    local open_command
+    if   [[ "$OSTYPE" == "linux-gnu"* ]]; then open_command='xdg-open';
+    elif [[ "$OSTYPE" == "darwin"*    ]]; then open_command='open';
+    fi
+
+    if [ ! -z "$open_command" ] && [ -x "$(command -v $open_command)" ]; then
+        $open_command "${url}" > /dev/null 2>&1
         return;
     fi
 
-    xdg-open "${url}" > /dev/null 2>&1
+    echo_error "Unable to open browser"
+    echo_error
+    echo "${url}"
+    echo
 }
 
 
