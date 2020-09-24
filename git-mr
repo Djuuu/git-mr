@@ -843,6 +843,9 @@ function mr_print_status
     local labels; labels=$(extract_json_array "labels" "$merge_request")
     local labels_display; labels_display=$(mr_format_labels "$labels")
 
+    local labels_count; labels_count=$(echo $labels | sed 's/[^,]//g' | wc -m)
+    local labels_str_len=$(( ${#labels} + $(($labels_count*2)) + 3 ))
+
     # Votes
 
     local upvotes;   upvotes=$(extract_json_int "upvotes" "$merge_request")
@@ -879,18 +882,40 @@ function mr_print_status
         then merge_status_icon="$(colorize "\U00002714" "lightgreen" "bold")"; # heavy check mark
         else merge_status_icon="$(colorize "\U0000274C" "lightred" "bold")"; fi # cross mark
 
+    # Merge target
+    local current_target; current_target=$(extract_json_string "target_branch" "$merge_request")
+
+    local target_display;
+    target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
+    target_display="${target_display}$(colorize "$current_target" "lightpurple" )"
+    target_display="${target_display}$(colorize ")" "gray")"
+
+    local target_str_len=$(( ${#current_target} + 4 ))
+
+    # Spacer for right alignment of target branch
+    local display_width=73
+    local labels_target_spacer=" "
+    local left_chars=$(( $display_width - $labels_str_len - $target_str_len ))
+    if [ "$left_chars" -gt 0 ]; then
+        labels_target_spacer=$(eval $(echo printf '" %0.s"' {1..${left_chars}}))
+    fi
+
     # Display
     echo
-    echo -e  "   \U0001F3F7  ${labels_display}\n"
+    echo -en  "   \U0001F3F7  ${labels_display}"
+    echo -en "$labels_target_spacer"
+    echo -e  "${target_display}\n"
     echo -en "   \U0001F44D  ${upvotes}"
     echo -en "   \U0001F44E  ${downvotes}"
     if [ "$thread_count" -gt 0 ]; then
-        echo -n "      Resolved threads: ${resolved_count_display}/${thread_count_display}"
+        echo -n "     Resolved threads: ${resolved_count_display}/${thread_count_display}"
+    else
+      echo -n "                          "
     fi
     if [ ! -z "$wip" ]; then
-        echo -en "      WIP: $(colorize "yes" "orange")"
+        echo -en "     WIP: $(colorize "yes" "orange")"
     fi
-    echo -en "      Can be merged: ${merge_status_icon}"
+    echo -en "     Can be merged: ${merge_status_icon}"
     echo -e "\n"
 }
 
