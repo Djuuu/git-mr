@@ -70,10 +70,8 @@ function git_titlize_branch
     local title_ref;   title_ref="${prefix^}${issue_id}"
     local title_label; title_label="$(echo "${label^}" | sed 's/[-_]/ /g')"
 
-    # Wip prefix
-    local wip_prefix="WIP: "
-
-    echo "${wip_prefix}${title_ref}${title_label}"
+    # Draft prefix
+    gitlab_title_to_draft "${title_ref}${title_label}"
 }
 
 
@@ -628,7 +626,33 @@ function gitlab_merge_request_merge
     gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
 }
 
-function gitlab_unwip
+function gitlab_title_is_draft
+{
+    local title=$1
+    for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
+        if echo "$title" | grep -q "^${prefix}:"; then
+            return 0
+        fi
+    done
+    return 1;
+}
+
+function gitlab_title_to_draft
+{
+    local title=$1
+    echo "${GITLAB_DRAFT_PREFIX}: $title"
+}
+
+function gitlab_title_undraft
+{
+    local title=$1
+    for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
+        title=$(echo "$title" | sed "s/^${prefix}:\s*//g")
+    done
+    echo "$title"
+}
+
+function gitlab_undraft
 {
     gitlab_check_env
 
@@ -660,19 +684,18 @@ function gitlab_unwip
     mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
     echo
 
-    local wip; wip=$(echo "$mr_title" | grep -o '^WIP:')
-    if [ -z "$wip" ]; then
-        echo_error "Merge request is not a Work in Progress"
+    if ! gitlab_title_is_draft "$mr_title"; then
+        echo_error "Merge request is not a draft"
         echo_error
         return
     fi
 
-    local unwipped_title; unwipped_title=$(echo "$mr_title" | sed 's/^WIP:\s*//')
+    local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
 
-    if [ "$(confirm "Do you want to resolve WIP status?")" = "yes" ]; then
-        echo -n "Resolving WIP status... "
+    if [ "$(confirm "Do you want to resolve draft status?")" = "yes" ]; then
+        echo -n "Resolving draft status... "
 
-        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
+        mr_data=$(jq_build "title" "$undraft_title") || exit $?
         local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
 
         if [ ! -z "$result" ]; then echo -e "OK\n"; fi
@@ -872,9 +895,8 @@ function mr_print_status
         then resolved_count_display=$(colorize "$resolved_count" "bold" "lightred")
         else resolved_count_display=$(colorize "$resolved_count" "bold" "lightgreen"); fi
 
-    # WiP
+    # Title
     local title; title=$(gitlab_extract_title "$merge_request")
-    local wip;   wip=$(echo "$title" | grep -o '^WIP:')
 
     # Merge status
     local merge_status; merge_status=$(extract_json_string "merge_status" "$merge_request")
@@ -912,8 +934,8 @@ function mr_print_status
     else
       echo -n "                          "
     fi
-    if [ ! -z "$wip" ]; then
-        echo -en "     WIP: $(colorize "yes" "orange")"
+    if gitlab_title_is_draft "$title"; then
+        echo -en "     Draft: $(colorize "yes" "orange")"
     fi
     echo -en "     Can be merged: ${merge_status_icon}"
     echo -e "\n"
@@ -1263,17 +1285,14 @@ function mr_merge
         return
     fi
 
-    # test WIP status
-    local wip; wip=$(echo "$title" | grep -o '^WIP:')
-    if [ ! -z "$wip" ]; then
-        echo_error "Merge request is a Work in Progress"
+    if gitlab_title_is_draft "$title"; then
+        echo_error "Merge request is a draft (work in progress)"
 
-        if [ "$(confirm "Do you want to resolve WIP status?")" != "yes" ]; then echo_error; return; fi
+        if [ "$(confirm "Do you want to resolve draft status?")" != "yes" ]; then echo_error; return; fi
 
-        echo -n "Resolving WIP status... "
-
-        local unwipped_title; unwipped_title=$(echo "$title" | sed 's/^WIP:\s*//')
-        local mr_data;        mr_data=$(jq_build "title" "$unwipped_title") || exit $?
+        echo -n "Resolving draft status... "
+        local undraft_title; undraft_title=$(gitlab_title_undraft "$title")
+        local mr_data;        mr_data=$(jq_build "title" "$undraft_title") || exit $?
 
         local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
 
@@ -1378,7 +1397,7 @@ SYNOPSIS
     mr [OPTIONS] update [BASE_BRANCH]
     mr [OPTIONS] merge
 
-    mr [OPTIONS] unwip
+    mr [OPTIONS] undraft
 
     mr [OPTIONS] ip     [ISSUE_CODE]
     mr [OPTIONS] cr     [ISSUE_CODE]
@@ -1462,6 +1481,9 @@ if [ ! -x "$(command -v jq)" ]; then
     echo_error "Please install jq for full actions support (update, merge, ...)."
 fi
 
+# Hardcoded constants
+GITLAB_DRAFT_PREFIX="Draft"
+GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
 
 # Parse options
 args=()
@@ -1487,7 +1509,7 @@ case $1 in
     u|up|update) mr_update "${@:2}" ;;
     m|mg|merge)  mr_merge  "${@:2}" ;;
 
-    unwip)  gitlab_unwip ;;
+    undraft)  gitlab_undraft ;;
 
     p|ip|IP) mr_ip "${@:2}" ;;
     r|cr|CR) mr_cr "${@:2}" ;;

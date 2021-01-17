@@ -11,7 +11,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr`](#git-mr-1)
     + [`git mr open`](#git-mr-open)
     + [`git mr update`](#git-mr-update)
-    + [`git mr unwip`](#git-mr-unwip)
+    + [`git mr undraft`](#git-mr-undraft)
     + [`git mr ip`](#git-mr-ip)
     + [`git mr cr`](#git-mr-cr)
     + [`git mr qa`](#git-mr-qa)
@@ -28,7 +28,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BASE_BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>unwip</b>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>   <i>[ISSUE_CODE]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>   <i>[ISSUE_CODE]</i>
@@ -161,10 +161,10 @@ You can also update the source branche if it is different from the current one.
 
 ----------------------------------------------------------------
 
-### `git mr unwip`
+### `git mr undraft`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>unwip</b>
+<b>git mr</b> <i>[OPTIONS]</i> <b>undraft</b>
 </pre>
 
 This will resolve the Gitlab _Work in Progress_ status.
@@ -218,10 +218,10 @@ This will:
 This will:
 * check merge status
 * check open threads
-* check WiP status
+* check draft status
 
 and if applicable, will prompt you to:
-* resolve WIP status
+* resolve draft status
 * trigger the merge
 * checkout local target branch, update it and delete local merged branch
 
@@ -255,7 +255,7 @@ To create a new merge request:
 <font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr update
 
 -------------------------------------------------------------------
-WIP: Feature/XY-1234 Ipsum
+Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
 # [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
 
@@ -292,7 +292,7 @@ Merge request:
 
   https://myapp.gitlab.com/my/project/merge_requests/6
 
-    👍  1    👎  0        Resolved threads: 1/2        WIP: yes        Can be merged: ✅
+    👍  1    👎  0        Resolved threads: 1/2        Draft: yes        Can be merged: ✅
  
 </pre>
 
@@ -302,17 +302,17 @@ Merge request:
 <font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr merge
 
 -------------------------------------------------------------------
-WIP: Feature/XY-1234 Ipsum
+Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
 
 Merge request:
 
   https://myapp.gitlab.com/my/project/merge_requests/6
 
-    👍  2    👎  0        Resolved threads: 2/2        WIP: yes        Can be merged: ✅
+    👍  2    👎  0        Resolved threads: 2/2        Draft: yes        Can be merged: ✅
 
 <font color="#C4A000">Merge request is a Work in Progress</font>
-Do you want to resolve WIP status? [y/N] y
+Do you want to resolve draft status? [y/N] y
 OK
 Do you want to merge &apos;feature/xy-1234-ipsum&apos;? [y/N] y
 OK
