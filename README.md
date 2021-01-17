@@ -15,7 +15,10 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr ip`](#git-mr-ip)
     + [`git mr cr`](#git-mr-cr)
     + [`git mr qa`](#git-mr-qa)
+    + [`git mr hook`](#git-mr-hook)
     + [`git mr merge`](#git-mr-merge)
+* [Hooks](#hooks)
+  + [prepare-commit-msg](#prepare-commit-msg)
 * [Sample output](#sample-output)
 
 ----------------------------------------------------------------
@@ -33,6 +36,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>   <i>[ISSUE_CODE]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>   <i>[ISSUE_CODE]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>qa</b>   <i>[ISSUE_CODE]</i>
+
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>hook</b>
 </pre>
 
 ### Arguments
@@ -44,6 +49,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 * `-v` Verbose output (displays called API URLs)
 * `-y` Bypass confirmation prompts (always answer "yes")
+* `-e` Use full commit messages in description ("extended")
 
 
 ## Installation
@@ -209,6 +215,17 @@ This will:
 
 ----------------------------------------------------------------
 
+### `git mr hook`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>hook</b>
+</pre>
+
+This will symlink hooks of your repository to the ones provided by git-mr:
+* `prepare-commit-msg`
+
+----------------------------------------------------------------
+
 ### `git mr merge`
 
 <pre>
@@ -225,6 +242,14 @@ and if applicable, will prompt you to:
 * trigger the merge
 * checkout local target branch, update it and delete local merged branch
 
+## Hooks
+
+The following hooks are provided for convenience:
+
+### `prepare-commit-msg`
+
+Ensures your commit messages are prefixed with the code of related issue.
+
 
 ## Sample output
 
@@ -240,6 +265,37 @@ and if applicable, will prompt you to:
 * **78330c9 In vulputate quam ac ultrices volutpat**&lt;br&gt;
 * **0010a6a Curabitur vel purus sed tortor finibus posuere**&lt;br&gt;
 * **3621817 Aenean sed sem hendrerit ex egestas**&lt;br&gt;
+
+--------------------------------------------------------------------------------
+
+To create a new merge request:
+
+  https://myapp.gitlab.com/my/project/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
+ 
+</pre>
+
+------------------------------------------------------------------------------------------------------------------------
+
+<pre>
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr -e
+
+--------------------------------------------------------------------------------
+# [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
+
+
+## Commits
+
+* **78330c9 In vulputate quam ac ultrices volutpat**
+
+  Some commit description
+
+* **0010a6a Curabitur vel purus sed tortor finibus posuere**
+
+  Extended description
+  - stuff
+  - other stuff
+
+* **3621817 Aenean sed sem hendrerit ex egestas**
 
 --------------------------------------------------------------------------------
 

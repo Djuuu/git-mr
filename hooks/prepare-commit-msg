@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+
+################################################################################
+# When on a branch referring to a Jira issue,
+# ensure commit messages start with the issue reference
+
+jira_code_pattern="[A-Z]{2}-[0-9]+"
+
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+issue_code=$(echo "${current_branch}" | grep -iEo "$jira_code_pattern" | tail -n1)
+[ ! -z "$issue_code" ] || exit 0 # No issue code detected
+
+current_msg=$(cat $1)
+msg_code=$(echo "${current_msg}" | grep -iEo "$jira_code_pattern" | tail -n1)
+[ -z "$msg_code" ] || exit 0 # existing issue code in message
+
+echo "Prefixing message with issue code: $issue_code" >&2
+sed -i.bak -e "1s/^/$issue_code /" $1

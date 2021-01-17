@@ -37,6 +37,16 @@ function git_commits
     git log --oneline --reverse --no-decorate "${base_branch}".."${current_branch}"
 }
 
+function git_commits_extended
+{
+    local current_branch=${1:-$(git_current_branch)}
+    local base_branch=${2:-$(git_base_branch)}
+
+    local format="* **%h %s**%n%n%b"
+
+    git log --reverse --no-decorate --format="${format}" "${base_branch}".."${current_branch}"
+}
+
 function git_titlize_branch
 {
     local branch=${1:-$(git_current_branch)}
@@ -760,8 +770,18 @@ function mr_description
     local current_branch=${1:-$(git_current_branch)}
     local base_branch=${2:-$(git_base_branch)}
 
-    local title;   title=$(mr_title "$current_branch") || exit $?
-    local commits; commits=$(git_commits "$current_branch" "$base_branch")
+    local title; title=$(mr_title "$current_branch") || exit $?
+
+    local commits
+    local description
+    if [ "$GIT_MR_EXTENDED" = "1" ]; then
+        commits=$(git_commits_extended "$current_branch" "$base_branch")
+        # indent extended description (not starting with '* **')
+        description=$(echo "$commits" | sed -E 's/^([^*].*|\*[^ ].*|\* [^*].*|\* \*[^*].*)$/  \1/gm')
+    else
+        commits=$(git_commits "$current_branch" "$base_branch")
+        description=$(markdown_list "$commits" "**")
+    fi
 
     cat << EOF
 $(markdown_title "$title")
@@ -769,7 +789,7 @@ $(markdown_title "$title")
 
 ## Commits
 
-$(markdown_list "$commits" "**")
+$description
 
 EOF
 }
@@ -1381,6 +1401,18 @@ function mr_qa
     if [ -z "$JIRA_QA_ID" ]; then echo_error "Set JIRA_QA_ID to be able to update Jira status\n"; fi
 }
 
+function mr_hook
+{
+    local git_dir; git_dir=$(git rev-parse --show-toplevel)
+    local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
+
+    find "${git_mr_dir}/hooks" -type f -print0 | while read -d $'\0' hook; do
+        local hook_name; hook_name="$(basename $hook)"
+        echo "Linking hook: ${hook_name}"
+        ln -sf "$hook" "${git_dir}/.git/hooks/${hook_name}"
+    done
+}
+
 function usage
 {
     cat << EOF
@@ -1398,10 +1430,13 @@ SYNOPSIS
     mr [OPTIONS] cr     [ISSUE_CODE]
     mr [OPTIONS] qa     [ISSUE_CODE]
 
+    mr [OPTIONS] hook
+
 OPTIONS
 
     -v  Verbose output (displays called API URLs)
     -y  Bypass confirmation prompts ("yes")
+    -e  Use full commit messages in description ("extended")
 
 INSTALLATION
 
@@ -1486,6 +1521,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -v|-V) GIT_MR_VERBOSE=1 ;;
         -y|-Y) GIT_MR_YES=1     ;;
+        -e|-E) GIT_MR_EXTENDED=1 ;;
 
         *) args+=("${1}") ;;
     esac
@@ -1509,6 +1545,8 @@ case $1 in
     p|ip|IP) mr_ip "${@:2}" ;;
     r|cr|CR) mr_cr "${@:2}" ;;
     q|qa|QA) mr_qa "${@:2}" ;;
+
+    hook) mr_hook "${@:2}" ;;
 
     *) mr_print "$@" ;;
 
