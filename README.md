@@ -15,7 +15,10 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr ip`](#git-mr-ip)
     + [`git mr cr`](#git-mr-cr)
     + [`git mr qa`](#git-mr-qa)
+    + [`git mr hook`](#git-mr-hook)
     + [`git mr merge`](#git-mr-merge)
+* [Hooks](#hooks)
+  + [prepare-commit-msg](#prepare-commit-msg)
 * [Sample output](#sample-output)
 
 ----------------------------------------------------------------
@@ -33,6 +36,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>   <i>[ISSUE_CODE]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>   <i>[ISSUE_CODE]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>qa</b>   <i>[ISSUE_CODE]</i>
+
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>hook</b>
 </pre>
 
 ### Arguments
@@ -210,6 +215,17 @@ This will:
 
 ----------------------------------------------------------------
 
+### `git mr hook`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>hook</b>
+</pre>
+
+This will symlink hooks of your repository to the ones provided by git-mr:
+* `prepare-commit-msg`
+
+----------------------------------------------------------------
+
 ### `git mr merge`
 
 <pre>
@@ -225,6 +241,14 @@ and if applicable, will prompt you to:
 * resolve draft status
 * trigger the merge
 * checkout local target branch, update it and delete local merged branch
+
+## Hooks
+
+The following hooks are provided for convenience:
+
+### `prepare-commit-msg`
+
+Ensures your commit messages are prefixed with the code of related issue.
 
 
 ## Sample output
