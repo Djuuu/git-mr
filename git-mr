@@ -119,22 +119,17 @@ function extract_json_array
         sed 's/"//g'   # remove double quotes
 }
 
-# https://gist.github.com/cdown/1163649
-function urlencode
-{
-    # old_lc_collate=$LC_COLLATE
-    # LC_COLLATE=C
-
+# https://gist.github.com/cdown/1163649#gistcomment-1639097
+urlencode() {
+    local LANG=C
     local length="${#1}"
     for (( i = 0; i < length; i++ )); do
         local c="${1:i:1}"
         case $c in
-            [a-zA-Z0-9.~_-]) printf "%s"      "$c" ;;
-            *)               printf '%%%02X' "'$c" ;;
+            [a-zA-Z0-9.~_-]) printf "$c" ;;
+            *) printf '%%%02X' "'$c" ;;
         esac
     done
-
-    # LC_COLLATE=$old_lc_collate
 }
 
 function colorize
