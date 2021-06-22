@@ -390,11 +390,18 @@ function gitlab_project_url
 {
     gitlab_check_env
 
+    local remote_url
     local project_url
 
-    project_url=$(git remote get-url --push origin |
-        grep "${GITLAB_DOMAIN}" |
-        sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+    remote_url=$(git remote get-url --push origin | grep "${GITLAB_DOMAIN}")
+
+    if [[ "$remote_url" = git* ]]; then
+      project_url=$(echo $remote_url | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+    fi
+
+    if [[ "$remote_url" = https* ]]; then
+      project_url=$(echo $remote_url | sed "s/https:\/\/${GITLAB_DOMAIN}\/\(.*\).git/\1/")
+    fi
 
     if [ -z "$project_url" ]; then
         local remote; remote=$(git remote get-url --push origin)
