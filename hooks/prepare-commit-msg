@@ -4,7 +4,8 @@
 # When on a branch referring to a Jira issue,
 # ensure commit messages start with the issue reference
 
-jira_code_pattern="[A-Z]{2}-[0-9]+"
+default_pattern="[A-Z]{2}-[0-9]+"
+jira_code_pattern="${JIRA_CODE_PATTERN:-$default_pattern}"
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 issue_code=$(echo "${current_branch}" | grep -iEo "$jira_code_pattern" | tail -n1)
