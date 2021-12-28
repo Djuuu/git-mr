@@ -97,17 +97,6 @@ function exit_error
 	exit "$code"
 }
 
-function extract_json_array
-{
-    local key=$1
-    local content=$2
-
-    echo "$content" |
-        grep -Po '"'"${key}"'"\s*:\s*\[\K.*?[^\]]\]' | # extract array content
-        sed 's/]$//' | # remove trailing bracket
-        sed 's/"//g'   # remove double quotes
-}
-
 # https://gist.github.com/cdown/1163649#gistcomment-1639097
 urlencode() {
     local LANG=C
@@ -540,6 +529,12 @@ function gitlab_extract_target_branch
     echo "$mr_detail" | jq -r '.target_branch'
 }
 
+function gitlab_extract_labels
+{
+    local mr_detail=$1
+    echo "$mr_detail" | jq -r '.labels | join(",")'
+}
+
 function gitlab_merge_request_discussions
 {
     gitlab_check_env
@@ -868,7 +863,7 @@ function mr_print_status
     local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
 
     # Labels
-    local labels; labels=$(extract_json_array "labels" "$merge_request")
+    local labels; labels=$(gitlab_extract_labels "$merge_request")
     local labels_display; labels_display=$(mr_format_labels "$labels")
 
     local labels_count; labels_count=$(echo $labels | sed 's/[^,]//g' | wc -m)
@@ -967,7 +962,7 @@ function mr_update_labels
 
     local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
     local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
-    local labels;        labels=$(extract_json_array "labels" "$merge_request")
+    local labels;        labels=$(gitlab_extract_labels "$merge_request")
 
     # Print merge request status summary
     echo
