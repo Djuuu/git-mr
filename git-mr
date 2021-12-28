@@ -97,16 +97,6 @@ function exit_error
 	exit "$code"
 }
 
-function extract_json_int
-{
-    local key=$1
-    local content=$2
-
-    echo "$content" |
-        grep -Po '"'"${key}"'"\s*:\s*\K.*?[,}]' | # extract int
-        sed 's/[,}]$//' # remove trailing comma or brace
-}
-
 function extract_json_array
 {
     local key=$1
@@ -514,6 +504,12 @@ function gitlab_merge_request
     gitlab_request "merge_requests/$mr_iid"
 }
 
+function gitlab_extract_iid
+{
+    local mr_summary=$1
+    echo "$mr_summary" | jq -r '.[0].iid'
+}
+
 function gitlab_extract_url
 {
     local mr_summary=$1
@@ -598,7 +594,7 @@ function gitlab_default_label_ids
     for label in "${default_labels[@]}"; do
 
         local label_row; label_row=$(echo "$gitlab_labels" | grep "\"name\":\"$label\"")
-        local label_id;  label_id=$(extract_json_int "id" "$label_row")
+        local label_id;  label_id=$(echo "$label_row" | jq -r '.id' )
 
         if [ ! -z "$label_id" ]; then
             echo "$label_id"
@@ -661,7 +657,7 @@ function gitlab_undraft
     # Search existing merge request
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
@@ -799,7 +795,7 @@ function mr_actions
         mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
     fi
 
-    local mr_iid; mr_iid=$(extract_json_int "iid" "${mr_summary}")
+    local mr_iid; mr_iid=$(gitlab_extract_iid "${mr_summary}")
     local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
@@ -880,8 +876,8 @@ function mr_print_status
 
     # Votes
 
-    local upvotes;   upvotes=$(extract_json_int "upvotes" "$merge_request")
-    local downvotes; downvotes=$(extract_json_int "downvotes" "$merge_request")
+    local upvotes;   upvotes=$(echo "$merge_request" | jq -r '.upvotes' )
+    local downvotes; downvotes=$(echo "$merge_request" | jq -r '.downvotes' )
 
     if [ "$upvotes" -gt 1 ];   then upvotes=$(colorize "$upvotes" "bold" "lightgreen")
     elif [ "$upvotes" -gt 0 ]; then upvotes=$(colorize "$upvotes" "bold" "lightyellow")
@@ -958,7 +954,7 @@ function mr_update_labels
     # Search existing merge request
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
@@ -1030,7 +1026,7 @@ function mr_open
     local base_branch;    base_branch=${2:-$(git_base_branch)}
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "${mr_summary}")
+    local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
@@ -1073,7 +1069,7 @@ function mr_status
     # Search existing merge request
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
@@ -1107,7 +1103,7 @@ function mr_update
     # Search existing merge request
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
@@ -1252,7 +1248,7 @@ function mr_merge
     # Search existing merge request
 
     local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(extract_json_int "iid" "$mr_summary")
+    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
