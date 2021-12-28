@@ -170,8 +170,6 @@ function confirm
 
 function jq_build
 {
-    [ -x "$(command -v jq)" ] || exit_error 2 "jq is required for this operation"
-
     local key=${1}
     local value=${2}
     local initial_data=${3:-"{}"}
@@ -1493,7 +1491,7 @@ EOF
 git rev-parse > /dev/null 2>&1 || exit_error 1 "Not a git repository"
 
 if [ ! -x "$(command -v jq)" ]; then
-    echo_error "Please install jq for full actions support (update, merge, ...)."
+    exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
 fi
 
 # Hardcoded constants
@@ -1542,7 +1540,7 @@ esac
 # Error code reference:
 #
 #   1   Not a git repository
-#   2   jq is required for this operation
+#   2   jq is not installed
 #
 #  10   Gitlab request error
 #  11   GITLAB_DOMAIN|GITLAB_TOKEN is not set

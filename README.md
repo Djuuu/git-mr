@@ -75,7 +75,7 @@ _OR_
 
 ### Dependencies
 
-* Install [**`jq`**](https://stedolan.github.io/jq/) to be able to update or merge.
+* [**`jq`**](https://stedolan.github.io/jq/) is required and needs to be in PATH.
 
 
 ## Configuration
