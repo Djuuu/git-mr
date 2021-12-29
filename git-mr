@@ -586,8 +586,7 @@ function gitlab_default_label_ids
     oIFS="$IFS"; IFS=','; read -ra default_labels <<< "$GITLAB_DEFAULT_LABELS"; IFS="$oIFS"; unset oIFS
     for label in "${default_labels[@]}"; do
 
-        local label_row; label_row=$(echo "$gitlab_labels" | grep "\"name\":\"$label\"")
-        local label_id;  label_id=$(echo "$label_row" | jq -r '.id' )
+        local label_id; label_id=$(echo "$gitlab_labels" | jq -r '.[] | select(.name == "'"$label"'") | .id')
 
         if [ ! -z "$label_id" ]; then
             echo "$label_id"
