@@ -17,6 +17,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr qa`](#git-mr-qa)
     + [`git mr hook`](#git-mr-hook)
     + [`git mr merge`](#git-mr-merge)
+    + [`git mr menu`](#git-mr-menu)
 * [Hooks](#hooks)
   + [prepare-commit-msg](#prepare-commit-msg)
 * [Sample output](#sample-output)
@@ -30,6 +31,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>open</b>    <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BASE_BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>
+
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>[ISSUE_CODE]</i>
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>
 
@@ -49,7 +52,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 * `-v` Verbose output (displays called API URLs)
 * `-y` Bypass confirmation prompts (always answer "yes")
-* `-e` Use full commit messages in description ("extended")
+* `-e` Use full commit messages in description ("extended", for `git mr update`)
 
 
 ## Installation
@@ -241,6 +244,27 @@ and if applicable, will prompt you to:
 * resolve draft status
 * trigger the merge
 * checkout local target branch, update it and delete local merged branch
+
+----------------------------------------------------------------
+
+### `git mr menu`
+
+<pre>
+<b>git mr</b> <b>merge</b> <i>[ISSUE_CODE]</i> <i>[OPTIONS]</i>
+</pre>
+
+Searches for all (non-closed) merge requests with the current issue code in the title, and generates a menu.
+
+Sample:
+```markdown
+## Menu
+
+* My Project: [feature/XY-1234 My feature main stuff](https://myapp.gitlab.com/my/project/merge_requests/5)
+* My Other Project: [feature/XY-1234 My feature related stuff](https://myapp.gitlab.com/my/other-project/merge_requests/6)
+* My Other Project: [feature/XY-1234 My feature other stuff](https://myapp.gitlab.com/my/other-project/merge_requests/7)
+
+--------------------------------------------------------------------------------
+```
 
 ## Hooks
 

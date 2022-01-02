@@ -1386,6 +1386,98 @@ function mr_merge
     echo
 }
 
+function mr_menu
+{
+    gitlab_check_env
+
+    local git_mr_menu_mode=show
+
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    # All non-closed merge requests for issue code
+    local menu_items; menu_items=$(mr_menu_merge_requests "$ISSUE_CODE")
+
+    if [ -z "$menu_items" ]; then
+        echo_error "No merge requests found for '$ISSUE_CODE'."
+        return
+    fi
+
+    case "$git_mr_menu_mode" in
+        show) mr_menu_show "$ISSUE_CODE" "$menu_items" ;;
+    esac
+}
+
+function mr_menu_merge_requests
+{
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$ISSUE_CODE") || exit $?
+    if [ -z "$mr_summaries" ]; then
+        return
+    fi
+
+    # Load project names into bash associative array
+    declare -A project_arr
+    while IFS="=" read -r id name
+    do
+        project_arr[$id]="$name"
+    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]')
+
+    # Enrich merge request summaries with project names
+    while IFS=$'\n' read -r mr_summary
+    do
+        local project_id; project_id=$(echo "$mr_summary" | jq -r '.project_id')
+        local project_name; project_name=${project_arr[$project_id]}
+
+        echo "$mr_summary" | jq -c --arg project_name "$project_name" '. + {project_name: $project_name}'
+
+    done < <(echo "$mr_summaries")
+}
+
+function mr_menu_contents
+{
+    local issue_code=$1
+    local menu_items=$2
+    local current_mr_url=$3;
+
+    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
+    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+
+    echo "$git_mr_menu_start"
+    echo
+
+    while IFS=$'\n' read -r menu_item; do
+        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
+        local title;        title=$(echo "$menu_item" | jq -r '.title')
+        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
+
+        title=$(gitlab_title_undraft "$title")
+
+        local item_label
+        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
+
+        local wrap=''
+        if [ "$current_mr_url" == "$web_url" ]; then
+            wrap='**' # Markdown bold
+        fi
+
+        echo "* ${wrap}${item_label}${wrap}"
+
+    done < <(echo "$menu_items")
+
+    echo
+    echo "$git_mr_menu_end"
+}
+
+function mr_menu_show
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    echo
+    mr_menu_contents "$issue_code" "$menu_items"
+}
+
 function mr_ip
 {
     [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
@@ -1469,6 +1561,8 @@ SYNOPSIS
     mr [OPTIONS] update [BASE_BRANCH]
     mr [OPTIONS] merge
 
+    mr [OPTIONS] menu   [ISSUE_CODE]
+
     mr [OPTIONS] undraft
 
     mr [OPTIONS] ip     [ISSUE_CODE]
@@ -1481,7 +1575,7 @@ OPTIONS
 
     -v  Verbose output (displays called API URLs)
     -y  Bypass confirmation prompts ("yes")
-    -e  Use full commit messages in description ("extended")
+    -e  Use full commit messages in description ("extended", for \`git mr update\`)
 
 INSTALLATION
 
@@ -1584,6 +1678,8 @@ case $1 in
     s|st|status) mr_status "${@:2}" ;;
     u|up|update) mr_update "${@:2}" ;;
     m|mg|merge)  mr_merge  "${@:2}" ;;
+
+    menu) mr_menu "${@:2}" ;;
 
     undraft)  gitlab_undraft ;;
 
