@@ -401,7 +401,7 @@ function gitlab_project_request
 
     local gitlab_project_url="${gitlab_base_url}/projects/${project_id}"
 
-    echo_debug "GitLab - ${request_verb} ${request_url} ${request_data}"
+    echo_debug "GitLab - ${request_verb} ${gitlab_project_url}/${request_url} ${request_data}"
 
     result=$(curl -Ss \
         -X "${request_verb}" \
