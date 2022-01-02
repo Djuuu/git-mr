@@ -416,6 +416,31 @@ function gitlab_project_request
     echo "$result"
 }
 
+function gitlab_request
+{
+    gitlab_check_env
+
+    local request_url=$1
+    local request_verb=${2:-"GET"}
+    local request_data=${3}
+
+    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+
+    echo_debug "GitLab - ${request_verb} ${gitlab_base_url}/${request_url} ${request_data}"
+
+    result=$(curl -Ss \
+        -X "${request_verb}" \
+        -H "Private-Token: ${GITLAB_TOKEN}" \
+        -H "Content-Type: application/json" \
+        --data "${request_data}" \
+        --max-time "${GIT_MR_TIMEOUT:-5}" \
+        "${gitlab_base_url}/${request_url}") || exit_error 10 "Gitlab request error"
+
+    if [ ! -z "$(gitlab_check_error "$result")" ]; then return; fi
+
+    echo "$result"
+}
+
 function gitlab_check_error
 {
     local result=$1
