@@ -464,7 +464,7 @@ function gitlab_new_merge_request_url
     echo "$gitlab_mr_url"
 }
 
-function gitlab_merge_requests
+function gitlab_merge_requests_for_branch
 {
     gitlab_check_env
 
@@ -648,7 +648,7 @@ function gitlab_undraft
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -784,7 +784,7 @@ function mr_actions
     local mr_detail=${4}
 
     if [ -z "$mr_summary" ]; then
-        mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+        mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "${mr_summary}")
@@ -945,7 +945,7 @@ function mr_update_labels
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -1017,7 +1017,7 @@ function mr_open
     local current_branch; current_branch=$(git_current_branch)
     local base_branch;    base_branch=${2:-$(git_base_branch)}
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch")
     local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -1060,7 +1060,7 @@ function mr_status
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -1094,7 +1094,7 @@ function mr_update
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -1239,7 +1239,7 @@ function mr_merge
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
