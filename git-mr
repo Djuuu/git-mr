@@ -384,7 +384,7 @@ EOF
     echo "$project_url"
 }
 
-function gitlab_request
+function gitlab_project_request
 {
     gitlab_check_env
 
@@ -471,7 +471,7 @@ function gitlab_merge_requests_for_branch
     local source_branch=${1:-$(git_current_branch)}
 
     local result
-    result=$(gitlab_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
+    result=$(gitlab_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
 
     if [ -z "$result" ] || [ "$result" = "[]" ]; then
         return
@@ -488,7 +488,7 @@ function gitlab_merge_request
 
     if [ -z "$mr_iid" ]; then return; fi
 
-    gitlab_request "merge_requests/$mr_iid"
+    gitlab_project_request "merge_requests/$mr_iid"
 }
 
 function gitlab_extract_iid
@@ -550,7 +550,7 @@ function gitlab_merge_request_discussions
 
         # fetch page
         local notes_page
-        notes_page=$(gitlab_request "merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" |
+        notes_page=$(gitlab_project_request "merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" |
             sed 's/\\r//g' |
             sed 's/\\n/\\\\n/g' |
             sed 's/"noteable_iid":\([0-9]*\)}]},/"noteable_iid":\1}]},\n/g')
@@ -577,7 +577,7 @@ function gitlab_default_label_ids
 {
     gitlab_check_env
 
-    local gitlab_labels; gitlab_labels=$(gitlab_request "labels")
+    local gitlab_labels; gitlab_labels=$(gitlab_project_request "labels")
 
     # split in multiple lines
     gitlab_labels=$(echo "$gitlab_labels" | sed "s/},/},\n/g")
@@ -601,7 +601,7 @@ function gitlab_merge_request_update
     local mr_iid=$1;   if [ -z "$mr_iid" ];  then echo_error "No mr_iid provided"; return; fi
     local mr_data=$2;  if [ -z "$mr_data" ]; then echo_error "No data provided";   return; fi
 
-    gitlab_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
+    gitlab_project_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
 
 function gitlab_merge_request_merge
@@ -610,7 +610,7 @@ function gitlab_merge_request_merge
 
     local mr_iid=$1;  if [ -z "$mr_iid" ]; then echo_error "No mr_iid provided"; return; fi
 
-    gitlab_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
+    gitlab_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
 }
 
 function gitlab_title_is_draft
