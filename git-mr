@@ -1391,6 +1391,7 @@ function mr_menu
     gitlab_check_env
 
     local git_mr_menu_mode=show
+    local git_mr_menu_update_all=0
 
     # Parse options
     args=()
@@ -1398,6 +1399,7 @@ function mr_menu
         case "$1" in
             # Consume options
             update)      git_mr_menu_mode=update ;;
+            -a|-A|--all) git_mr_menu_update_all=1 ;;
             # Default: conserve argument
             *) args+=("${1}") ;;
         esac
@@ -1418,7 +1420,11 @@ function mr_menu
     case "$git_mr_menu_mode" in
         show) mr_menu_show "$ISSUE_CODE" "$menu_items" ;;
         update)
-            mr_menu_update "$ISSUE_CODE" "$menu_items"
+            if [ "$git_mr_menu_update_all" = "1" ]; then
+                mr_menu_update_all "$ISSUE_CODE" "$menu_items"
+            else
+                mr_menu_update "$ISSUE_CODE" "$menu_items"
+            fi
             ;;
     esac
 }
@@ -1539,6 +1545,75 @@ function mr_menu_update
         result=$(gitlab_merge_request_update "$current_mr_iid" "$mr_update_data")
         if [ ! -z "$result" ]; then echo -e "OK\n"; fi
     fi
+}
+
+function mr_menu_update_all
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    local mr_iid
+    local mr_url
+    local project_url
+    local merge_request
+    local mr_description
+    local mr_menu_content
+    local updated_description
+    local mr_update_data
+    local result
+
+    # Use array instead of looping over variable content with `read` to leave standard input open for `confirm`
+    readarray menu_array < <(echo "$menu_items")
+
+    for menu_item in "${menu_array[@]}"; do
+
+        mr_iid=$(echo "$menu_item" | jq -r '.iid')
+        mr_url=$(echo "$menu_item" | jq -r '.web_url')
+
+        # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
+        # Here, we can expect other target projects here.
+        project_url=$(echo "$mr_url" |
+            sed "s/https:\/\/$GITLAB_DOMAIN\///" | # remove prefix
+            sed "s/\/-\/merge_requests\/[0-9]*\$//") # remove suffix
+        project_url=$(urlencode "$project_url")
+
+        # Load existing merge request details
+        # Do NOT use `gitlab_merge_request`
+        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
+
+        mr_description=$(gitlab_extract_description "$merge_request")
+
+        mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$mr_url")
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+
+        echo
+        echo "$updated_description"
+        echo
+        echo '--------------------------------------------------------------------------------'
+        echo
+        echo "Merge request:"
+        echo
+        echo "  ${mr_url}"
+        echo
+
+        mr_update_data='{}'
+
+        if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
+            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
+        fi
+
+        if [ "$mr_update_data" != "{}" ]; then
+            echo -n "Updating merge request..."
+            # Do NOT use `gitlab_merge_request_update`
+            result=$(gitlab_request "projects/${project_url}/merge_requests/${mr_iid}" "PUT" "${mr_update_data}")
+            if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+        fi
+    done
+
+    echo '--------------------------------------------------------------------------------'
+    echo
+
+    mr_menu_contents "$issue_code" "$menu_items"
 }
 
 function mr_menu_replace_description
@@ -1671,7 +1746,7 @@ SYNOPSIS
     mr [OPTIONS] update [BASE_BRANCH]
     mr [OPTIONS] merge
 
-    mr [OPTIONS] menu   [update] [ISSUE_CODE]
+    mr [OPTIONS] menu   [update [--all]] [ISSUE_CODE]
 
     mr [OPTIONS] undraft
 
@@ -1686,6 +1761,7 @@ OPTIONS
     -v  Verbose output (displays called API URLs)
     -y  Bypass confirmation prompts ("yes")
     -e  Use full commit messages in description ("extended", for \`git mr update\`)
+    -a | --all Update all merge requests (\`git mr menu update\`)
 
 INSTALLATION
 
