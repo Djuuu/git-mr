@@ -505,6 +505,44 @@ function gitlab_merge_requests_for_branch
     echo "$result"
 }
 
+function gitlab_merge_requests_search
+{
+    gitlab_check_env
+
+    local search_term=$1; [ ! -z "$search_term" ] || exit_error 0 "search_term required"
+
+    local result
+    result=$(gitlab_request "merge_requests?state=all&view=simple&search=${search_term}&in=title&order_by=created_at&sort=asc") || exit $?
+
+    if [ -z "$result" ] || [ "$result" = "[]" ]; then
+        return
+    fi
+
+    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id}) | .[]')
+    if [ -z "$result" ] || [ "$result" = "[]" ]; then
+        return
+    fi
+
+    echo "$result"
+}
+
+function gitlab_projects
+{
+    local result
+
+    result=$(gitlab_request "projects?simple=true&archived=false&per_page=250") || exit $?
+    if [ -z "$result" ] || [ "$result" = "[]" ]; then
+        return
+    fi
+
+    result=$(echo "$result" | jq 'map({id: .id, name: .name, path_with_namespace: .path_with_namespace})')
+    if [ -z "$result" ] || [ "$result" = "[]" ]; then
+        return
+    fi
+
+    echo "$result"
+}
+
 function gitlab_merge_request
 {
     gitlab_check_env
