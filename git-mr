@@ -1392,6 +1392,19 @@ function mr_menu
 
     local git_mr_menu_mode=show
 
+    # Parse options
+    args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            # Consume options
+            update)      git_mr_menu_mode=update ;;
+            # Default: conserve argument
+            *) args+=("${1}") ;;
+        esac
+        shift
+    done
+    set -- "${args[@]}"
+
     ISSUE_CODE=${1:-$(guess_issue_code)}
 
     # All non-closed merge requests for issue code
@@ -1404,6 +1417,9 @@ function mr_menu
 
     case "$git_mr_menu_mode" in
         show) mr_menu_show "$ISSUE_CODE" "$menu_items" ;;
+        update)
+            mr_menu_update "$ISSUE_CODE" "$menu_items"
+            ;;
     esac
 }
 
@@ -1476,6 +1492,100 @@ function mr_menu_show
 
     echo
     mr_menu_contents "$issue_code" "$menu_items"
+}
+
+function mr_menu_update
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    # Look for existing merge request
+    local current_branch
+    current_branch=$(git_current_branch)
+
+    local current_mr_summary; current_mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local current_mr_iid;     current_mr_iid=$(gitlab_extract_iid "$current_mr_summary")
+    local current_mr_url;     current_mr_url=$(gitlab_extract_url "$current_mr_summary")
+
+    if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
+        echo_error "Merge request not found"
+        echo
+        mr_menu_contents "$issue_code" "$menu_items"
+        return
+    fi
+
+    # Load existing merge request details
+    local merge_request;  merge_request=$(gitlab_merge_request "$current_mr_iid")
+    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
+
+    local mr_menu_content;
+    mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$current_mr_url")
+
+    local updated_description;
+    updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+
+    echo
+    echo "$updated_description"
+    echo
+    echo '--------------------------------------------------------------------------------'
+
+    local mr_update_data='{}'
+    if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
+        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
+    fi
+    if [ "$mr_update_data" != "{}" ]; then
+        echo -n "Updating merge request..."
+        local result
+        result=$(gitlab_merge_request_update "$current_mr_iid" "$mr_update_data")
+        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+    fi
+}
+
+function mr_menu_replace_description
+{
+    local mr_description=$1
+    local menu_content=$2
+
+    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
+    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+
+    menu_start=$(echo "$mr_description" | grep -n "$git_mr_menu_start" | cut -f1 -d:)
+    menu_end=$(echo "$mr_description" | grep -n -- "$git_mr_menu_end" | cut -f1 -d: | head -n 1)
+
+    has_menu=0
+    if [ -n "$menu_start" ] && [ -n "$menu_end" ] && [ "$menu_start" -gt "0" ] && [ "$menu_end" -gt "$menu_start" ]; then
+        has_menu=1
+    fi
+
+    # Iterate over description lines and insert/replace menu
+    i=1
+    while IFS=$'\n' read -r mr_description_line
+    do
+        if [ "$has_menu" = "1" ]; then
+            if [ "$i" -lt "$menu_start" ] || [ "$i" -gt "$menu_end" ]; then
+                # output non-menu line
+                echo "$mr_description_line"
+            else
+                # replace menu once
+                if [ "$i" -eq "$menu_end" ]; then
+                    echo_debug "Replacing menu"
+                    echo "$menu_content"
+                fi
+            fi
+        else
+            # output non-menu line
+            echo "$mr_description_line"
+            # insert menu once
+            if [ "$i" -eq "2" ]; then
+                echo_debug "Inserting menu"
+                echo "$menu_content"
+                echo
+            fi
+        fi
+
+        ((i+=1))
+
+    done < <(echo "$mr_description")
 }
 
 function mr_ip
@@ -1561,7 +1671,7 @@ SYNOPSIS
     mr [OPTIONS] update [BASE_BRANCH]
     mr [OPTIONS] merge
 
-    mr [OPTIONS] menu   [ISSUE_CODE]
+    mr [OPTIONS] menu   [update] [ISSUE_CODE]
 
     mr [OPTIONS] undraft
 
