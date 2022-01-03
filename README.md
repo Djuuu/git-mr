@@ -10,13 +10,13 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * [Usage](#usage)
     + [`git mr`](#git-mr-1)
     + [`git mr open`](#git-mr-open)
+    + [`git mr status`](#git-mr-status)
     + [`git mr update`](#git-mr-update)
+    + [`git mr menu`](#git-mr-menu)
+    + [`git mr ip|cr|qa`](#git-mr-ipcrqa)
     + [`git mr undraft`](#git-mr-undraft)
-    + [`git mr ip`](#git-mr-ip)
-    + [`git mr cr`](#git-mr-cr)
-    + [`git mr qa`](#git-mr-qa)
-    + [`git mr hook`](#git-mr-hook)
     + [`git mr merge`](#git-mr-merge)
+    + [`git mr hook`](#git-mr-hook)
 * [Hooks](#hooks)
   + [prepare-commit-msg](#prepare-commit-msg)
 * [Sample output](#sample-output)
@@ -28,14 +28,17 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <pre>
 <b>git mr</b>  <i>[OPTIONS]</i>          <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>open</b>    <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>status</b>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BASE_BRANCH]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>
 
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>    <i>[update [--all] | status]</i> <i>[ISSUE_CODE]</i>
+
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>qa</b>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>   <i>[ISSUE_CODE]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>   <i>[ISSUE_CODE]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>qa</b>   <i>[ISSUE_CODE]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>   <i>[BASE_BRANCH]</i>
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>hook</b>
 </pre>
@@ -49,8 +52,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 * `-v` Verbose output (displays called API URLs)
 * `-y` Bypass confirmation prompts (always answer "yes")
-* `-e` Use full commit messages in description ("extended")
-
+* `-e` Use full commit messages in description ("extended", for `git mr update`)
+* `-a`|`--all` Update all merge requests (`git mr menu update`)
 
 ## Installation
 
@@ -75,7 +78,7 @@ _OR_
 
 ### Dependencies
 
-* Install [**`jq`**](https://stedolan.github.io/jq/) to be able to update or merge.
+* [**`jq`**](https://stedolan.github.io/jq/) is required and needs to be in PATH.
 
 
 ## Configuration
@@ -85,7 +88,7 @@ You need to configure the following environment variables:
 export JIRA_USER="user.name@mycompany.com"
 export JIRA_INSTANCE="mycompany.atlassian.net"
 export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
-export JIRA_CODE_PATTERN="XY-[0-9]+"
+export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
 
 export GITLAB_DOMAIN="myapp.gitlab.com"
 export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
@@ -144,17 +147,27 @@ can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REM
 ### `git mr open`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>open</b> <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTIONS]</i> <b>o|op|open</b> <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
 </pre>
 
 Similar to `git mr`, but will open browser directly.
 
 ----------------------------------------------------------------
 
+### `git mr status`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>s|st|status</b> <i>[BASE_BRANCH]</i>
+</pre>
+
+Displays a quick summary of the merge request, with useful indicators (tags, target branch, votes, open threads, draft status, ...)
+
+----------------------------------------------------------------
+
 ### `git mr update`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>update</b> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTIONS]</i> <b>u|up|update</b> <i>[BASE_BRANCH]</i>
 </pre>
 
 This will:
@@ -164,6 +177,71 @@ This will:
 If some commits were changed (after a rebase) or added, you will be prompted if you want to post the updated description to Gitlab.
 
 You can also update the source branche if it is different from the current one.
+
+----------------------------------------------------------------
+
+### `git mr menu`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>menu</b> <i>[st|status]</i> <i>[up|update [--all]]</i> <i>[ISSUE_CODE]</i> 
+</pre>
+
+Searches for all (non-closed) merge requests with the current issue code in the title, and generates a menu.
+
+Sample:
+```markdown
+## Menu
+
+* My Project: [feature/XY-1234 My feature main stuff](https://myapp.gitlab.com/my/project/merge_requests/5)
+* My Other Project: [feature/XY-1234 My feature related stuff](https://myapp.gitlab.com/my/other-project/merge_requests/6)
+* My Other Project: [feature/XY-1234 My feature other stuff](https://myapp.gitlab.com/my/other-project/merge_requests/7)
+
+--------------------------------------------------------------------------------
+
+```
+
+* `git mr menu`<br>
+  Prints the markdown menu
+
+* `git mr menu up|update`<br>
+  Updates the menu in the current merge request description (prompts for confirmation)
+* `git mr menu up|update -a|--all`<br>
+  Updates the menu in all related merge requests (prompts for confirmation)
+
+* `git mr menu st|status`<br>
+  Prints the menu and status indicators for every related merge request
+
+----------------------------------------------------------------
+
+### `git mr ip|cr|qa`
+
+<pre>
+<b>git mr</b> <i>[OPTIONS]</i> <b>ip|cr|qa</b> <i>[ISSUE_CODE]</i>
+</pre>
+
+This will:
+* Set Gitlab labels according to:
+  - `GITLAB_CR_LABELS`
+  - `GITLAB_QA_LABELS`
+  - `GITLAB_OK_LABELS`
+* set Jira ticket to status ID defined in:
+  - `JIRA_IP_ID`
+  - `JIRA_CR_ID`
+  - `JIRA_QA_ID`
+
+#### `git mr ip`
+* removes Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS`
+* sets Jira ticket to status ID defined in `JIRA_IP_ID`
+
+#### `git mr cr`
+* removes Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS`
+* adds Gitlab labels defined in `GITLAB_CR_LABELS`
+* sets Jira ticket to status ID defined in `JIRA_CR_ID`
+
+#### `git mr qa`
+* removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS`
+* adds Gitlab labels defined in `GITLAB_QA_LABELS`
+* sets Jira ticket to status ID defined in `JIRA_QA_ID`
 
 ----------------------------------------------------------------
 
@@ -177,41 +255,21 @@ This will resolve the Gitlab _Work in Progress_ status.
 
 ----------------------------------------------------------------
 
-### `git mr ip` 
+### `git mr merge`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>ip</b> <i>[ISSUE_CODE]</i>
+<b>git mr</b> <i>[OPTIONS]</i> <b>m|mg|merge</b> <i>[BASE_BRANCH]</i>
 </pre>
 
 This will:
-* remove Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS` 
-* set Jira ticket to status ID defined in `JIRA_IP_ID`
+* check merge status
+* check open threads
+* check draft status
 
-----------------------------------------------------------------
-
-### `git mr cr` 
-
-<pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>cr</b> <i>[ISSUE_CODE]</i>
-</pre>
-
-This will:
-* remove Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS` 
-* add Gitlab labels defined in `GITLAB_CR_LABELS`
-* set Jira ticket to status ID defined in `JIRA_CR_ID`
-
-----------------------------------------------------------------
-
-### `git mr qa` 
-
-<pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>qa</b> <i>[ISSUE_CODE]</i>
-</pre>
-
-This will:
-* remove Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS` 
-* add Gitlab labels defined in `GITLAB_QA_LABELS`
-* set Jira ticket to status ID defined in `JIRA_QA_ID`
+and if applicable, will prompt you to:
+* resolve draft status
+* trigger the merge
+* checkout local target branch, update it and delete local merged branch
 
 ----------------------------------------------------------------
 
@@ -226,22 +284,6 @@ This will symlink hooks of your repository to the ones provided by git-mr:
 
 ----------------------------------------------------------------
 
-### `git mr merge`
-
-<pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>merge</b>
-</pre>
-
-This will:
-* check merge status
-* check open threads
-* check draft status
-
-and if applicable, will prompt you to:
-* resolve draft status
-* trigger the merge
-* checkout local target branch, update it and delete local merged branch
-
 ## Hooks
 
 The following hooks are provided for convenience:
@@ -250,15 +292,18 @@ The following hooks are provided for convenience:
 
 Ensures your commit messages are prefixed with the code of related issue.
 
+----------------------------------------------------------------
 
 ## Sample output
 
 <pre>
 <font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr
-
+</pre>
+<pre>
+<details>
+<summary>Output</summary>
 --------------------------------------------------------------------------------
 # [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
-
 
 ## Commits
 
@@ -271,17 +316,18 @@ Ensures your commit messages are prefixed with the code of related issue.
 To create a new merge request:
 
   https://myapp.gitlab.com/my/project/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
- 
-</pre>
+</details></pre>
 
 ------------------------------------------------------------------------------------------------------------------------
 
 <pre>
 <font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr -e
-
+</pre>
+<pre>
+<details>
+<summary>Output</summary>
 --------------------------------------------------------------------------------
 # [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
-
 
 ## Commits
 
@@ -302,14 +348,16 @@ To create a new merge request:
 To create a new merge request:
 
   https://myapp.gitlab.com/my/project/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
- 
-</pre>
+</details></pre>
 
 ------------------------------------------------------------------------------------------------------------------------
 
 <pre>
 <font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr update
-
+</pre>
+<pre>
+<details>
+<summary>Output</summary>
 -------------------------------------------------------------------
 Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
@@ -330,7 +378,6 @@ Vivamus venenatis tortor et neque sollicitudin, eget suscipit est malesuada
   Hendrerit ex egestas&lt;br&gt;
   egestas sed
 
-
 ## Update
 
 * **<font color="#4E9A06">e9642b7</font> Ut consectetur leo ut leo commodo porttitor**&lt;br&gt;
@@ -349,14 +396,16 @@ Merge request:
   https://myapp.gitlab.com/my/project/merge_requests/6
 
     👍  1    👎  0        Resolved threads: 1/2        Draft: yes        Can be merged: ✅
- 
-</pre>
+</details></pre>
 
 ------------------------------------------------------------------------------------------------------------------------
 
 <pre>
 <font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr merge
-
+</pre>
+<pre>
+<details>
+<summary>Output</summary>
 -------------------------------------------------------------------
 Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
@@ -388,5 +437,4 @@ Fast-forward
 
 Do you want to delete local branch &apos;feature/xy-1234-ipsum&apos; [y/N] y
 Deleted branch feature/xy-1234-ipsum (was e9642b7).
- 
-</pre>
+</details></pre>
