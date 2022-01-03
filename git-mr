@@ -609,7 +609,7 @@ function gitlab_extract_project_url
     echo "$project_url"
 }
 
-function gitlab_merge_request_discussions
+function gitlab_merge_request_threads
 {
     gitlab_check_env
 
@@ -619,7 +619,7 @@ function gitlab_merge_request_discussions
     if [ -z "$project_url" ]; then return; fi
     if [ -z "$mr_iid" ]; then return; fi
 
-    local notes
+    local thread_summaries
     local per_page=100
     local page=1
     local notes_page_count=${per_page}
@@ -628,27 +628,32 @@ function gitlab_merge_request_discussions
 
         # fetch page
         local notes_page
-        notes_page=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" |
-            sed 's/\\r//g' |
-            sed 's/\\n/\\\\n/g' |
-            sed 's/"noteable_iid":\([0-9]*\)}]},/"noteable_iid":\1}]},\n/g')
+        notes_page=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}")
 
         if [ "$notes_page" != "[]" ]; then
+            
+            local thread_summaries_page
+            thread_summaries_page=$(echo "$notes_page" | jq -r 'map(
+                select(any(.notes[]; .resolvable == true))
+                | {id: .id, unresolved: any(.notes[]; .resolvable == true and .resolved == false) }
+            ) | .[] | .id + " unresolved:" + (.unresolved | tostring)')
+
             # append page
-            if [ ! -z "$notes" ]; then
-                notes=$(echo -e "${notes}\n,") # 1 character after new line avoids trimming
+            if [ -z "$thread_summaries" ]; then
+                thread_summaries="$thread_summaries_page"
+            else
+                thread_summaries=$(echo -e "${thread_summaries}\n${thread_summaries_page}")
             fi
-            notes="${notes}${notes_page}"
 
             # increment
-            notes_page_count=$(echo -e "$notes_page" | wc -l)
+            notes_page_count=$(echo "$notes_page" | jq -r 'length')
             page=$((page+1))
         else
             notes_page_count=0
         fi
     done
 
-    echo "$notes"
+    echo "$thread_summaries"
 }
 
 function gitlab_default_label_ids
@@ -960,10 +965,9 @@ function mr_print_status
         else downvotes=$(colorize "$downvotes" "bold"); fi
 
     # Threads
-
-    local notes;          notes=$(gitlab_merge_request_discussions "$project_url" "$mr_iid")
-    local thread_count;   thread_count=$(echo "$notes" | grep -c '"resolvable":true')
-    local resolved_count; resolved_count=$(echo "$notes" | grep -c '"resolved":true')
+    local threads;        threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
+    local thread_count;   thread_count=$(echo "$threads" | grep -c 'unresolved:')
+    local resolved_count; resolved_count=$(echo "$threads" | grep -c 'unresolved:false')
 
     local thread_count_display;
         thread_count_display=$(colorize "$thread_count" "bold")
@@ -1353,9 +1357,7 @@ function mr_merge
 
     # test open threads
     local unresolved_thread_count;
-    unresolved_thread_count=$(gitlab_merge_request_discussions "$project_url" "$mr_iid" |
-        grep '"resolvable":true' |
-        grep -c '"resolved":false')
+    unresolved_thread_count=$(gitlab_merge_request_threads "$project_url" "$mr_iid" | grep -c 'unresolved:true')
 
     if [ "$unresolved_thread_count" -gt 0 ]; then
         echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging."
