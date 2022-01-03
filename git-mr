@@ -1418,7 +1418,8 @@ function mr_menu
     while [[ $# -gt 0 ]]; do
         case "$1" in
             # Consume options
-            update)      git_mr_menu_mode=update ;;
+            up|update)   git_mr_menu_mode=update ;;
+            st|status)   git_mr_menu_mode=status ;;
             -a|-A|--all) git_mr_menu_update_all=1 ;;
             # Default: conserve argument
             *) args+=("${1}") ;;
@@ -1446,6 +1447,7 @@ function mr_menu
                 mr_menu_update "$ISSUE_CODE" "$menu_items"
             fi
             ;;
+        status) mr_menu_status "$ISSUE_CODE" "$menu_items" ;;
     esac
 }
 
@@ -1504,6 +1506,44 @@ function mr_menu_contents
         fi
 
         echo "* ${wrap}${item_label}${wrap}"
+
+    done < <(echo "$menu_items")
+
+    echo
+    echo "$git_mr_menu_end"
+}
+
+function mr_menu_status
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
+    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+
+    echo "$git_mr_menu_start"
+    echo
+
+    while IFS=$'\n' read -r menu_item; do
+        local mr_iid;       mr_iid=$(echo "$menu_item" | jq -r '.iid')
+        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
+        local title;        title=$(echo "$menu_item" | jq -r '.title')
+        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
+
+        title=$(gitlab_title_undraft "$title")
+
+        local item_label
+        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
+
+        echo "* ${item_label}"
+
+        local project_url; project_url=$(gitlab_extract_project_url "$web_url")
+
+        # Load existing merge request details
+        # Do NOT use `gitlab_merge_request`
+        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
+
+        mr_print_status "${mr_iid}" "$merge_request"
 
     done < <(echo "$menu_items")
 
@@ -1763,7 +1803,7 @@ SYNOPSIS
     mr [OPTIONS] update [BASE_BRANCH]
     mr [OPTIONS] merge
 
-    mr [OPTIONS] menu   [update [--all]] [ISSUE_CODE]
+    mr [OPTIONS] menu   [update [--all] | status] [ISSUE_CODE]
 
     mr [OPTIONS] undraft
 

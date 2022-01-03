@@ -32,7 +32,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BASE_BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>[update [--all]]</i> <i>[ISSUE_CODE]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>[update [--all] | status]</i> <i>[ISSUE_CODE]</i>
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>
 
@@ -269,6 +269,7 @@ Sample:
 * `git mr menu` Prints the menu
 * `git mr menu update` Updates the menu in the current merge request description
 * `git mr menu update --all` Updates the menu in all related merge requests
+* `git mr menu status` Prints the menu and status indicators of merge requests
 
 ## Hooks
 
