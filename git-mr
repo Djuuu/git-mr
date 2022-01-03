@@ -596,12 +596,27 @@ function gitlab_extract_labels
     echo "$mr_detail" | jq -r '.labels | join(",")'
 }
 
+function gitlab_extract_project_url
+{
+    local mr_url=$1
+
+    project_url=$(echo "$mr_url" |
+        sed "s/https:\/\/$GITLAB_DOMAIN\///" | # remove prefix
+        sed "s/\/-\/merge_requests\/[0-9]*\$//") # remove suffix
+
+    project_url=$(urlencode "$project_url")
+
+    echo "$project_url"
+}
+
 function gitlab_merge_request_discussions
 {
     gitlab_check_env
 
-    local mr_iid=$1
+    local project_url=$1
+    local mr_iid=$2
 
+    if [ -z "$project_url" ]; then return; fi
     if [ -z "$mr_iid" ]; then return; fi
 
     local notes
@@ -613,7 +628,7 @@ function gitlab_merge_request_discussions
 
         # fetch page
         local notes_page
-        notes_page=$(gitlab_project_request "merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" |
+        notes_page=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}" |
             sed 's/\\r//g' |
             sed 's/\\n/\\\\n/g' |
             sed 's/"noteable_iid":\([0-9]*\)}]},/"noteable_iid":\1}]},\n/g')
@@ -921,6 +936,8 @@ function mr_print_status
     [ ! -z "$mr_iid" ] || exit_error 0 "mr_iid not provided"
 
     local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
+    local mr_url;        mr_url=$(echo "$merge_request" | jq -r '.web_url')
+    local project_url;   project_url=$(gitlab_extract_project_url "$mr_url")
 
     # Labels
     local labels; labels=$(gitlab_extract_labels "$merge_request")
@@ -944,7 +961,7 @@ function mr_print_status
 
     # Threads
 
-    local notes;          notes=$(gitlab_merge_request_discussions "$mr_iid")
+    local notes;          notes=$(gitlab_merge_request_discussions "$project_url" "$mr_iid")
     local thread_count;   thread_count=$(echo "$notes" | grep -c '"resolvable":true')
     local resolved_count; resolved_count=$(echo "$notes" | grep -c '"resolved":true')
 
@@ -1302,9 +1319,10 @@ function mr_merge
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
+    local mr_summary;  mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
+    local mr_url;      mr_url=$(gitlab_extract_url "$mr_summary")
+    local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
@@ -1335,7 +1353,7 @@ function mr_merge
 
     # test open threads
     local unresolved_thread_count;
-    unresolved_thread_count=$(gitlab_merge_request_discussions "$mr_iid" |
+    unresolved_thread_count=$(gitlab_merge_request_discussions "$project_url" "$mr_iid" |
         grep '"resolvable":true' |
         grep -c '"resolved":false')
 
@@ -1572,10 +1590,7 @@ function mr_menu_update_all
 
         # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
         # Here, we can expect other target projects here.
-        project_url=$(echo "$mr_url" |
-            sed "s/https:\/\/$GITLAB_DOMAIN\///" | # remove prefix
-            sed "s/\/-\/merge_requests\/[0-9]*\$//") # remove suffix
-        project_url=$(urlencode "$project_url")
+        project_url=$(gitlab_extract_project_url "$mr_url")
 
         # Load existing merge request details
         # Do NOT use `gitlab_merge_request`
