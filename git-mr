@@ -512,7 +512,7 @@ function gitlab_merge_requests_search
     local search_term=$1; [ ! -z "$search_term" ] || exit_error 0 "search_term required"
 
     local result
-    result=$(gitlab_request "merge_requests?state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
+    result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
 
     if [ -z "$result" ] || [ "$result" = "[]" ]; then
         return
