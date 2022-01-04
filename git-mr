@@ -581,6 +581,12 @@ function gitlab_extract_description
 function gitlab_extract_merge_status
 {
     local mr_detail=$1
+
+    if [ "$(echo "$mr_detail" | jq -r '.state')" = "merged" ]; then
+        echo "merged"
+        return
+    fi
+
     echo "$mr_detail" | jq -r '.merge_status'
 }
 
@@ -981,7 +987,7 @@ function mr_print_status
 
     # Merge status
     local merge_status; merge_status=$(gitlab_extract_merge_status "$merge_request")
-    local merge_status_icon; if [ "$merge_status" = "can_be_merged" ];
+    local merge_status_icon; if [ "$merge_status" = "merged" ] || [ "$merge_status" = "can_be_merged" ];
         then merge_status_icon="$(colorize "\U00002714" "lightgreen" "bold")"; # heavy check mark
         else merge_status_icon="$(colorize "\U0000274C" "lightred" "bold")"; fi # cross mark
 
@@ -1017,8 +1023,14 @@ function mr_print_status
     fi
     if gitlab_title_is_draft "$title"; then
         echo -en "     Draft: $(colorize "yes" "orange")"
+    else
+        echo -en "               "
     fi
-    echo -en "     Can be merged: ${merge_status_icon}"
+    if [ "$merge_status" != "merged" ]; then
+        echo -en "     Can be merged: ${merge_status_icon}"
+    else
+        echo -en "            $(colorize "Merged" "lightgreen")"
+    fi
     echo -e "\n"
 }
 
@@ -1349,6 +1361,11 @@ function mr_merge
     mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
 
     # test merge status
+    if [ "$merge_status" = "merged" ]; then
+        echo_error "Merge request is already merged."
+        echo_error
+        return
+    fi
     if [ "$merge_status" != "can_be_merged" ]; then
         echo_error "Merge request can not be merged. You probably need to rebase the branch and resolve conflicts."
         echo_error
