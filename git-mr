@@ -465,7 +465,7 @@ function gitlab_new_merge_request_url
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-$(git_base_branch)}
 
-    local gitlab_mr_url="https://${GITLAB_DOMAIN}/${project_url}/merge_requests/new"
+    local gitlab_mr_url="https://${GITLAB_DOMAIN}/${project_url}/-/merge_requests/new"
 
     gitlab_mr_url="${gitlab_mr_url}?$(urlencode "merge_request[source_branch]")=${source_branch}"
     gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[target_branch]")=${target_branch}"
@@ -1142,6 +1142,10 @@ EOF
 
         # add description
         new_mr_url="${new_mr_url}&$(urlencode "merge_request[description]")=$(urlencode "$description")"
+
+        echo_debug
+        echo_debug "Opening:"
+        echo_debug "$new_mr_url"
 
         open_in_browser "${new_mr_url}"
     fi
