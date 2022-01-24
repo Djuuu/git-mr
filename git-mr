@@ -99,7 +99,10 @@ function exit_error
 
 # https://gist.github.com/cdown/1163649#gistcomment-1639097
 urlencode() {
-    local LANG=C
+    local oLANG="$LANG"
+    local oLC_ALL="$LC_ALL"
+    LANG=C
+    LC_ALL=C
     local length="${#1}"
     for (( i = 0; i < length; i++ )); do
         local c="${1:i:1}"
@@ -108,6 +111,8 @@ urlencode() {
             *) printf '%%%02X' "'$c" ;;
         esac
     done
+    LANG="$oLANG"
+    LC_ALL="$oLC_ALL"
 }
 
 function colorize
