@@ -16,7 +16,7 @@ function git_base_branch
         git log --decorate --simplify-by-decoration --oneline | # selects only commits with a branch or tag
         grep -v "(HEAD"                                        | # removes current head (and branch)
         head -n1                                                | # selects only the closest decoration
-        sed 's/.* (\(.*\)) .*/\1/'                               | # filters out everything but decorations
+        sed 's/.* (\([^)]*\)) .*/\1/'                            | # filters out everything but decorations
         sed -e 's/, /\n/g'                                        | # splits decorations
         grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' | # ignore "tag: ...", "origin/..." and ".../HEAD"
         head -n1)                                                     # keep only first decoration
