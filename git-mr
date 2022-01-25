@@ -147,6 +147,15 @@ function colorize
     fi
 }
 
+# https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
+function terminal_link
+{
+    local href=$1
+    local text=$2
+
+    printf "\e]8;;${href}\e\\${text}\e]8;;\e\\"
+}
+
 function echo_error
 {
     colorize "$1\n" "orange" >&2
@@ -645,12 +654,18 @@ function gitlab_merge_request_threads
         notes_page=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}")
 
         if [ "$notes_page" != "[]" ]; then
-            
+
             local thread_summaries_page
-            thread_summaries_page=$(echo "$notes_page" | jq -r 'map(
-                select(any(.notes[]; .resolvable == true))
-                | {id: .id, unresolved: any(.notes[]; .resolvable == true and .resolved == false) }
-            ) | .[] | .id + " unresolved:" + (.unresolved | tostring)')
+            thread_summaries_page=$(echo "$notes_page" | jq -r '
+                map(
+                    select(any(.notes[]; .resolvable == true)) |
+                    {
+                        id: .id,
+                        unresolved: any(.notes[]; .resolvable == true and .resolved == false),
+                        first_unresolved_note_id: .notes | map(select(.resolvable == true and .resolved == false) | .id) | .[0]
+                    }
+                ) | .[] |
+                .id + "\t" + "unresolved:" + (.unresolved | tostring) + "\t" + "note_id:" + (.first_unresolved_note_id | tostring)')
 
             # append page
             if [ -z "$thread_summaries" ]; then
@@ -990,6 +1005,15 @@ function mr_print_status
         then resolved_count_display=$(colorize "$resolved_count" "bold" "lightred")
         else resolved_count_display=$(colorize "$resolved_count" "bold" "lightgreen"); fi
 
+    local threads_display="${resolved_count_display}/${thread_count_display}"
+
+    if [ "$resolved_count" -lt "$thread_count" ]; then
+        local first_unresolved_note_id
+        first_unresolved_note_id=$(echo "$threads" | grep 'unresolved:true' | cut -f 3 | cut -d ':' -f 2 )
+        local note_url="${mr_url}#note_${first_unresolved_note_id}"
+        threads_display=$(terminal_link "$note_url" "$threads_display")
+    fi
+
     # Title
     local title; title=$(gitlab_extract_title "$merge_request")
 
@@ -1025,7 +1049,7 @@ function mr_print_status
     echo -en "   \U0001F44D  ${upvotes}"
     echo -en "   \U0001F44E  ${downvotes}"
     if [ "$thread_count" -gt 0 ]; then
-        echo -n "     Resolved threads: ${resolved_count_display}/${thread_count_display}"
+        echo -n "     Resolved threads: ${threads_display}"
     else
       echo -n "                          "
     fi
