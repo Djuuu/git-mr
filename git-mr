@@ -5,6 +5,9 @@
 
 function git_current_branch
 {
+    # `git branch --show-current` is available starting from Git 2.22
+    # fallback to `git rev-parse --abbrev-ref HEAD` if first command fails
+    (git branch --show-current 2>/dev/null) || \
     git rev-parse --abbrev-ref HEAD
 }
 
