@@ -8,7 +8,7 @@ default_pattern="[A-Z]{2}-[0-9]+"
 jira_code_pattern="${JIRA_CODE_PATTERN:-$default_pattern}"
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
-issue_code=$(echo "${current_branch}" | grep -iEo "$jira_code_pattern" | tail -n1)
+issue_code=$(echo "${current_branch}" | grep -Eo "$jira_code_pattern" | tail -n1)
 [ ! -z "$issue_code" ] || exit 0 # No issue code detected
 
 current_msg=$(cat $1)

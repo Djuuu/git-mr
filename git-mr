@@ -796,7 +796,7 @@ function guess_issue_code
     local current_branch; current_branch=$(git_current_branch)
 
     local issue_code; issue_code=$(echo "${current_branch}" |
-        grep -iEo "$JIRA_CODE_PATTERN" |
+        grep -Eo "$JIRA_CODE_PATTERN" |
         tail -n1)
 
     if [ -z "$issue_code" ]; then
