@@ -14,20 +14,20 @@ function git_current_branch
 function git_base_branch
 {
     # Nearest branch in commit history
-
-    base_branch=$( \
-        git log --decorate --simplify-by-decoration --oneline | # selects only commits with a branch or tag
-        grep -v "(HEAD"                                        | # removes current head (and branch)
-        head -n1                                                | # selects only the closest decoration
-        sed 's/.* (\([^)]*\)) .*/\1/'                            | # filters out everything but decorations
-        sed -e 's/, /\n/g'                                        | # splits decorations
-        grep -v 'tag:' | grep -vE '^origin\/' | grep -vE '\/HEAD$' | # ignore "tag: ...", "origin/..." and ".../HEAD"
-        head -n1)                                                     # keep only first decoration
+    local base_branch; base_branch=$( \
+        git log --decorate --simplify-by-decoration --oneline \
+                --decorate-refs='refs/heads/*' | # select only commits with a local branch
+        head -n2 | tail -n1                    | # select closest decoration before current HEAD
+        sed 's/.* (\([^)]*\)) .*/\1/'          | # filters out everything but decorations
+        sed -e 's/, /\n/g'                     | # splits decorations
+        head -n1)                                # keep only first decoration
 
     # First possible merge base
     if [ -z "$base_branch" ]; then
         base_branch=$(git show-branch  --merge-base | head -n1)
     fi
+
+    echo_debug "Base branch: $base_branch"
 
     echo "$base_branch"
 }
@@ -37,7 +37,7 @@ function git_commits
     local current_branch=${1:-$(git_current_branch)}
     local base_branch=${2:-$(git_base_branch)}
 
-    git log --oneline --reverse --no-decorate "${base_branch}".."${current_branch}"
+    git log --oneline --reverse --no-decorate "heads/${base_branch}..heads/${current_branch}"
 }
 
 function git_commits_extended
@@ -821,6 +821,8 @@ function guess_issue_code
         echo_error "Unable to guess issue code"
         return
     fi
+
+    echo_debug "Issue code: $issue_code"
 
     echo "$issue_code"
 }
