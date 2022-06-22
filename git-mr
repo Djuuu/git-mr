@@ -1449,10 +1449,10 @@ function mr_merge
 
     # checkout target branch
 
-    if [ "$(confirm "Do you want to checkout '$base_branch' and pull changes?")" != "yes" ]; then echo; return; fi
+    if [ "$(confirm "Do you want to checkout '$current_target' and pull changes?")" != "yes" ]; then echo; return; fi
 
-    echo "git checkout $base_branch && git pull --rebase"
-    git checkout "$base_branch" && git pull --rebase
+    echo "git checkout $current_target && git pull --rebase"
+    git checkout "$current_target" && git pull --rebase
     echo
 
     # delete local branch
