@@ -1871,6 +1871,9 @@ SYNOPSIS
 
     mr [OPTIONS] hook
 
+    mr base
+    mr code
+
 OPTIONS
 
     -v  Verbose output (displays called API URLs)
@@ -1989,6 +1992,10 @@ case $1 in
     q|qa|QA) mr_qa "${@:2}" ;;
 
     hook) mr_hook "${@:2}" ;;
+
+    # Plumbing
+    base) git_base_branch ;;
+    code) guess_issue_code ;;
 
     *) mr_print "$@" ;;
 

@@ -19,6 +19,9 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr hook`](#git-mr-hook)
 * [Hooks](#hooks)
   + [prepare-commit-msg](#prepare-commit-msg)
+* [Plumbing](#plumbing)
+  + [git mr base](#git-mr-base)
+  + [git mr code](#git-mr-code)
 * [Sample output](#sample-output)
 
 ----------------------------------------------------------------
@@ -41,6 +44,9 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>   <i>[BASE_BRANCH]</i>
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>hook</b>
+
+<b>git mr</b>  <b>base</b>
+<b>git mr</b>  <b>code</b>
 </pre>
 
 ### Arguments
@@ -176,7 +182,7 @@ This will:
 
 If some commits were changed (after a rebase) or added, you will be prompted if you want to post the updated description to Gitlab.
 
-You can also update the source branche if it is different from the current one.
+You can also update the source branch if it is different from the current one.
 
 ----------------------------------------------------------------
 
@@ -291,6 +297,20 @@ The following hooks are provided for convenience:
 ### `prepare-commit-msg`
 
 Ensures your commit messages are prefixed with the code of related issue.
+
+----------------------------------------------------------------
+
+## Plumbing
+
+### `git mr base`
+
+Outputs guessed base branch.
+
+----------------------------------------------------------------
+
+### `git mr code`
+
+Outputs guessed issue code.
 
 ----------------------------------------------------------------
 
