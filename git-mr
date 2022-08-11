@@ -547,7 +547,7 @@ function gitlab_projects
 {
     local result
 
-    result=$(gitlab_request "projects?simple=true&archived=false&per_page=250") || exit $?
+    result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=100") || exit $?
     if [ -z "$result" ] || [ "$result" = "[]" ]; then
         return
     fi
