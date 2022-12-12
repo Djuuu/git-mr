@@ -15,5 +15,9 @@ current_msg=$(cat $1)
 msg_code=$(echo "${current_msg}" | grep -iEo "$jira_code_pattern" | tail -n1)
 [ -z "$msg_code" ] || exit 0 # existing issue code in message
 
+if case "$current_msg" in "fixup! "*) ;; *) false;; esac; then
+    exit 0 # don't alter fixup messages
+fi
+
 echo "Prefixing message with issue code: $issue_code" >&2
 sed -i.bak -e "1s/^/$issue_code /" $1
