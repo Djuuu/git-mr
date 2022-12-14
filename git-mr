@@ -1121,6 +1121,279 @@ function mr_update_labels
 
 
 ################################################################################
+# Merge request menu utility functions
+
+function mr_menu_merge_requests
+{
+    ISSUE_CODE=${1:-$(guess_issue_code)}
+
+    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$ISSUE_CODE") || exit $?
+    if [ -z "$mr_summaries" ]; then
+        return
+    fi
+
+    # Load project names into bash associative array
+    declare -A project_arr
+    while IFS="=" read -r id name
+    do
+        project_arr[$id]="$name"
+    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]')
+
+    # Enrich merge request summaries with project names
+    while IFS=$'\n' read -r mr_summary
+    do
+        local project_id; project_id=$(echo "$mr_summary" | jq -r '.project_id')
+        local project_name; project_name=${project_arr[$project_id]}
+
+        echo "$mr_summary" | jq -c --arg project_name "$project_name" '. + {project_name: $project_name}'
+
+    done < <(echo "$mr_summaries")
+}
+
+function mr_menu_contents
+{
+    local issue_code=$1
+    local menu_items=$2
+    local current_mr_url=$3;
+
+    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
+    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+
+    echo "$git_mr_menu_start"
+    echo
+
+    while IFS=$'\n' read -r menu_item; do
+        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
+        local title;        title=$(echo "$menu_item" | jq -r '.title')
+        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
+
+        title=$(gitlab_title_undraft "$title")
+
+        local item_label
+        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
+
+        local wrap=''
+        if [ "$current_mr_url" == "$web_url" ]; then
+            wrap='**' # Markdown bold
+        fi
+
+        echo "* ${wrap}${item_label}${wrap}"
+
+    done < <(echo "$menu_items")
+
+    echo
+    echo "$git_mr_menu_end"
+}
+
+function mr_menu_status
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
+    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+
+    echo "$git_mr_menu_start"
+    echo
+
+    while IFS=$'\n' read -r menu_item; do
+        local mr_iid;       mr_iid=$(echo "$menu_item" | jq -r '.iid')
+        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
+        local title;        title=$(echo "$menu_item" | jq -r '.title')
+        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
+
+        title=$(gitlab_title_undraft "$title")
+
+        local item_label
+        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
+
+        echo "* ${item_label}"
+
+        local project_url; project_url=$(gitlab_extract_project_url "$web_url")
+
+        # Load existing merge request details
+        # Do NOT use `gitlab_merge_request`
+        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
+
+        mr_print_status "${mr_iid}" "$merge_request"
+
+    done < <(echo "$menu_items")
+
+    echo
+    echo "$git_mr_menu_end"
+}
+
+function mr_menu_show
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    echo
+    mr_menu_contents "$issue_code" "$menu_items"
+}
+
+function mr_menu_update
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    # Look for existing merge request
+    local current_branch
+    current_branch=$(git_current_branch)
+
+    local current_mr_summary; current_mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local current_mr_iid;     current_mr_iid=$(gitlab_extract_iid "$current_mr_summary")
+    local current_mr_url;     current_mr_url=$(gitlab_extract_url "$current_mr_summary")
+
+    if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
+        echo_error "Merge request not found"
+        echo
+        mr_menu_contents "$issue_code" "$menu_items"
+        return
+    fi
+
+    # Load existing merge request details
+    local merge_request;  merge_request=$(gitlab_merge_request "$current_mr_iid")
+    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
+
+    local mr_menu_content;
+    mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$current_mr_url")
+
+    local updated_description;
+    updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+
+    echo
+    echo "$updated_description"
+    echo
+    echo '--------------------------------------------------------------------------------'
+
+    local mr_update_data='{}'
+    if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
+        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
+    fi
+    if [ "$mr_update_data" != "{}" ]; then
+        echo -n "Updating merge request..."
+        local result
+        result=$(gitlab_merge_request_update "$current_mr_iid" "$mr_update_data")
+        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+    fi
+}
+
+function mr_menu_update_all
+{
+    local issue_code=$1
+    local menu_items=$2
+
+    local mr_iid
+    local mr_url
+    local project_url
+    local merge_request
+    local mr_description
+    local mr_menu_content
+    local updated_description
+    local mr_update_data
+    local result
+
+    # Use array instead of looping over variable content with `read` to leave standard input open for `confirm`
+    readarray menu_array < <(echo "$menu_items")
+
+    for menu_item in "${menu_array[@]}"; do
+
+        mr_iid=$(echo "$menu_item" | jq -r '.iid')
+        mr_url=$(echo "$menu_item" | jq -r '.web_url')
+
+        # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
+        # Here, we can expect other target projects here.
+        project_url=$(gitlab_extract_project_url "$mr_url")
+
+        # Load existing merge request details
+        # Do NOT use `gitlab_merge_request`
+        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
+
+        mr_description=$(gitlab_extract_description "$merge_request")
+
+        mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$mr_url")
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+
+        echo
+        echo "$updated_description"
+        echo
+        echo '--------------------------------------------------------------------------------'
+        echo
+        echo "Merge request:"
+        echo
+        echo "  ${mr_url}"
+        echo
+
+        mr_update_data='{}'
+
+        if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
+            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
+        fi
+
+        if [ "$mr_update_data" != "{}" ]; then
+            echo -n "Updating merge request..."
+            # Do NOT use `gitlab_merge_request_update`
+            result=$(gitlab_request "projects/${project_url}/merge_requests/${mr_iid}" "PUT" "${mr_update_data}")
+            if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+        fi
+    done
+
+    echo '--------------------------------------------------------------------------------'
+    echo
+
+    mr_menu_contents "$issue_code" "$menu_items"
+}
+
+function mr_menu_replace_description
+{
+    local mr_description=$1
+    local menu_content=$2
+
+    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
+    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+
+    menu_start=$(echo "$mr_description" | grep -n "$git_mr_menu_start" | cut -f1 -d:)
+    menu_end=$(echo "$mr_description" | grep -n -- "$git_mr_menu_end" | cut -f1 -d: | head -n 1)
+
+    has_menu=0
+    if [ -n "$menu_start" ] && [ -n "$menu_end" ] && [ "$menu_start" -gt "0" ] && [ "$menu_end" -gt "$menu_start" ]; then
+        has_menu=1
+    fi
+
+    # Iterate over description lines and insert/replace menu
+    i=1
+    while IFS=$'\n' read -r mr_description_line
+    do
+        if [ "$has_menu" = "1" ]; then
+            if [ "$i" -lt "$menu_start" ] || [ "$i" -gt "$menu_end" ]; then
+                # output non-menu line
+                echo "$mr_description_line"
+            else
+                # replace menu once
+                if [ "$i" -eq "$menu_end" ]; then
+                    echo_debug "Replacing menu"
+                    echo "$menu_content"
+                fi
+            fi
+        else
+            # output non-menu line
+            echo "$mr_description_line"
+            # insert menu once
+            if [ "$i" -eq "2" ]; then
+                echo_debug "Inserting menu"
+                echo "$menu_content"
+                echo
+            fi
+        fi
+
+        ((i+=1))
+
+    done < <(echo "$mr_description")
+}
+
+
+################################################################################
 # Merge request top-level functions
 
 function mr_print
@@ -1507,275 +1780,6 @@ function mr_menu
             ;;
         status) mr_menu_status "$ISSUE_CODE" "$menu_items" ;;
     esac
-}
-
-function mr_menu_merge_requests
-{
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$ISSUE_CODE") || exit $?
-    if [ -z "$mr_summaries" ]; then
-        return
-    fi
-
-    # Load project names into bash associative array
-    declare -A project_arr
-    while IFS="=" read -r id name
-    do
-        project_arr[$id]="$name"
-    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]')
-
-    # Enrich merge request summaries with project names
-    while IFS=$'\n' read -r mr_summary
-    do
-        local project_id; project_id=$(echo "$mr_summary" | jq -r '.project_id')
-        local project_name; project_name=${project_arr[$project_id]}
-
-        echo "$mr_summary" | jq -c --arg project_name "$project_name" '. + {project_name: $project_name}'
-
-    done < <(echo "$mr_summaries")
-}
-
-function mr_menu_contents
-{
-    local issue_code=$1
-    local menu_items=$2
-    local current_mr_url=$3;
-
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    echo "$git_mr_menu_start"
-    echo
-
-    while IFS=$'\n' read -r menu_item; do
-        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
-        local title;        title=$(echo "$menu_item" | jq -r '.title')
-        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
-
-        title=$(gitlab_title_undraft "$title")
-
-        local item_label
-        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
-
-        local wrap=''
-        if [ "$current_mr_url" == "$web_url" ]; then
-            wrap='**' # Markdown bold
-        fi
-
-        echo "* ${wrap}${item_label}${wrap}"
-
-    done < <(echo "$menu_items")
-
-    echo
-    echo "$git_mr_menu_end"
-}
-
-function mr_menu_status
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    echo "$git_mr_menu_start"
-    echo
-
-    while IFS=$'\n' read -r menu_item; do
-        local mr_iid;       mr_iid=$(echo "$menu_item" | jq -r '.iid')
-        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
-        local title;        title=$(echo "$menu_item" | jq -r '.title')
-        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
-
-        title=$(gitlab_title_undraft "$title")
-
-        local item_label
-        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
-
-        echo "* ${item_label}"
-
-        local project_url; project_url=$(gitlab_extract_project_url "$web_url")
-
-        # Load existing merge request details
-        # Do NOT use `gitlab_merge_request`
-        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
-
-        mr_print_status "${mr_iid}" "$merge_request"
-
-    done < <(echo "$menu_items")
-
-    echo
-    echo "$git_mr_menu_end"
-}
-
-function mr_menu_show
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    echo
-    mr_menu_contents "$issue_code" "$menu_items"
-}
-
-function mr_menu_update
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    # Look for existing merge request
-    local current_branch
-    current_branch=$(git_current_branch)
-
-    local current_mr_summary; current_mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local current_mr_iid;     current_mr_iid=$(gitlab_extract_iid "$current_mr_summary")
-    local current_mr_url;     current_mr_url=$(gitlab_extract_url "$current_mr_summary")
-
-    if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
-        echo_error "Merge request not found"
-        echo
-        mr_menu_contents "$issue_code" "$menu_items"
-        return
-    fi
-
-    # Load existing merge request details
-    local merge_request;  merge_request=$(gitlab_merge_request "$current_mr_iid")
-    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
-
-    local mr_menu_content;
-    mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$current_mr_url")
-
-    local updated_description;
-    updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
-
-    echo
-    echo "$updated_description"
-    echo
-    echo '--------------------------------------------------------------------------------'
-
-    local mr_update_data='{}'
-    if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
-        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
-    fi
-    if [ "$mr_update_data" != "{}" ]; then
-        echo -n "Updating merge request..."
-        local result
-        result=$(gitlab_merge_request_update "$current_mr_iid" "$mr_update_data")
-        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
-    fi
-}
-
-function mr_menu_update_all
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    local mr_iid
-    local mr_url
-    local project_url
-    local merge_request
-    local mr_description
-    local mr_menu_content
-    local updated_description
-    local mr_update_data
-    local result
-
-    # Use array instead of looping over variable content with `read` to leave standard input open for `confirm`
-    readarray menu_array < <(echo "$menu_items")
-
-    for menu_item in "${menu_array[@]}"; do
-
-        mr_iid=$(echo "$menu_item" | jq -r '.iid')
-        mr_url=$(echo "$menu_item" | jq -r '.web_url')
-
-        # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
-        # Here, we can expect other target projects here.
-        project_url=$(gitlab_extract_project_url "$mr_url")
-
-        # Load existing merge request details
-        # Do NOT use `gitlab_merge_request`
-        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
-
-        mr_description=$(gitlab_extract_description "$merge_request")
-
-        mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$mr_url")
-        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
-
-        echo
-        echo "$updated_description"
-        echo
-        echo '--------------------------------------------------------------------------------'
-        echo
-        echo "Merge request:"
-        echo
-        echo "  ${mr_url}"
-        echo
-
-        mr_update_data='{}'
-
-        if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
-            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
-        fi
-
-        if [ "$mr_update_data" != "{}" ]; then
-            echo -n "Updating merge request..."
-            # Do NOT use `gitlab_merge_request_update`
-            result=$(gitlab_request "projects/${project_url}/merge_requests/${mr_iid}" "PUT" "${mr_update_data}")
-            if [ ! -z "$result" ]; then echo -e "OK\n"; fi
-        fi
-    done
-
-    echo '--------------------------------------------------------------------------------'
-    echo
-
-    mr_menu_contents "$issue_code" "$menu_items"
-}
-
-function mr_menu_replace_description
-{
-    local mr_description=$1
-    local menu_content=$2
-
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    menu_start=$(echo "$mr_description" | grep -n "$git_mr_menu_start" | cut -f1 -d:)
-    menu_end=$(echo "$mr_description" | grep -n -- "$git_mr_menu_end" | cut -f1 -d: | head -n 1)
-
-    has_menu=0
-    if [ -n "$menu_start" ] && [ -n "$menu_end" ] && [ "$menu_start" -gt "0" ] && [ "$menu_end" -gt "$menu_start" ]; then
-        has_menu=1
-    fi
-
-    # Iterate over description lines and insert/replace menu
-    i=1
-    while IFS=$'\n' read -r mr_description_line
-    do
-        if [ "$has_menu" = "1" ]; then
-            if [ "$i" -lt "$menu_start" ] || [ "$i" -gt "$menu_end" ]; then
-                # output non-menu line
-                echo "$mr_description_line"
-            else
-                # replace menu once
-                if [ "$i" -eq "$menu_end" ]; then
-                    echo_debug "Replacing menu"
-                    echo "$menu_content"
-                fi
-            fi
-        else
-            # output non-menu line
-            echo "$mr_description_line"
-            # insert menu once
-            if [ "$i" -eq "2" ]; then
-                echo_debug "Inserting menu"
-                echo "$menu_content"
-                echo
-            fi
-        fi
-
-        ((i+=1))
-
-    done < <(echo "$mr_description")
 }
 
 function mr_ip
