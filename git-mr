@@ -85,8 +85,7 @@ function git_titlize_branch
     local title_ref;   title_ref="${prefix^}${issue_id}"
     local title_label; title_label="$(echo "${label^}" | sed 's/[-_]/ /g')"
 
-    # Draft prefix
-    gitlab_title_to_draft "${title_ref}${title_label}"
+    echo "${title_ref}${title_label}"
 }
 
 
@@ -502,6 +501,7 @@ function gitlab_new_merge_request_url
     # title
     local title
     title=$(git_titlize_branch "$source_branch")
+    title=$(gitlab_title_to_draft "$title")
     title=$(urlencode "$title")
     gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[title]")=${title}"
 
@@ -834,7 +834,7 @@ function mr_title
     local issue_code=${2:-${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}}
 
     if [ -z "$issue_code" ]; then
-        echo "$source_branch"
+        git_titlize_branch "$source_branch"
         return
     fi
 
