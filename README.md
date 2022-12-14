@@ -1,5 +1,8 @@
 # git-mr
 
+[![Tests](https://github.com/Djuuu/git-mr/actions/workflows/test.yml/badge.svg)](https://github.com/Djuuu/git-mr/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-Beerware%20%F0%9F%8D%BA-yellow)](https://web.archive.org/web/20160322002352/http://www.cs.trincoll.edu/hfoss/wiki/Chris_Fei:_Beerware_License)
+
 Prepares a merge request description, with link to Jira ticket and current branch commit list.
 
 ----------------------------------------------------------------
@@ -18,10 +21,10 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr merge`](#git-mr-merge)
     + [`git mr hook`](#git-mr-hook)
 * [Hooks](#hooks)
-  + [prepare-commit-msg](#prepare-commit-msg)
+  + [`prepare-commit-msg`](#prepare-commit-msg)
 * [Plumbing](#plumbing)
-  + [git mr base](#git-mr-base)
-  + [git mr code](#git-mr-code)
+  + [`git mr base`](#git-mr-base)
+  + [`git mr code`](#git-mr-code)
 * [Sample output](#sample-output)
 
 ----------------------------------------------------------------
@@ -29,39 +32,63 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ## Synopsis
 
 <pre>
-<b>git mr</b>  <i>[OPTIONS]</i>          <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>open</b>    <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>status</b>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BASE_BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>          <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>open</b>    <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>status</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>   <i>[BRANCH]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>    <i>[update [--all] | status]</i> <i>[ISSUE_CODE]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>                 <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>update [--all]</i>  <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>status</i>          <i>[SEARCH_TERM]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>ip</b>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>cr</b>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>qa</b>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa)</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>     <i>[BRANCH]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>   <i>[BASE_BRANCH]</i>
+<b>git mr</b> <b>hook</b>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>hook</b>
-
-<b>git mr</b>  <b>base</b>
-<b>git mr</b>  <b>code</b>
+<b>git mr</b> <b>base</b>
+<b>git mr</b> <b>code</b>
 </pre>
 
 ### Arguments
 
-* `ISSUE_CODE` Force Jira issue code, if not detected properly
-* `BASE_BRANCH` Force base branch, if not detected properly
+* `BRANCH`  
+  Force merge request source branch.  
+  Defaults to current branch.
+* `SEARCH_TERM`  
+  Term searched in merge requests titles to build menu.  
+  Defaults to Jira issue code guessed from branch name.
 
 ### Options
 
-* `-v` Verbose output (displays called API URLs)
-* `-y` Bypass confirmation prompts (always answer "yes")
-* `-e` Use full commit messages in description ("extended", for `git mr update`)
-* `-a`|`--all` Update all merge requests (`git mr menu update`)
+* `-c|--code` `ISSUE_CODE`  
+  Force issue code.
+* `-t|--target` `TARGET_BRANCH`  
+  Force target branch.
+* `-v`  
+  Verbose output (displays called API URLs).
+* `-y`  
+  Bypass confirmation prompts (always answer "yes").
+* `-e`  
+  Use full commit messages in description ("extended", for `git mr [open|update]`).  
+  You can also set `GIT_MR_EXTENDED=1` in your environment variables to always use extended commit descriptions.
+* `-n`  
+  Add new section in description for new commits (for `git mr update`)
+* `-a`|`--all`  
+  Update all merge requests (for `git mr menu update`).
+* `-h`  
+  Show help page.
+
 
 ## Installation
+
+### Dependencies
+
+* `bash`, `git` and usual command-line utilities: `grep`, `sed`, `curl`, `head`, `tail`, `tr`.
+* [**`jq`**](https://stedolan.github.io/jq/) is required and needs to be in PATH.
+
+### git-mr
 
 * Add the `git-mr` directory to your `PATH`<br>
   in one of your shell startup scripts:
@@ -71,7 +98,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 _OR_ 
 
-* Define it as a git alias:<br>
+* Define it as a Git alias:<br>
   run:
   ```bash
   git config --global alias.mr '!bash /path/to/git-mr/git-mr'
@@ -82,9 +109,12 @@ _OR_
   	mr = "!bash /path/to/git-mr/git-mr"
   ```
 
-### Dependencies
+### Completion
 
-* [**`jq`**](https://stedolan.github.io/jq/) is required and needs to be in PATH.
+Completion is available in `git-mr-completion.bash`. Source it in one of your shell startup scripts:
+```bash
+. "/path/to/git-mr/git-mr-completion.bash"
+```
 
 
 ## Configuration
@@ -101,11 +131,11 @@ export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 ```
 
 To create a Jira API Token, go to:
-* https://id.atlassian.com/manage-profile/security/api-tokens<br>
+* https://id.atlassian.com/manage-profile/security/api-tokens  
   (Account Settings -> Security -> API Token -> Create and manage API tokens)
 
 To create a Gitlab API Token, go to:
-* https://myapp.gitlab.com/profile/personal_access_tokens<br>
+* https://myapp.gitlab.com/-/profile/personal_access_tokens?name=Git-MR+Access+token&scopes=api  
   (Settings -> Access Tokens)
 
 Other optional configuration variables:
@@ -136,12 +166,15 @@ export JIRA_QA_ID="xx" # "Quality Assurance" status ID
 ### `git mr`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <i>[BRANCH]</i>
 </pre>
 
 This will print a merge request description, with a link to Jira ticket and current branch commit list.
-* `ISSUE_CODE` can be guessed from the branch name according to `JIRA_CODE_PATTERN` 
-* `BASE_BRANCH` is determined by going up the commit history and finding the first one attached to a branch 
+
+* Issue code can be guessed from the branch name according to `JIRA_CODE_PATTERN`.  
+  It can also be forced with the `-c|--code` option.
+* Target branch is determined by going up the commit history and finding the first one attached to another local branch.  
+  It can also be forced with the `-t|--target` option.
 
 If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
 
@@ -153,7 +186,7 @@ can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REM
 ### `git mr open`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>o|op|open</b> <i>[ISSUE_CODE]</i> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>o|op|open</b> <i>[BRANCH]</i>
 </pre>
 
 Similar to `git mr`, but will open browser directly.
@@ -163,7 +196,7 @@ Similar to `git mr`, but will open browser directly.
 ### `git mr status`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>s|st|status</b> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>s|st|status</b> <i>[BRANCH]</i>
 </pre>
 
 Displays a quick summary of the merge request, with useful indicators (tags, target branch, votes, open threads, draft status, ...)
@@ -173,7 +206,7 @@ Displays a quick summary of the merge request, with useful indicators (tags, tar
 ### `git mr update`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>u|up|update</b> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>u|up|update</b> <i>[BRANCH]</i>
 </pre>
 
 This will:
@@ -189,7 +222,9 @@ You can also update the source branch if it is different from the current one.
 ### `git mr menu`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>menu</b> <i>[st|status]</i> <i>[up|update [--all]]</i> <i>[ISSUE_CODE]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b>                   <i>[ISSUE_CODE]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>up|update [--all]</i> <i>[ISSUE_CODE]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>st|status</i>         <i>[ISSUE_CODE]</i> 
 </pre>
 
 Searches for all (non-closed) merge requests with the current issue code in the title, and generates a menu.
@@ -198,9 +233,9 @@ Sample:
 ```markdown
 ## Menu
 
-* My Project: [feature/XY-1234 My feature main stuff](https://myapp.gitlab.com/my/project/merge_requests/5)
-* My Other Project: [feature/XY-1234 My feature related stuff](https://myapp.gitlab.com/my/other-project/merge_requests/6)
-* My Other Project: [feature/XY-1234 My feature other stuff](https://myapp.gitlab.com/my/other-project/merge_requests/7)
+* Some Project: [Feature/XY-1234 Ipsum](https://myapp.gitlab.com/some/project/-/merge_requests/12)
+* Other Project: [Feature/XY-1234 Quisque sed](https://myapp.gitlab.com/other/project/-/merge_requests/34)
+* Third Project: [Feature/XY-1234 Nunc vestibulum](https://myapp.gitlab.com/third/project/-/merge_requests/56)
 
 --------------------------------------------------------------------------------
 
@@ -222,7 +257,7 @@ Sample:
 ### `git mr ip|cr|qa`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>ip|cr|qa</b> <i>[ISSUE_CODE]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>ip|cr|qa</b> <i>[BRANCH]</i>
 </pre>
 
 This will:
@@ -235,16 +270,16 @@ This will:
   - `JIRA_CR_ID`
   - `JIRA_QA_ID`
 
-#### `git mr ip`
+#### `git mr ip` _("in progress")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS`
 * sets Jira ticket to status ID defined in `JIRA_IP_ID`
 
-#### `git mr cr`
+#### `git mr cr` _("code review")_
 * removes Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_CR_LABELS`
 * sets Jira ticket to status ID defined in `JIRA_CR_ID`
 
-#### `git mr qa`
+#### `git mr qa` _("quality assurance")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_QA_LABELS`
 * sets Jira ticket to status ID defined in `JIRA_QA_ID`
@@ -254,7 +289,7 @@ This will:
 ### `git mr undraft`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>undraft</b>
+<b>git mr</b> <i>[OPTION...]</i> <b>undraft</b> <i>[BRANCH]</i>
 </pre>
 
 This will resolve the Gitlab _Work in Progress_ status.
@@ -264,7 +299,7 @@ This will resolve the Gitlab _Work in Progress_ status.
 ### `git mr merge`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>m|mg|merge</b> <i>[BASE_BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>m|mg|merge</b> <i>[BRANCH]</i>
 </pre>
 
 This will:
@@ -282,13 +317,13 @@ and if applicable, will prompt you to:
 ### `git mr hook`
 
 <pre>
-<b>git mr</b> <i>[OPTIONS]</i> <b>hook</b>
+<b>git mr</b> <b>hook</b>
 </pre>
 
-This will symlink hooks of your repository to the ones provided by git-mr:
-* `prepare-commit-msg`
+Adds the `prepare-commit-msg` Git hook to your current repository.
 
 ----------------------------------------------------------------
+
 
 ## Hooks
 
@@ -300,7 +335,10 @@ Ensures your commit messages are prefixed with the code of related issue.
 
 ----------------------------------------------------------------
 
+
 ## Plumbing
+
+These "plumbing" commands can be useful in other scripts or git aliases.
 
 ### `git mr base`
 
@@ -314,71 +352,83 @@ Outputs guessed issue code.
 
 ----------------------------------------------------------------
 
+
 ## Sample output
 
+## `git mr`
+
 <pre>
-<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr
 </pre>
-<pre>
-<details>
-<summary>Output</summary>
---------------------------------------------------------------------------------
+<pre>--------------------------------------------------------------------------------
 # [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
 
 ## Commits
 
-* **78330c9 In vulputate quam ac ultrices volutpat**&lt;br&gt;
-* **0010a6a Curabitur vel purus sed tortor finibus posuere**&lt;br&gt;
-* **3621817 Aenean sed sem hendrerit ex egestas**&lt;br&gt;
+* **78330c9 In vulputate quam ac ultrices volutpat**  
+* **0010a6a Curabitur vel purus sed tortor finibus posuere**  
+* **3621817 Aenean sed sem hendrerit ex egestas**  
 
 --------------------------------------------------------------------------------
 
 To create a new merge request:
 
-  https://myapp.gitlab.com/my/project/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
-</details></pre>
+  https://myapp.gitlab.com/my/project/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
+</pre>
 
 ------------------------------------------------------------------------------------------------------------------------
 
 <pre>
-<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr -e
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr -e
 </pre>
-<pre>
-<details>
-<summary>Output</summary>
---------------------------------------------------------------------------------
+<pre>--------------------------------------------------------------------------------
 # [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
 
 ## Commits
 
-* **78330c9 In vulputate quam ac ultrices volutpat**
-
-  Some commit description
-
-* **0010a6a Curabitur vel purus sed tortor finibus posuere**
-
-  Extended description
-  - stuff
-  - other stuff
-
-* **3621817 Aenean sed sem hendrerit ex egestas**
+* **78330c9 In vulputate quam ac ultrices volutpat**  
+  Some commit description  
+* **0010a6a Curabitur vel purus sed tortor finibus posuere**  
+  Extended description  
+  - stuff  
+  - other stuff  
+* **3621817 Aenean sed sem hendrerit ex egestas**  
 
 --------------------------------------------------------------------------------
 
 To create a new merge request:
 
-  https://myapp.gitlab.com/my/project/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
-</details></pre>
+  https://myapp.gitlab.com/my/project/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature/xy-1234-ipsum&amp;merge_request%5Btarget_branch%5D=develop
+</pre>
 
 ------------------------------------------------------------------------------------------------------------------------
 
+## `git mr status`
+
 <pre>
-<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr update
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr status
 </pre>
-<pre>
-<details>
-<summary>Output</summary>
+<pre>-------------------------------------------------------------------
+Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
+
+Merge request:
+
+  https://myapp.gitlab.com/my/project/merge_requests/6
+
+   🏷  <b><font color="#A57CA6">[Review]</font></b> [My Team]                                            (↣ <font color="#A57CA6">main</font>)
+
+   👍  <b><font color="#C4A000">1</font></b>   👎  <b><font color="#BA201E">1</font></b>     Resolved threads: <b><font color="#BA201E">0</font></b>/1     Draft: <font color="#C4A000">yes</font>     Can be merged: ❌
+</pre>
+
+------------------------------------------------------------------------------------------------------------------------
+
+## `git mr update`
+
+<pre>
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr update -n
+</pre>
+<pre>-------------------------------------------------------------------
 Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
 # [XY-1234 Ipsum consectetur adipiscing](https://mycompany.atlassian.net/browse/XY-1234)
@@ -387,27 +437,25 @@ Vivamus venenatis tortor et neque sollicitudin, eget suscipit est malesuada
 
 ## Commits
 
-* **<font color="#729FCF">78330c9</font> In vulputate quam ac ultrices volutpat**&lt;br&gt;
-  In vulputate quam&lt;br&gt;
-  ac ultrices volutpat
-
-* **<font color="#729FCF">0010a6a</font> Curabitur vel purus sed tortor finibus posuere**&lt;br&gt;
+* **<font color="#729FCF">78330c9</font> In vulputate quam ac ultrices volutpat**  
+  In vulputate quam  
+  ac ultrices volutpat  
+* **<font color="#729FCF">0010a6a</font> Curabitur vel purus sed tortor finibus posuere**  
   Curabitur vel
-
-* **<font color="#C4A000">aac348f</font> Aenean sed sem hendrerit ex egestas tincidunt**&lt;br&gt;
-  Hendrerit ex egestas&lt;br&gt;
-  egestas sed
+* **<font color="#C4A000">aac348f</font> Aenean sed sem hendrerit ex egestas tincidunt**  
+  Hendrerit ex egestas  
+  egestas sed  
 
 ## Update
 
-* **<font color="#4E9A06">e9642b7</font> Ut consectetur leo ut leo commodo porttitor**&lt;br&gt;
+* **<font color="#4E9A06">e9642b7</font> Ut consectetur leo ut leo commodo porttitor**  
 
 --------------------------------------------------------------------------------
 
   updated commits: <font color="#C4A000">1</font>
       new commits: <font color="#4E9A06">1</font>
 
-Do you want to update the merge request description? [y/N] y
+<b><font color="#29B0B0">Do you want to update the merge request description?</font></b> [y/N] y
 OK
 --------------------------------------------------------------------------------
 
@@ -415,18 +463,19 @@ Merge request:
 
   https://myapp.gitlab.com/my/project/merge_requests/6
 
-    👍  1    👎  0        Resolved threads: 1/2        Draft: yes        Can be merged: ✅
-</details></pre>
+   🏷  <b><font color="#A57CA6">[Testing]</font></b> [My Team]                                           (↣ <font color="#A57CA6">main</font>)
+
+   👍  <b><font color="4E9A06">2</font></b>   👎  0     Resolved threads: <b><font color="#BA201E">1</font></b>/2     Draft: <font color="#C4A000">yes</font>     Can be merged: <b><font color="4E9A06">✔</font></b>
+</pre>
 
 ------------------------------------------------------------------------------------------------------------------------
 
+## `git mr merge`
+
 <pre>
-<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/projects/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr merge
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr merge
 </pre>
-<pre>
-<details>
-<summary>Output</summary>
--------------------------------------------------------------------
+<pre>-------------------------------------------------------------------
 Draft: Feature/XY-1234 Ipsum
 -------------------------------------------------------------------
 
@@ -434,16 +483,18 @@ Merge request:
 
   https://myapp.gitlab.com/my/project/merge_requests/6
 
-    👍  2    👎  0        Resolved threads: 2/2        Draft: yes        Can be merged: ✅
+   🏷  <b><font color="#A57CA6">[Accepted]</font></b> [My Team]                                          (↣ <font color="#A57CA6">main</font>)
 
-<font color="#C4A000">Merge request is a Work in Progress</font>
-Do you want to resolve draft status? [y/N] y
+   👍  <b><font color="4E9A06">2</font></b>   👎  0     Resolved threads: <b><font color="4E9A06">2</font></b>/2     Draft: <font color="#C4A000">yes</font>     Can be merged: <b><font color="4E9A06">✔</font></b>
+
+<font color="#C4A000">Merge request is a draft (work in progress)</font>
+<b><font color="#29B0B0">Do you want to resolve draft status?</font></b> [y/N] y
 OK
-Do you want to merge &apos;feature/xy-1234-ipsum&apos;? [y/N] y
+<b><font color="#29B0B0">Do you want to merge &apos;feature/xy-1234-ipsum&apos;?</font></b> [y/N] y
 OK
-Do you want to checkout &apos;develop&apos; and pull changes? [y/N] y
-Switched to branch &apos;develop&apos;
-Your branch is up to date with &apos;origin/develop&apos;.
+<b><font color="#29B0B0">Do you want to checkout &apos;main&apos; and pull changes?</font></b> [y/N] y
+Switched to branch &apos;main&apos;
+Your branch is up to date with &apos;origin/main&apos;.
 From myapp.gitlab.com:me/my/project
  - [deleted]         (none)     -&gt; origin/feature/xy-1234-ipsum
 remote: Enumerating objects: 1, done.
@@ -451,10 +502,55 @@ remote: Counting objects: 100% (1/1), done.
 remote: Total 1 (delta 0), reused 0 (delta 0), pack-reused 0
 remote: 
 Unpacking objects: 100% (1/1), 263 bytes | 263.00 KiB/s, done.
-   c17b3a1..9545ecd  develop    -&gt; origin/develop
+   c17b3a1..9545ecd  main    -&gt; origin/main
 Updating c17b3a1..9545ecd
 Fast-forward
 
-Do you want to delete local branch &apos;feature/xy-1234-ipsum&apos; [y/N] y
+<b><font color="#29B0B0">Do you want to delete local branch &apos;feature/xy-1234-ipsum&apos;?</font></b> [y/N] y
 Deleted branch feature/xy-1234-ipsum (was e9642b7).
-</details></pre>
+</pre>
+
+------------------------------------------------------------------------------------------------------------------------
+
+## `git mr menu`
+
+<pre>
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr menu
+</pre>
+<pre>## Menu
+
+* Some Project: [Feature/XY-1234 Ipsum](https://myapp.gitlab.com/some/project/-/merge_requests/12)
+* Other Project: [Feature/XY-1234 Quisque sed](https://myapp.gitlab.com/other/project/-/merge_requests/34)
+* Third Project: [Feature/XY-1234 Nunc vestibulum](https://myapp.gitlab.com/third/project/-/merge_requests/56)
+
+---------------------------------------------------------------------------------
+</pre>
+
+
+------------------------------------------------------------------------------------------------------------------------
+
+<pre>
+<font color="#4E9A06">me@mystation</font><font color="#D3D7CF">:</font><font color="#729FCF"><b>~/my-project</b></font><font color="#905C99"> (feature/xy-1234-ipsum)</font><font color="#4E9A06"> ↔ ✔ </font>$ git mr menu status
+</pre>
+<pre>## Menu
+
+* Some Project: [Feature/XY-1234 Ipsum](https://myapp.gitlab.com/some/project/-/merge_requests/12)
+
+   🏷  <b><font color="#A57CA6">[Review]</font></b> [My Team]                                            (↣ <font color="#A57CA6">main</font>)
+
+   👍  <b><font color="#C4A000">1</font></b>   👎  <b><font color="#BA201E">1</font></b>     Resolved threads: <b><font color="#BA201E">0</font></b>/1     Draft: <font color="#C4A000">yes</font>     Can be merged: ❌
+
+* Other Project: [Feature/XY-1234 Quisque sed](https://myapp.gitlab.com/other/project/-/merge_requests/34)
+
+   🏷  <b><font color="#A57CA6">[Testing]</font></b> [My Team]                                         (↣ <font color="#A57CA6">master</font>)
+
+   👍  <b><font color="4E9A06">2</font></b>   👎  0     Resolved threads: <b><font color="#BA201E">1</font></b>/2     Draft: <font color="#C4A000">yes</font>     Can be merged: <b><font color="4E9A06">✔</font></b>
+
+* Third Project: [Feature/XY-1234 Nunc vestibulum](https://myapp.gitlab.com/third/project/-/merge_requests/56)
+
+   🏷  <b><font color="#A57CA6">[Accepted]</font></b> [My Team]                                    (↣ <font color="#A57CA6">epic/stuff</font>)
+
+   👍  <b><font color="4E9A06">2</font></b>   👎  0     Resolved threads: <b><font color="4E9A06">2</font></b>/2     Draft: <font color="#C4A000">yes</font>     Can be merged: <b><font color="4E9A06">✔</font></b>
+
+---------------------------------------------------------------------------------
+</pre>

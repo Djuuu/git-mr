@@ -1817,7 +1817,7 @@ function mr_merge
 
     # delete local branch
 
-    if [ "$(confirm "Do you want to delete local branch '$source_branch'")" != "yes" ]; then echo; return; fi
+    if [ "$(confirm "Do you want to delete local branch '$source_branch'?")" != "yes" ]; then echo; return; fi
 
     echo "git branch -d $source_branch"
     git branch -d "$source_branch"
@@ -1950,95 +1950,107 @@ function mr_hook
 
 function usage
 {
+    local b; b="$(printf '\e[1m')"
+    local u; u="$(printf '\e[4m')"
+    local r; r="$(printf '\e[0m')"
+
     cat << EOF
+${b}NAME${r}
+       ${u}git-mr${r} - Manage a Gitlab merge request description, with link to Jira ticket and current branch commit list
 
-SYNOPSIS
+${b}SYNOPSIS${r}
+       ${u}git${r} ${u}mr${r} [OPTION...]          [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  open    [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  status  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  update  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  merge   [BRANCH]
 
-    mr [OPTIONS]        [ISSUE_CODE] [BASE_BRANCH]
-    mr [OPTIONS] open   [ISSUE_CODE] [BASE_BRANCH]
-    mr [OPTIONS] update [BASE_BRANCH]
-    mr [OPTIONS] merge
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu                 [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--all]  [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu status          [SEARCH_TERM]
 
-    mr [OPTIONS] menu   [update [--all] | status] [ISSUE_CODE]
+       ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa)  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  undraft     [BRANCH]
 
-    mr [OPTIONS] undraft
+       ${u}git${r} ${u}mr${r} hook
 
-    mr [OPTIONS] ip     [ISSUE_CODE]
-    mr [OPTIONS] cr     [ISSUE_CODE]
-    mr [OPTIONS] qa     [ISSUE_CODE]
+       ${u}git${r} ${u}mr${r} base
+       ${u}git${r} ${u}mr${r} code
 
-    mr [OPTIONS] hook
+${b}ARGUMENTS${r}
+       BRANCH
+           Force merge request source branch.
+           Defaults to current branch.
 
-    mr base
-    mr code
+       SEARCH_TERM
+           Term searched in merge requests titles to build menu.
+           Defaults to Jira issue code guessed from branch name.
 
-OPTIONS
+${b}OPTIONS${r}
 
-    -t | --target TARGET_BRANCH  Force target branch.
-    -c | --code   ISSUE_CODE     Force issue code.
+       -c, --code   ISSUE_CODE
+           Force issue code.
 
-    -v  Verbose output (displays called API URLs)
-    -y  Bypass confirmation prompts ("yes")
-    -e  Use full commit messages in description ("extended", for \`git mr update\`)
-    -a | --all Update all merge requests (\`git mr menu update\`)
+       -t, --target TARGET_BRANCH
+           Force target branch.
 
-INSTALLATION
+       -v
+           Verbose output (displays called API URLs).
 
-    Add the git-mr directory to your PATH
+       -y
+           Bypass confirmation prompts ("yes").
 
-        PATH="\${PATH}:/path/to/git-mr"
+       -e
+           Use full commit messages in description ("extended", for \`git mr [open|update]\`).
+           You can also set GIT_MR_EXTENDED=1 in your environment variables to always use extended commit descriptions.
 
-    OR
+       -n  
+           Add new section in description for new commits (for \`git mr update\`)
 
-    Define it as a git alias:
+       -a, --all
+           Update all merge requests (for \`git mr menu update\`).
 
-        git config --global alias.mr '!bash /path/to/git-mr/git-mr'
+       -h
+           Show this help.
 
-        or edit your ~/.gitconfig directly:
+${b}CONFIGURATION${r}
 
-            [alias]
-                mr = "!bash /path/to/git-mr/git-mr"
+       You need to configure the following environment variables:
 
-    Ensure jq is installed to be able to update or merge.
+           export JIRA_USER="user.name@mycompany.com"
+           export JIRA_INSTANCE="mycompany.atlassian.net"
+           export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
+           export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
 
-CONFIGURATION
+           export GITLAB_DOMAIN="myapp.gitlab.com"
+           export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 
-    You need to configure the following environment variables:
+       To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
+       (Account Settings -> Security -> API Token -> Create and manage API tokens)
 
-        export JIRA_USER="user.name@mycompany.com"
-        export JIRA_INSTANCE="mycompany.atlassian.net"
-        export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
-        export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
+       To create a Gitlab API Token, go to: https://myapp.gitlab.com/-/profile/personal_access_tokens?name=Git-MR+Access+token&scopes=api
+       (Settings -> Access Tokens)
 
-        export GITLAB_DOMAIN="myapp.gitlab.com"
-        export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
+       Optional configuration variables:
 
-    To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
-    (Account Settings -> Security -> API Token -> Create and manage API tokens)
+           # Default labels for new merge requests
+           export GITLAB_DEFAULT_LABELS="Review,My Team"
 
-    To create a Gitlab API Token, go to: https://myapp.gitlab.com/profile/personal_access_tokens<br>
-    (Settings -> Access Tokens)
+           # Check "Delete source branch" by default (defaults to 1)
+           export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
 
-    Optional configuration variables:
+           # Network timeout (in seconds, defaults to 5)
+           export GIT_MR_TIMEOUT=5
 
-        # Default labels for new merge requests
-        export GITLAB_DEFAULT_LABELS="Review,My Team"
+           # Gitlab status labels (comma-separated, without spaces in between)
+           export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
+           export GITLAB_CR_LABELS="Review"             # Labels set on CR step
+           export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
 
-        # Check "Delete source branch" by default (defaults to 1)
-        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
-
-        # Network timeout (in seconds, defaults to 5)
-        export GIT_MR_TIMEOUT=5
-
-        # Gitlab status labels (comma-separated, without spaces in between)
-        export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
-        export GITLAB_CR_LABELS="Review"             # Labels set on CR step
-        export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
-
-        # Jira status IDs
-        export JIRA_IP_ID="xx" # "In Progress" status ID
-        export JIRA_CR_ID="xx" # "Code Review" status ID
-        export JIRA_QA_ID="xx" # "Quality Assurance" status ID
+           # Jira status IDs
+           export JIRA_IP_ID="xx" # "In Progress" status ID
+           export JIRA_CR_ID="xx" # "Code Review" status ID
+           export JIRA_QA_ID="xx" # "Quality Assurance" status ID
 
 EOF
 }
@@ -2081,6 +2093,8 @@ while [[ $# -gt 0 ]]; do
         -e|-E) GIT_MR_EXTENDED=1 ;;
         -n|-N) GIT_MR_UPDATE_NEW_SECTION=1 ;;
 
+        -h) usage; exit 0; ;;
+
         *) args+=("${1}") ;;
     esac
     shift
@@ -2100,13 +2114,13 @@ case $1 in
 
     menu) mr_menu "${@:2}" ;;
 
-    undraft)  gitlab_undraft "${@:2}" ;;
-
     p|ip|IP) mr_ip "${@:2}" ;;
     r|cr|CR) mr_cr "${@:2}" ;;
     q|qa|QA) mr_qa "${@:2}" ;;
 
-    hook) mr_hook "${@:2}" ;;
+    undraft) gitlab_undraft "${@:2}" ;;
+
+    hook) mr_hook ;;
 
     # Plumbing
     base) git_base_branch ;;
