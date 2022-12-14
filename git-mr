@@ -36,20 +36,20 @@ function git_base_branch
 
 function git_commits
 {
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
-    git log --oneline --reverse --no-decorate "heads/${base_branch}..heads/${current_branch}"
+    git log --oneline --reverse --no-decorate "heads/${target_branch}..heads/${source_branch}"
 }
 
 function git_commits_extended
 {
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
     local format="* **%h %s**%n%n%b"
 
-    git log --reverse --no-decorate --format="${format}" "${base_branch}".."${current_branch}"
+    git log --reverse --no-decorate --format="${format}" "${target_branch}".."${source_branch}"
 }
 
 function git_titlize_branch
@@ -482,7 +482,7 @@ function gitlab_new_merge_request_url
     if [ -z "$project_url" ]; then return; fi
 
     local source_branch=${1:-$(git_current_branch)}
-    local target_branch=${2:-$(git_base_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
     local gitlab_mr_url="https://${GITLAB_DOMAIN}/${project_url}/-/merge_requests/new"
 
@@ -757,18 +757,17 @@ function gitlab_undraft
 {
     gitlab_check_env
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=$(git_base_branch)
+    local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
+        mr_print "$source_branch"
         return
     fi
 
@@ -782,7 +781,7 @@ function gitlab_undraft
     echo "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_actions "$source_branch" "$mr_summary" "$merge_request"
     echo
 
     if ! gitlab_title_is_draft "$mr_title"; then
@@ -813,9 +812,9 @@ function guess_issue_code
 {
     [ ! -z "$JIRA_CODE_PATTERN" ] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
 
-    local current_branch; current_branch=$(git_current_branch)
+    local branch=${1:-$(git_current_branch)}
 
-    local issue_code; issue_code=$(echo "${current_branch}" |
+    local issue_code; issue_code=$(echo "${branch}" |
         grep -Eo "$JIRA_CODE_PATTERN" |
         tail -n1)
 
@@ -831,25 +830,26 @@ function guess_issue_code
 
 function mr_title
 {
-    local current_branch=${1:-$(git_current_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local issue_code=${2:-${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}}
 
-    if [ -z "$ISSUE_CODE" ]; then
-        echo "$current_branch"
+    if [ -z "$issue_code" ]; then
+        echo "$source_branch"
         return
     fi
 
-    local issue_content; issue_content=$(jira_ticket_data "$ISSUE_CODE")
+    local issue_content; issue_content=$(jira_ticket_data "$issue_code")
 
     local issue_key;     issue_key=$(echo "$issue_content" | jq -r '.key // empty' )
     local issue_title;   issue_title=$(echo "$issue_content" | jq -r '.fields.summary // empty')
 
     if [ -z "$issue_key" ]; then
-        issue_key=${ISSUE_CODE^^}
+        issue_key=${issue_code^^}
     fi
 
     if [ -z "$issue_title" ]; then
         echo_error "Unable to get issue title from Jira"
-        echo_error "  ISSUE_CODE: $ISSUE_CODE"
+        echo_error "  issue_code: $issue_code"
         if [ ! -z "$issue_content" ]; then
             echo_error "  $issue_content"
         fi
@@ -865,19 +865,20 @@ function mr_title
 
 function mr_description
 {
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    local issue_code=${3:-${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}}
 
-    local title; title=$(mr_title "$current_branch") || exit $?
+    local title; title=$(mr_title "$source_branch" "$issue_code") || exit $?
 
     local commits
     local description
     if [ "$GIT_MR_EXTENDED" = "1" ]; then
-        commits=$(git_commits_extended "$current_branch" "$base_branch")
+        commits=$(git_commits_extended "$source_branch" "$target_branch")
         # indent extended description (not starting with '* **')
         description=$(echo "$commits" | sed -E 's/^([^*].*|\*[^ ].*|\* [^*].*|\* \*[^*].*)$/  \1/gm')
     else
-        commits=$(git_commits "$current_branch" "$base_branch")
+        commits=$(git_commits "$source_branch" "$target_branch")
         description=$(markdown_list "$commits" "**")
     fi
 
@@ -894,13 +895,13 @@ EOF
 
 function mr_actions
 {
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
-    local mr_summary=${3}
-    local mr_detail=${4}
+    local source_branch=${1:-$(git_current_branch)}
+
+    local mr_summary=${2}
+    local mr_detail=${3}
 
     if [ -z "$mr_summary" ]; then
-        mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+        mr_summary=$(gitlab_merge_requests_for_branch "$source_branch") || exit $?
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "${mr_summary}")
@@ -916,8 +917,9 @@ EOF
         return
     fi
 
+    local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
     local new_mr_url
-    new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
+    new_mr_url=$(gitlab_new_merge_request_url "${source_branch}" "${target_branch}")
 
     cat << EOF
 To create a new merge request:
@@ -1072,18 +1074,25 @@ function mr_print_status
 
 function mr_update_labels
 {
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=$(git_base_branch)
+    local source_branch=${1:-$(git_current_branch)}
+
+    # strip leading & trailing label commas
+    local to_remove; to_remove=$(echo -e "$2" | sed 's/^,*//' | sed 's/,*$//')
+    local to_add;    to_add=$(echo -e "$3" | sed 's/^,*//' | sed 's/,*$//')
+
+    if [ -z "$to_remove" ] && [ -z "$to_add" ]; then
+        echo_error "No label to add or remove"; return
+    fi
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
+        mr_print "$source_branch"
         return
     fi
 
@@ -1099,16 +1108,8 @@ function mr_update_labels
     echo "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_actions "$source_branch" "$mr_summary" "$merge_request"
     echo
-
-    # strip leading & trailing label commas
-    local to_remove; to_remove=$(echo -e "$1" | sed 's/^,*//' | sed 's/,*$//')
-    local to_add;    to_add=$(echo -e "$2" | sed 's/^,*//' | sed 's/,*$//')
-
-    if [ -z "$to_remove" ] && [ -z "$to_add" ]; then
-        echo_error "No label to add or remove"; return
-    fi
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
     if [ "$(confirm "Do you want to update the merge request labels to \"$new_labels\"?")" = "yes" ]; then
@@ -1127,9 +1128,9 @@ function mr_update_labels
 
 function mr_menu_merge_requests
 {
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+    local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code)}}
 
-    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$ISSUE_CODE") || exit $?
+    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$issue_code") || exit $?
     if [ -z "$mr_summaries" ]; then
         return
     fi
@@ -1154,9 +1155,8 @@ function mr_menu_merge_requests
 
 function mr_menu_contents
 {
-    local issue_code=$1
-    local menu_items=$2
-    local current_mr_url=$3;
+    local menu_items=$1
+    local current_mr_url=$2;
 
     local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
     local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
@@ -1189,8 +1189,7 @@ function mr_menu_contents
 
 function mr_menu_status
 {
-    local issue_code=$1
-    local menu_items=$2
+    local menu_items=$1
 
     local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
     local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
@@ -1227,17 +1226,15 @@ function mr_menu_status
 
 function mr_menu_show
 {
-    local issue_code=$1
-    local menu_items=$2
+    local menu_items=$1
 
     echo
-    mr_menu_contents "$issue_code" "$menu_items"
+    mr_menu_contents "$menu_items"
 }
 
 function mr_menu_update
 {
-    local issue_code=$1
-    local menu_items=$2
+    local menu_items=$1
 
     # Look for existing merge request
     local current_branch
@@ -1250,7 +1247,7 @@ function mr_menu_update
     if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
         echo_error "Merge request not found"
         echo
-        mr_menu_contents "$issue_code" "$menu_items"
+        mr_menu_contents "$menu_items"
         return
     fi
 
@@ -1259,7 +1256,7 @@ function mr_menu_update
     local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
 
     local mr_menu_content;
-    mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$current_mr_url")
+    mr_menu_content=$(mr_menu_contents "$menu_items" "$current_mr_url")
 
     local updated_description;
     updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
@@ -1283,8 +1280,7 @@ function mr_menu_update
 
 function mr_menu_update_all
 {
-    local issue_code=$1
-    local menu_items=$2
+    local menu_items=$1
 
     local mr_iid
     local mr_url
@@ -1314,7 +1310,7 @@ function mr_menu_update_all
 
         mr_description=$(gitlab_extract_description "$merge_request")
 
-        mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$mr_url")
+        mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
         updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
 
         echo
@@ -1344,7 +1340,7 @@ function mr_menu_update_all
     echo '--------------------------------------------------------------------------------'
     echo
 
-    mr_menu_contents "$issue_code" "$menu_items"
+    mr_menu_contents "$menu_items"
 }
 
 function mr_menu_replace_description
@@ -1400,29 +1396,28 @@ function mr_menu_replace_description
 
 function mr_print
 {
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch=${2:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
     cat << EOF
 
 --------------------------------------------------------------------------------
-$(mr_description "$current_branch" "$base_branch")
+$(mr_description "$source_branch" "$target_branch" "$issue_code")
 
 --------------------------------------------------------------------------------
 
 EOF
 
-    mr_actions "$current_branch" "$base_branch"
+    mr_actions "$source_branch"
 }
 
 function mr_open
 {
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${2:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch")
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch")
     local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
@@ -1434,7 +1429,7 @@ function mr_open
 
     ISSUE_CODE=${1:-$(guess_issue_code)}
 
-    local description; description=$(mr_description "$current_branch" "$base_branch")
+    local description; description=$(mr_description "$source_branch" "$target_branch")
 
     cat << EOF
 
@@ -1445,7 +1440,7 @@ ${description}
 
 EOF
 
-    local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
+    local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${source_branch}" "${target_branch}")
 
     if [ ! -z "${new_mr_url}" ]; then
 
@@ -1464,18 +1459,17 @@ function mr_status
 {
     gitlab_check_env
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
+        mr_print "$source_branch"
         return
     fi
 
@@ -1491,25 +1485,25 @@ function mr_status
     echo "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_actions "$source_branch" "$mr_summary" "$merge_request"
 }
 
 function mr_update
 {
     gitlab_check_env
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
 
     # Search existing merge request
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch") || exit $?
     local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
+        mr_print "$source_branch" "$target_branch"
         return
     fi
 
@@ -1522,7 +1516,7 @@ function mr_update
 
     # Init commit lists
 
-    local commit_messages; commit_messages=$(git_commits "$current_branch" "$base_branch")
+    local commit_messages; commit_messages=$(git_commits "$source_branch" "$target_branch")
 
     local current_commits; current_commits=$(echo "$commit_messages" | cut -d ' ' -f1)
     local old_commits;     old_commits=$(echo "$mr_description" |
@@ -1616,9 +1610,9 @@ function mr_update
             mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
         fi
 
-        if [ "$base_branch" != "$current_target" ] \
-        && [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$base_branch'?")" = "yes" ]; then
-            mr_update_data=$(jq_build "target_branch" "$base_branch" "$mr_update_data") || exit $?
+        if [ "$target_branch" != "$current_target" ] \
+        && [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?")" = "yes" ]; then
+            mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
         fi
 
         if [ "$mr_update_data" != "{}" ]; then
@@ -1637,28 +1631,25 @@ function mr_update
     echo "--------------------------------------------------------------------------------"
     echo
 
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_actions "$source_branch" "$mr_summary" "$merge_request"
 }
 
 function mr_merge
 {
     gitlab_check_env
 
-    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
-
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
 
-    local mr_summary;  mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
+    local mr_summary;  mr_summary=$(gitlab_merge_requests_for_branch "$source_branch") || exit $?
     local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
     local mr_url;      mr_url=$(gitlab_extract_url "$mr_summary")
     local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
 
     if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
+        mr_print "$source_branch"
         return
     fi
 
@@ -1674,7 +1665,7 @@ function mr_merge
     echo "$title"
     echo "-------------------------------------------------------------------"
     echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_actions "$source_branch" "$mr_summary" "$merge_request"
 
     # test merge status
     if [ "$merge_status" = "merged" ]; then
@@ -1715,9 +1706,9 @@ function mr_merge
 
     # Merge
 
-    if [ "$(confirm "Do you want to merge '$current_branch' into '$current_target'?")" != "yes" ]; then echo; return; fi
+    if [ "$(confirm "Do you want to merge '$source_branch' into '$current_target'?")" != "yes" ]; then echo; return; fi
 
-    echo -n "Merging '$current_branch'... "
+    echo -n "Merging '$source_branch'... "
     local result; result=$(gitlab_merge_request_merge "${mr_iid}")
     if [ -z "$result" ]; then echo; return;
     else echo -e "OK\n"; fi
@@ -1732,10 +1723,10 @@ function mr_merge
 
     # delete local branch
 
-    if [ "$(confirm "Do you want to delete local branch '$current_branch'")" != "yes" ]; then echo; return; fi
+    if [ "$(confirm "Do you want to delete local branch '$source_branch'")" != "yes" ]; then echo; return; fi
 
-    echo "git branch -d $current_branch"
-    git branch -d "$current_branch"
+    echo "git branch -d $source_branch"
+    git branch -d "$source_branch"
     echo
 }
 
@@ -1761,26 +1752,31 @@ function mr_menu
     done
     set -- "${args[@]}"
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+    local source_branch; source_branch=$(git_current_branch)
+    local issue_code=${GIT_MR_CODE:-${1:-$(guess_issue_code "$source_branch")}}
+
+    if [ -z "$issue_code" ]; then
+      return
+    fi
 
     # All non-closed merge requests for issue code
-    local menu_items; menu_items=$(mr_menu_merge_requests "$ISSUE_CODE")
+    local menu_items; menu_items=$(mr_menu_merge_requests "$issue_code")
 
     if [ -z "$menu_items" ]; then
-        echo_error "No merge requests found for '$ISSUE_CODE'."
+        echo_error "No merge requests found for '$issue_code'."
         return
     fi
 
     case "$git_mr_menu_mode" in
-        show) mr_menu_show "$ISSUE_CODE" "$menu_items" ;;
+        show) mr_menu_show "$menu_items" ;;
         update)
             if [ "$git_mr_menu_update_all" = "1" ]; then
-                mr_menu_update_all "$ISSUE_CODE" "$menu_items"
+                mr_menu_update_all "$menu_items"
             else
-                mr_menu_update "$ISSUE_CODE" "$menu_items"
+                mr_menu_update "$menu_items"
             fi
             ;;
-        status) mr_menu_status "$ISSUE_CODE" "$menu_items" ;;
+        status) mr_menu_status "$menu_items" ;;
     esac
 }
 
@@ -1790,9 +1786,9 @@ function mr_ip
     [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
     [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+    local source_branch=${1:-$(git_current_branch)}
 
-    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
+    mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
 
     if [ ! -z "$ISSUE_CODE" ] \
     && [ ! -z "$JIRA_IP_ID" ] \
@@ -1810,9 +1806,9 @@ function mr_cr
     [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
     [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+    local source_branch=${1:-$(git_current_branch)}
 
-    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
+    mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
 
     if [ ! -z "$ISSUE_CODE" ] \
     && [ ! -z "$JIRA_CR_ID" ] \
@@ -1830,9 +1826,9 @@ function mr_qa
     [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
     [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+    local source_branch=${1:-$(git_current_branch)}
 
-    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
+    mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
 
     if [ ! -z "$ISSUE_CODE" ] \
     && [ ! -z "$JIRA_QA_ID" ] \
@@ -1997,7 +1993,7 @@ case $1 in
 
     menu) mr_menu "${@:2}" ;;
 
-    undraft)  gitlab_undraft ;;
+    undraft)  gitlab_undraft "${@:2}" ;;
 
     p|ip|IP) mr_ip "${@:2}" ;;
     r|cr|CR) mr_cr "${@:2}" ;;
