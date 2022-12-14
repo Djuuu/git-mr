@@ -1882,6 +1882,9 @@ SYNOPSIS
 
 OPTIONS
 
+    -t | --target TARGET_BRANCH  Force target branch.
+    -c | --code   ISSUE_CODE     Force issue code.
+
     -v  Verbose output (displays called API URLs)
     -y  Bypass confirmation prompts ("yes")
     -e  Use full commit messages in description ("extended", for \`git mr update\`)
@@ -1968,6 +1971,9 @@ GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
 args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -t|--target) GIT_MR_TARGET="$2"; shift ;;
+        -c|--code)   GIT_MR_CODE="$2";   shift ;;
+
         -v|-V) GIT_MR_VERBOSE=1 ;;
         -y|-Y) GIT_MR_YES=1     ;;
         -e|-E) GIT_MR_EXTENDED=1 ;;
