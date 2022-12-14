@@ -13,10 +13,12 @@ function git_current_branch
 
 function git_base_branch
 {
+    local branch=${1:-HEAD}
+
     # Nearest branch in commit history
     local base_branch; base_branch=$( \
-        git log --decorate --simplify-by-decoration --oneline \
-                --decorate-refs='refs/heads/*' | # select only commits with a local branch
+        git log --oneline --decorate "${branch}" \
+            --simplify-by-decoration --decorate-refs='refs/heads/*' | # select only commits with a local branch
         head -n2 | tail -n1                    | # select closest decoration before current HEAD
         sed 's/[a-f0-9]\+ (\([^)]*\)) .*/\1/'  | # filters out everything but decorations
         sed -e 's/, /\n/g'                     | # splits decorations
