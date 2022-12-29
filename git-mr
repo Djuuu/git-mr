@@ -47,9 +47,15 @@ function git_commits_extended
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
-    local format="* **%h %s**%n%n%b"
+    local prefix="* ${MD_BOLD}"
+    local suffix="${MD_BOLD}${MD_BR}"
 
-    git log --reverse --no-decorate --format="${format}" "${target_branch}".."${source_branch}"
+    local end="---COMMIT-BODY-END---" # useful to remove trailing blank line
+
+    local format="${prefix}%h %s${suffix}%n%b${end}"
+
+    git log --reverse --no-decorate --format="${format}" "${target_branch}".."${source_branch}" |
+        grep -v "^${end}" # remove trailing blank line
 }
 
 function git_titlize_branch
@@ -209,6 +215,12 @@ function jq_build
             '$initial_data + $current_object'
 }
 
+# escape regex special characters for literal usage
+function regex_escape
+{
+    echo "${1}" | sed -e 's/[]\/$*.^[]/\\&/g'
+}
+
 function replace_labels
 {
     local labels=$1
@@ -295,14 +307,25 @@ function markdown_link
 function markdown_list
 {
     local content=$1
-    local wrap=$2
 
-    local prefix="* ${wrap}"
-    local suffix="${wrap}<br>"
+    local prefix="* ${MD_BOLD}"
+    local suffix="${MD_BOLD}${MD_BR}"
 
-    echo "$content" |
-        sed "s/^/${prefix}/g" |
-        sed "s/$/${suffix}/g"
+    echo "$content" | sed "s/.*/${prefix}&${suffix}/"
+}
+
+function markdown_indent_list_items
+{
+    local content=$1
+
+    local list_prefix_pattern
+    list_prefix_pattern="$(regex_escape "* ${MD_BOLD}")"
+
+    # indent extended description (not starting with list prefix)
+    local indent="  "
+    echo "$content" | sed -E \
+        -e "/^${list_prefix_pattern}/! s/^(.*)$/${indent}\1${MD_BR}/gm" \
+        -e "s/^${indent}${MD_BR}$/${indent}/gm"
 }
 
 
@@ -875,11 +898,10 @@ function mr_description
     local description
     if [ "$GIT_MR_EXTENDED" = "1" ]; then
         commits=$(git_commits_extended "$source_branch" "$target_branch")
-        # indent extended description (not starting with '* **')
-        description=$(echo "$commits" | sed -E 's/^([^*].*|\*[^ ].*|\* [^*].*|\* \*[^*].*)$/  \1/gm')
+        description=$(markdown_indent_list_items "$commits")
     else
         commits=$(git_commits "$source_branch" "$target_branch")
-        description=$(markdown_list "$commits" "**")
+        description=$(markdown_list "$commits")
     fi
 
     cat << EOF
@@ -1578,7 +1600,7 @@ function mr_update
     if [ "$new_commit_count" -gt 0 ]; then
         echo "## Update"
         echo
-        echo "$(markdown_list "$new_commit_messages_display_str" "**")"
+        echo "$(markdown_list "$new_commit_messages_display_str")"
         echo
     fi
     echo "--------------------------------------------------------------------------------"
@@ -1603,7 +1625,7 @@ function mr_update
 
             if [ "$new_commit_count" -gt 0 ]; then
                 new_description=$(echo -e "${new_description}\n\n## Update")
-                new_description=$(echo -e "${new_description}\n\n$(markdown_list "$new_commit_messages_content_str" "**")")
+                new_description=$(echo -e "${new_description}\n\n$(markdown_list "$new_commit_messages_content_str")")
             fi
             new_description=$(echo -e "${new_description}")$'\n'
 
@@ -1962,6 +1984,8 @@ fi
 # Hardcoded constants
 GITLAB_DRAFT_PREFIX="Draft"
 GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
+MD_BOLD=${MD_BOLD="**"} # Markdown bold
+MD_BR=${MD_BR="  "} # Markdown line break
 
 # Parse options
 args=()
