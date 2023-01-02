@@ -1595,11 +1595,12 @@ function mr_update
     echo "$mr_title"
     echo "-------------------------------------------------------------------"
     echo "$new_description_display"
-    echo
-    echo
     if [ "$new_commit_count" -gt 0 ]; then
-        echo "## Update"
-        echo
+        if [ -n "$GIT_MR_UPDATE_NEW_SECTION" ]; then
+            echo
+            echo "## Update"
+            echo
+        fi
         echo "$(markdown_list "$new_commit_messages_display_str")"
         echo
     fi
@@ -1624,8 +1625,12 @@ function mr_update
             new_description=$(echo -e "${new_description_content}")
 
             if [ "$new_commit_count" -gt 0 ]; then
-                new_description=$(echo -e "${new_description}\n\n## Update")
-                new_description=$(echo -e "${new_description}\n\n$(markdown_list "$new_commit_messages_content_str")")
+                if [ -n "$GIT_MR_UPDATE_NEW_SECTION" ]; then
+                    new_description=$(echo -e "${new_description}\n\n## Update\n\n")
+                elif [ -z "$lastDescriptionLineIsCommit" ]; then
+                    new_description=$(echo -e "${new_description}\n") # add new line
+                fi
+                new_description=$(echo -e "${new_description}\n$(markdown_list "$new_commit_messages_content_str")")
             fi
             new_description=$(echo -e "${new_description}")$'\n'
 
@@ -1997,6 +2002,7 @@ while [[ $# -gt 0 ]]; do
         -v|-V) GIT_MR_VERBOSE=1 ;;
         -y|-Y) GIT_MR_YES=1     ;;
         -e|-E) GIT_MR_EXTENDED=1 ;;
+        -n|-N) GIT_MR_UPDATE_NEW_SECTION=1 ;;
 
         *) args+=("${1}") ;;
     esac
