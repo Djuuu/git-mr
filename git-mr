@@ -13,7 +13,11 @@ function git_current_branch
 
 function git_base_branch
 {
-    local branch=${1:-HEAD}
+    local branch=${1:-$(git_current_branch)}
+
+    [ -z "$branch" ]                                      && exit 3 # Not on any branch
+    [ "$branch" == "main" ] || [ "$branch" == "master" ]  && exit 3 # On default branch
+    git show-ref -q --heads "$branch"                     || exit 3 # Branch does not exist
 
     # Nearest branch in commit history
     local base_branch; base_branch=$( \
@@ -32,6 +36,27 @@ function git_base_branch
     echo_debug "Base branch: $base_branch"
 
     echo "$base_branch"
+}
+
+function git_check_branches
+{
+    local source_branch="$1"
+    local target_branch="$2"
+
+    [ -z "$source_branch" ] &&
+        exit_error 3 "Not on any branch"
+
+    [ "$source_branch" == "main" ] ||
+    [ "$source_branch" == "master" ]  &&
+        exit_error 3 "On default branch"
+
+    git show-ref -q --heads "$source_branch" ||
+        exit_error 3 "Branch '$source_branch' does not exist"
+
+    [ -z "$target_branch" ] &&
+        exit_error 3 "Unable to determine target branch"
+
+    return 0
 }
 
 function git_commits
@@ -1420,6 +1445,8 @@ function mr_print
 {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    git_check_branches "$source_branch" "$target_branch"
+
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
     cat << EOF
@@ -1438,6 +1465,7 @@ function mr_open
 {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
+    git_check_branches "$source_branch" "$target_branch"
 
     local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch")
     local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
@@ -2045,6 +2073,7 @@ esac
 #
 #   1   Not a git repository
 #   2   jq is not installed
+#   3   Git branch error
 #
 #  10   Gitlab request error
 #  11   GITLAB_DOMAIN|GITLAB_TOKEN is not set
