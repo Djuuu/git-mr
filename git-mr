@@ -1205,10 +1205,7 @@ function mr_menu_contents
     local menu_items=$1
     local current_mr_url=$2;
 
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    echo "$git_mr_menu_start"
+    echo "$GIT_MR_MENU_START"
     echo
 
     while IFS=$'\n' read -r menu_item; do
@@ -1231,17 +1228,14 @@ function mr_menu_contents
     done < <(echo "$menu_items")
 
     echo
-    echo "$git_mr_menu_end"
+    echo "$GIT_MR_MENU_END"
 }
 
 function mr_menu_status
 {
     local menu_items=$1
 
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    echo "$git_mr_menu_start"
+    echo "$GIT_MR_MENU_START"
     echo
 
     while IFS=$'\n' read -r menu_item; do
@@ -1268,7 +1262,7 @@ function mr_menu_status
     done < <(echo "$menu_items")
 
     echo
-    echo "$git_mr_menu_end"
+    echo "$GIT_MR_MENU_END"
 }
 
 function mr_menu_show
@@ -1395,13 +1389,10 @@ function mr_menu_replace_description
     local mr_description=$1
     local menu_content=$2
 
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
+    local menu_start; menu_start=$(echo "$mr_description" | grep -n "$GIT_MR_MENU_START" | cut -f1 -d:)
+    local menu_end; menu_end=$(echo "$mr_description" | grep -n -- "$GIT_MR_MENU_END" | cut -f1 -d: | head -n 1)
 
-    menu_start=$(echo "$mr_description" | grep -n "$git_mr_menu_start" | cut -f1 -d:)
-    menu_end=$(echo "$mr_description" | grep -n -- "$git_mr_menu_end" | cut -f1 -d: | head -n 1)
-
-    has_menu=0
+    local has_menu=0
     if [ -n "$menu_start" ] && [ -n "$menu_end" ] && [ "$menu_start" -gt "0" ] && [ "$menu_end" -gt "$menu_start" ]; then
         has_menu=1
     fi
@@ -2019,6 +2010,8 @@ GITLAB_DRAFT_PREFIX="Draft"
 GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
 MD_BOLD=${MD_BOLD="**"} # Markdown bold
 MD_BR=${MD_BR="  "} # Markdown line break
+GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
+GIT_MR_MENU_END=${GIT_MR_MENU_END:-"---------------------------------------------------------------------------------"}
 
 # Parse options
 args=()
