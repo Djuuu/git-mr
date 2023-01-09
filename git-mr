@@ -200,7 +200,11 @@ function terminal_link
     local href=$1
     local text=$2
 
-    printf "\e]8;;${href}\e\\${text}\e]8;;\e\\"
+    if which tput > /dev/null 2>&1 && [ ! -z "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
+        printf "\e]8;;${href}\e\\${text}\e]8;;\e\\"
+    else
+        echo -n "$text"
+    fi
 }
 
 function echo_error
@@ -936,7 +940,7 @@ function mr_description
 
     local commits
     local description
-    if [ "$GIT_MR_EXTENDED" = "1" ]; then
+    if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
         commits=$(git_commits_extended "$source_branch" "$target_branch")
         description=$(markdown_indent_list_items "$commits")
     else
@@ -1063,8 +1067,8 @@ function mr_print_status
 
     # Threads
     local threads;        threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
-    local thread_count;   thread_count=$(echo "$threads" | grep -c 'unresolved:')
-    local resolved_count; resolved_count=$(echo "$threads" | grep -c 'unresolved:false')
+    local thread_count;   thread_count="$(echo "$threads" | grep -c 'unresolved:' || true)"
+    local resolved_count; resolved_count="$(echo "$threads" | grep -c 'unresolved:false' || true)"
 
     local thread_count_display;
         thread_count_display=$(colorize "$thread_count" "bold")
@@ -1202,7 +1206,7 @@ function mr_menu_merge_requests
     while IFS="=" read -r id name
     do
         project_arr[$id]="$name"
-    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]')
+    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]' | sed 's/\r//g')
 
     # Enrich merge request summaries with project names
     while IFS=$'\n' read -r mr_summary
@@ -1633,7 +1637,7 @@ function mr_update
             fi
         else
             # new commit
-            [ "$GIT_MR_EXTENDED" = "1" ] &&
+            [[ $GIT_MR_EXTENDED -eq 1 ]] &&
                 new_commit="$(git_commit_extended "$curr")" ||
                 new_commit="$(echo "$commit_messages" | grep "$curr")"
 
@@ -1655,12 +1659,12 @@ function mr_update
     echo "-------------------------------------------------------------------"
     echo "$new_description_display"
     if [ "$new_commit_count" -gt 0 ]; then
-        if [ -n "$GIT_MR_UPDATE_NEW_SECTION" ]; then
+        if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
             echo
             echo "## Update"
             echo
         fi
-        [ "$GIT_MR_EXTENDED" = "1" ] &&
+        [[ $GIT_MR_EXTENDED -eq 1 ]] &&
             markdown_indent_list_items "$new_commit_messages_display_str" ||
             markdown_list "$new_commit_messages_display_str"
     fi
@@ -1935,6 +1939,8 @@ function mr_hook
     local git_dir; git_dir=$(git rev-parse --show-toplevel)
     local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
 
+    [ ! -d "${git_dir}/.git/hooks" ] && mkdir "${git_dir}/.git/hooks"
+
     find "${git_mr_dir}/hooks" -type f -print0 | while read -d $'\0' hook; do
         local hook_name; hook_name="$(basename $hook)"
         echo "Linking hook: ${hook_name}"
@@ -2039,7 +2045,20 @@ EOF
 
 
 ################################################################################
+# Hardcoded constants
+GITLAB_DRAFT_PREFIX="Draft"
+GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
+MD_BOLD=${MD_BOLD="**"} # Markdown bold
+MD_BR=${MD_BR="  "} # Markdown line break
+GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
+GIT_MR_MENU_END=${GIT_MR_MENU_END:-"---------------------------------------------------------------------------------"}
+
+
+################################################################################
 # Run
+
+# Exit if not running script directly (ex: when sourcing)
+[ "$(basename "$0")" != 'git-mr' ] && return;
 
 # Init
 
@@ -2049,13 +2068,6 @@ if [ ! -x "$(command -v jq)" ]; then
     exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
 fi
 
-# Hardcoded constants
-GITLAB_DRAFT_PREFIX="Draft"
-GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
-MD_BOLD=${MD_BOLD="**"} # Markdown bold
-MD_BR=${MD_BR="  "} # Markdown line break
-GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
-GIT_MR_MENU_END=${GIT_MR_MENU_END:-"---------------------------------------------------------------------------------"}
 
 # Parse options
 args=()
