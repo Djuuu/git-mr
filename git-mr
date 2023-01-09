@@ -83,6 +83,21 @@ function git_commits_extended
         grep -v "^${end}" # remove trailing blank line
 }
 
+function git_commit_extended
+{
+    local revision=${1:-HEAD}
+
+    local prefix="* ${MD_BOLD}"
+    local suffix="${MD_BOLD}${MD_BR}"
+
+    local end="---COMMIT-BODY-END---" # useful to remove trailing blank line
+
+    local format="${prefix}%h %s${suffix}%n%b${end}"
+
+    git show -s --format="${format}" "${revision}" |
+        grep -v "^${end}" # remove trailing blank line
+}
+
 function git_titlize_branch
 {
     local branch=${1:-$(git_current_branch)}
@@ -1568,6 +1583,7 @@ function mr_update
     local old_commits_array;     old_commits_array=($(echo "$old_commits" | tr "\n" " "))
 
     local updated_commit_count=0
+    local new_commit=
     local new_commit_messages_display=()
     local new_commit_messages_content=()
 
@@ -1596,9 +1612,13 @@ function mr_update
                 updated_commit_count=$((updated_commit_count+1))
             fi
         else
-            # new commits
-            new_commit_messages_display+=("$(echo "$commit_messages" | grep "$curr" | sed "s/$curr/$(colorize "$curr" "$newColor")/")")
-            new_commit_messages_content+=("$(echo "$commit_messages" | grep "$curr")")
+            # new commit
+            [ "$GIT_MR_EXTENDED" = "1" ] &&
+                new_commit="$(git_commit_extended "$curr")" ||
+                new_commit="$(echo "$commit_messages" | grep "$curr")"
+
+            new_commit_messages_display+=("$(echo "$new_commit" | sed "s/$curr/$(colorize "$curr" "$newColor")/")")
+            new_commit_messages_content+=("$(echo "$new_commit")")
         fi
     done
 
@@ -1620,9 +1640,12 @@ function mr_update
             echo "## Update"
             echo
         fi
-        echo "$(markdown_list "$new_commit_messages_display_str")"
-        echo
+        [ "$GIT_MR_EXTENDED" = "1" ] &&
+            markdown_indent_list_items "$new_commit_messages_display_str" ||
+            markdown_list "$new_commit_messages_display_str"
     fi
+
+    echo
     echo "--------------------------------------------------------------------------------"
     echo
     echo "  updated commits: $(colorize "$updated_commit_count" "$updatedColor")"
@@ -1640,20 +1663,21 @@ function mr_update
         if [ $((updated_commit_count + new_commit_count)) -gt 0 ] \
         && [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
 
-            local new_description
-            new_description=$(echo -e "${new_description_content}")
+                local new_description; new_description=$(echo -e "${new_description_content}")
+                local newLines=""
 
-            if [ "$new_commit_count" -gt 0 ]; then
-                if [ -n "$GIT_MR_UPDATE_NEW_SECTION" ]; then
-                    new_description=$(echo -e "${new_description}\n\n## Update\n\n")
-                elif [ -z "$lastDescriptionLineIsCommit" ]; then
-                    new_description=$(echo -e "${new_description}\n") # add new line
+                if [ "$new_commit_count" -gt 0 ]; then
+                    if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
+                        new_description=$(echo -e "${new_description}\n\n## Update")
+                        newLines="\n"
+                    fi
+                    [[ $GIT_MR_EXTENDED -eq 1 ]] &&
+                        new_description=$(echo -e "${new_description}\n${newLines}$(markdown_indent_list_items "$new_commit_messages_content_str")") ||
+                        new_description=$(echo -e "${new_description}\n${newLines}$(markdown_list "$new_commit_messages_content_str")")
                 fi
-                new_description=$(echo -e "${new_description}\n$(markdown_list "$new_commit_messages_content_str")")
+                new_description=$(echo -e "$new_description")$'\n'
+                mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
             fi
-            new_description=$(echo -e "${new_description}")$'\n'
-
-            mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
         fi
 
         if [ "$target_branch" != "$current_target" ] \
