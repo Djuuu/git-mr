@@ -1318,7 +1318,7 @@ function mr_menu_update
     updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
 
     echo
-    echo "$updated_description"
+    mr_menu_colorize "$updated_description" "$current_mr_url"
     echo
     echo '--------------------------------------------------------------------------------'
 
@@ -1370,7 +1370,7 @@ function mr_menu_update_all
         updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
 
         echo
-        echo "$updated_description"
+        mr_menu_colorize "$updated_description" "$mr_url"
         echo
         echo '--------------------------------------------------------------------------------'
         echo
@@ -1392,11 +1392,7 @@ function mr_menu_update_all
             if [ ! -z "$result" ]; then echo -e "OK\n"; fi
         fi
     done
-
-    echo '--------------------------------------------------------------------------------'
     echo
-
-    mr_menu_contents "$menu_items"
 }
 
 function mr_menu_replace_description
@@ -1404,7 +1400,7 @@ function mr_menu_replace_description
     local mr_description=$1
     local menu_content=$2
 
-    local menu_start; menu_start=$(echo "$mr_description" | grep -n "$GIT_MR_MENU_START" | cut -f1 -d:)
+    local menu_start; menu_start=$(echo "$mr_description" | grep -n "$GIT_MR_MENU_START" | head -n1 | cut -f1 -d:)
     local menu_end; menu_end=$(echo "$mr_description" | grep -n -- "$GIT_MR_MENU_END" | cut -f1 -d: | head -n 1)
 
     local has_menu=0
@@ -1443,6 +1439,30 @@ function mr_menu_replace_description
     done < <(echo "$mr_description")
 }
 
+function mr_menu_colorize
+{
+    local mr_description=$1
+    local current_mr_url=$2
+
+    local menu_start; menu_start=$(echo "$mr_description" | grep -n "$GIT_MR_MENU_START" | head -n1 | cut -f1 -d:)
+    local menu_end; menu_end=$(echo "$mr_description" | grep -n -- "$GIT_MR_MENU_END" | cut -f1 -d: | head -n 1)
+
+    # Iterate over description lines and colorize menu lines
+    i=1
+    while IFS=$'\n' read -r mr_description_line
+    do
+        if [ "$i" -lt "$menu_start" ] || [ "$i" -gt "$menu_end" ]; then
+            # output non-menu line
+            echo -e "$(colorize "$mr_description_line" "lightgray")"
+        else
+            # colorize menu line
+            [[ $mr_description_line =~ $current_mr_url ]] &&
+                echo -e "$(colorize "$mr_description_line" "bold" "lightyellow")" ||
+                echo -e "$(colorize "$mr_description_line" "lightyellow")"
+        fi
+        ((i+=1))
+    done < <(echo "$mr_description")
+}
 
 ################################################################################
 # Merge request top-level functions
