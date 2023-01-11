@@ -1936,15 +1936,15 @@ function mr_qa
 
 function mr_hook
 {
-    local git_dir; git_dir=$(git rev-parse --show-toplevel)
+    local git_dir; git_dir=$(git rev-parse --git-dir)
     local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
 
-    [ ! -d "${git_dir}/.git/hooks" ] && mkdir "${git_dir}/.git/hooks"
+    [ ! -d "${git_dir}/hooks" ] && mkdir "${git_dir}/hooks"
 
     find "${git_mr_dir}/hooks" -type f -print0 | while read -d $'\0' hook; do
         local hook_name; hook_name="$(basename $hook)"
         echo "Linking hook: ${hook_name}"
-        ln -sf "$hook" "${git_dir}/.git/hooks/${hook_name}"
+        ln -sf "$hook" "${git_dir}/hooks/${hook_name}"
     done
 }
 

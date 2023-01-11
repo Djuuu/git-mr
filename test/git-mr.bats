@@ -587,16 +587,39 @@ setup() {
 # Merge request top-level functions
 
 @test "Provides pre-commit-msg hook" {
-    run git-mr hook >&3
 
+    # standard .git directory
+
+    run git commit --allow-empty -m "Test message 1"
+    assert_output "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] Test message 1"
+
+    run git-mr hook
     assert [ -f ".git/hooks/prepare-commit-msg" ]
 
-    git commit --allow-empty -m "Some message"
-    csha=$(git rev-parse --short HEAD)
+    run git commit --allow-empty -m "Test message 2"
+    assert_line "Prefixing message with issue code: AB-123"
+    assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] AB-123 Test message 2"
 
-    run git log --oneline --no-decorate -n1
+    git reset --hard HEAD~2
 
-    assert_output "${csha} AB-123 Some message"
+    # submodule
 
-    git reset --hard HEAD~1
+    cd "${BATS_TEST_DIRNAME}/data" || exit
+    git init subrepo
+    cd subrepo
+    git commit --allow-empty -m "Sub commit"
+    cd ../repo
+    git -c protocol.file.allow=always submodule add ../subrepo sub
+    cd sub
+    git switch -c feature/XY-345-test
+
+    run git commit --allow-empty -m "Sub message 1"
+    assert_output "[feature/XY-345-test $(git rev-parse --short HEAD)] Sub message 1"
+
+    run git-mr hook
+    assert [ -f "../.git/modules/sub/hooks/prepare-commit-msg" ]
+
+    run git commit --allow-empty -m "Sub message 2"
+    assert_line "Prefixing message with issue code: XY-345"
+    assert_line "[feature/XY-345-test $(git rev-parse --short HEAD)] XY-345 Sub message 2"
 }
