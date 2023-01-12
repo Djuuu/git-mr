@@ -874,7 +874,7 @@ function gitlab_undraft
 
     echo
     echo "-------------------------------------------------------------------"
-    echo "$mr_title"
+    gitlab_title_undraft "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
     mr_actions "$source_branch" "$mr_summary" "$merge_request"
@@ -1273,7 +1273,7 @@ function mr_update_labels
     # Print merge request status summary
     echo
     echo "-------------------------------------------------------------------"
-    echo "$mr_title"
+    gitlab_title_undraft "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
     mr_actions "$source_branch" "$mr_summary" "$merge_request"
@@ -1665,7 +1665,7 @@ function mr_status
     # Print merge request title & status
     echo
     echo "-------------------------------------------------------------------"
-    echo "$mr_title"
+    gitlab_title_undraft "$mr_title"
     echo "-------------------------------------------------------------------"
     echo
     mr_actions "$source_branch" "$mr_summary" "$merge_request"
@@ -1758,7 +1758,7 @@ function mr_update
     # Print updated merge request description
     echo
     echo "-------------------------------------------------------------------"
-    echo "$mr_title"
+    gitlab_title_undraft "$mr_title"
     echo "-------------------------------------------------------------------"
     echo "$new_description_display"
     if [ "$new_commit_count" -gt 0 ]; then
@@ -1859,7 +1859,7 @@ function mr_merge
 
     echo
     echo "-------------------------------------------------------------------"
-    echo "$title"
+    gitlab_title_undraft "$title"
     echo "-------------------------------------------------------------------"
     echo
     mr_actions "$source_branch" "$mr_summary" "$merge_request"
