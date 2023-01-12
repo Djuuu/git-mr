@@ -43,12 +43,16 @@ _git_mr() {
 
     case "$cur" in
         --*)
-            __gitcomp "--code --target"
+            __gitcomp "--code --target --verbose --extended --yes"
+            [[ -n $isUpdate ]] &&
+                __gitcomp_nl_append "--new-section"
             return
             ;;
         -*)
-            __gitcomp "-c --code -e -t --target -v -y"
-            [[ -n $isUpdate ]] && __gitcomp_nl_append "-n"
+            __gitcomp "-c --code -t --target -v --verbose -e --extended -y --yes"
+            [[ -n $isUpdate ]] &&
+                __gitcomp_nl_append "-n" &&
+                __gitcomp_nl_append "--new-section"
             return
             ;;
         *)

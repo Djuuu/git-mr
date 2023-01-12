@@ -2136,21 +2136,21 @@ ${b}OPTIONS${r}
        -t, --target TARGET_BRANCH
            Force target branch.
 
-       -v
-           Verbose output (displays called API URLs).
-
-       -y
-           Bypass confirmation prompts ("yes").
-
-       -e
+       -e, --extended
            Use full commit messages in description ("extended", for \`git mr [open|update]\`).
            You can also set GIT_MR_EXTENDED=1 in your environment variables to always use extended commit descriptions.
 
-       -n  
+       -y, --yes
+           Bypass confirmation prompts ("yes").
+
+       -n, --new-section
            Add new section in description for new commits (for \`git mr update\`)
 
        -a, --all
            Update all merge requests (for \`git mr menu update\`).
+
+       -v, --verbose
+           Verbose output (displays called API URLs & other debugging info).
 
        -h
            Show this help.
@@ -2178,21 +2178,21 @@ ${b}CONFIGURATION${r}
            # Default labels for new merge requests
            export GITLAB_DEFAULT_LABELS="Review,My Team"
 
-           # Check "Delete source branch" by default (defaults to 1)
-           export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
-
-           # Network timeout (in seconds, defaults to 5)
-           export GIT_MR_TIMEOUT=5
-
            # Gitlab status labels (comma-separated, without spaces in between)
-           export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
            export GITLAB_CR_LABELS="Review"             # Labels set on CR step
            export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
+           export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
 
            # Jira status IDs
            export JIRA_IP_ID="xx" # "In Progress" status ID
            export JIRA_CR_ID="xx" # "Code Review" status ID
            export JIRA_QA_ID="xx" # "Quality Assurance" status ID
+
+           # Check "Delete source branch" by default (defaults to 1)
+           export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
+
+           # Network timeout (in seconds, defaults to 5)
+           export GIT_MR_TIMEOUT=5
 
 EOF
 }
@@ -2228,13 +2228,13 @@ fi
 args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -t|--target) GIT_MR_TARGET="$2"; shift ;;
         -c|--code)   GIT_MR_CODE="$2";   shift ;;
+        -t|--target) GIT_MR_TARGET="$2"; shift ;;
 
-        -v|-V) GIT_MR_VERBOSE=1 ;;
-        -y|-Y) GIT_MR_YES=1     ;;
-        -e|-E) GIT_MR_EXTENDED=1 ;;
-        -n|-N) GIT_MR_UPDATE_NEW_SECTION=1 ;;
+        -e|-E|--extended)    GIT_MR_EXTENDED=1 ;;
+        -y|-Y|--yes)         GIT_MR_YES=1     ;;
+        -n|-N|--new-section) GIT_MR_UPDATE_NEW_SECTION=1 ;;
+        -v|-V|--verbose)     GIT_MR_VERBOSE=1 ;;
 
         -h) usage; exit 0; ;;
 
