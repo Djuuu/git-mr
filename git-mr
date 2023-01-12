@@ -224,6 +224,16 @@ function echo_debug
     colorize "$1\n" "gray" >&2
 }
 
+function echo_spacer
+{
+    local count=$1
+    local char=${2:-" "}
+
+    for ((i=1; i <= count; i++)); do
+      echo -n "$char"
+    done
+}
+
 function confirm
 {
     local question=$1
@@ -681,6 +691,20 @@ function gitlab_extract_merge_status
     echo "$mr_detail" | jq -r '.merge_status'
 }
 
+function gitlab_extract_pipeline_status
+{
+    local mr_detail=$1
+
+    echo "$mr_detail" | jq -r '.head_pipeline.status'
+}
+
+function gitlab_extract_pipeline_url
+{
+    local mr_detail=$1
+
+    echo "$mr_detail" | jq -r '.head_pipeline.web_url'
+}
+
 function gitlab_extract_target_branch
 {
     local mr_detail=$1
@@ -1074,7 +1098,7 @@ function mr_print_status
     local labels_display; labels_display=$(mr_format_labels "$labels")
 
     local labels_count; labels_count=$(echo $labels | sed 's/[^,]//g' | wc -m)
-    local labels_str_len=$(( ${#labels} + $(($labels_count*2)) + 3 ))
+    local labels_str_len=$(( ${#labels} + $(($labels_count*2)) + 4 )) # 2 spaces + 2 for larger icon
 
     # Votes
 
@@ -1118,6 +1142,28 @@ function mr_print_status
         then merge_status_icon="$(colorize "\U00002714" "lightgreen" "bold")"; # heavy check mark
         else merge_status_icon="$(colorize "\U0000274C" "lightred" "bold")"; fi # cross mark
 
+    # Pipeline status
+    local pipeline_status; pipeline_status="$(gitlab_extract_pipeline_status "$merge_request")"
+    local pipeline_url; pipeline_url="$(gitlab_extract_pipeline_url "$merge_request")"
+    local pipeline_icon
+    case "$pipeline_status" in
+        created|waiting_for_resource|preparing|pending|running)
+                          pipeline_icon="$(colorize "⏱" "lightgray")" ;;
+        success)          pipeline_icon="$(colorize "✔" "lightgreen" "bold")" ;;
+        failed)           pipeline_icon="$(colorize "❌" "lightred" "bold")" ;;
+        canceled|skipped) pipeline_icon="$(colorize "➖" "lightgray")" ;;
+        manual)           pipeline_icon="$(colorize "🔧" "lightgray")" ;;
+        scheduled)        pipeline_icon="$(colorize "⏰" "lightgray")" ;;
+        null)             pipeline_icon= ;;
+        *)                pipeline_icon="$(colorize "?" "lightgray")" ;;
+    esac
+    local ci_str=
+    local ci_str_len=0
+    if [ -n "$pipeline_icon" ]; then
+        ci_str="CI: $pipeline_icon"
+        ci_str_len=10 # 5 chars + 4 spaces + 1 for larger icon
+    fi
+
     # Merge target
     local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
 
@@ -1128,31 +1174,64 @@ function mr_print_status
 
     local target_str_len=$(( ${#current_target} + 4 ))
 
-    # Spacer for right alignment of target branch
-    local display_width=73
-    local labels_target_spacer=" "
-    local left_chars=$(( $display_width - $labels_str_len - $target_str_len ))
-    if [ "$left_chars" -gt 0 ]; then
-        labels_target_spacer=$(eval $(echo printf '" %0.s"' {1..${left_chars}}))
+    # Draft status
+    local draft_str=
+    local draft_str_len=0
+    if gitlab_title_is_draft "$title"; then
+        draft_str="🚧 Draft"
+        draft_str_len=12 # 7 chars + 4 spaces + 1 for larger icon
+    fi
+
+    # Spacers for CI & target branch indicators
+    # Spacers for draft & target branch indicators
+    local display_width=76 # not counting 3 leading spaces
+    local spacer_chars=$(( display_width - labels_str_len - target_str_len - draft_str_len ))
+    local spacer_chars_l=0
+    local spacer_chars_r=0
+
+    if [[ $spacer_chars -gt 0 ]]; then
+        spacer_chars_l=$(( 43 - labels_str_len )) # 42: roughly at the same level as CI indicator
+        spacer_chars_r=$(( spacer_chars - spacer_chars_l ))
+        if [[ $spacer_chars_r -lt 0  ]]; then
+            spacer_chars_l=$(( spacer_chars_l + spacer_chars_r ))
+            spacer_chars_r=0
+        fi
     fi
 
     # Display
     echo
+
+    # 1st row ------------------------------------------------------------------
+    # Labels
     echo -en  "   \U0001F3F7  ${labels_display}"
-    echo -en "$labels_target_spacer"
+    echo_spacer $spacer_chars_l
+    # Draft status
+    if [[ -n $draft_str ]]; then
+        echo -en "  $(colorize "$draft_str" "orange")  "
+    else
+        echo_spacer $(( 2 - spacer_chars_l - spacer_chars_r ))
+    fi
+    echo_spacer $spacer_chars_r
+    # Target
     echo -e  "${target_display}\n"
+
+    # 2nd row ------------------------------------------------------------------
+    # Votes
     echo -en "   \U0001F44D  ${upvotes}"
     echo -en "   \U0001F44E  ${downvotes}"
+    # Threads
     if [ "$thread_count" -gt 0 ]; then
         echo -n "     Resolved threads: ${threads_display}"
     else
       echo -n "                          "
     fi
-    if gitlab_title_is_draft "$title"; then
-        echo -en "     Draft: $(colorize "yes" "orange")"
+    # Pipeline
+    if [ -n "$ci_str" ]; then
+        echo -en "      $(terminal_link "$pipeline_url" "$ci_str")  "
     else
-        echo -en "               "
+        echo -n "             "
     fi
+    # Merge status
     if [ "$merge_status" != "merged" ]; then
         echo -en "     Can be merged: ${merge_status_icon}"
     else

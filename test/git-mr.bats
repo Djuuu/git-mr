@@ -244,6 +244,20 @@ setup() {
     assert_output "Some%20%27string%27%26%22stuff%22%20%28that%20needs%20%5Bto%5D%20be%29%20encoded%21"
 }
 
+@test "Outputs spacers" {
+    run echo_spacer 3
+    assert_output "   "
+
+    run echo_spacer 5 '-'
+    assert_output "-----"
+
+    run echo_spacer 0 'x'
+    assert_output ""
+
+    run echo_spacer -1 'x'
+    assert_output ""
+}
+
 @test "Asks for confirmation" {
     if [ "$(confirm "Do you want to resolve draft status?" <<< "yes")" = "yes" ]; then confirmed=1; else confirmed=0; fi
     assert_equal $confirmed 1
@@ -329,21 +343,24 @@ setup() {
 }
 
 @test "Extracts MR info from detail" {
-    mr_summary='{
+    mr_detail='{
         "title":"MR title",
         "description":"MR description",
         "merge_status":"can_be_merged",
         "target_branch":"main",
-        "labels":["aaa","bbb","ccc"]
+        "labels":["aaa","bbb","ccc"],
+        "head_pipeline": {"status":"success", "web_url":"https://example.net/ci"}
     }'
-    assert_equal "$(gitlab_extract_title "$mr_summary")" "MR title"
-    assert_equal "$(gitlab_extract_description "$mr_summary")" "MR description"
-    assert_equal "$(gitlab_extract_merge_status "$mr_summary")" 'can_be_merged'
-    assert_equal "$(gitlab_extract_target_branch "$mr_summary")" 'main'
-    assert_equal "$(gitlab_extract_labels "$mr_summary")" 'aaa,bbb,ccc'
+    assert_equal "$(gitlab_extract_title "$mr_detail")" "MR title"
+    assert_equal "$(gitlab_extract_description "$mr_detail")" "MR description"
+    assert_equal "$(gitlab_extract_merge_status "$mr_detail")" 'can_be_merged'
+    assert_equal "$(gitlab_extract_target_branch "$mr_detail")" 'main'
+    assert_equal "$(gitlab_extract_labels "$mr_detail")" 'aaa,bbb,ccc'
+    assert_equal "$(gitlab_extract_pipeline_status "$mr_detail")" 'success'
+    assert_equal "$(gitlab_extract_pipeline_url "$mr_detail")" 'https://example.net/ci'
 
-    mr_summary='{"title":"MR title","state":"merged"}'
-    assert_equal "$(gitlab_extract_merge_status "$mr_summary")" 'merged'
+    mr_detail='{"title":"MR title","state":"merged"}'
+    assert_equal "$(gitlab_extract_merge_status "$mr_detail")" 'merged'
 }
 
 @test "Extracts Gitlab project part from MR URL" {
@@ -443,7 +460,8 @@ setup() {
 
     mr='{
         "title": "Draft: Feature/XY-1234 Lorem Ipsum", "web_url":"https://myapp.gitlab.com/my/project/merge_requests/6",
-        "labels":["Review","My Team"], "target_branch": "main", "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged"
+        "labels":["Review","My Team"], "target_branch": "main", "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
+        "head_pipeline": {"status":"failed", "web_url":"https://example.net/ci/1"}
     }'
     threads='1	unresolved:false	note_id:1
 2	unresolved:true	note_id:2'
@@ -451,15 +469,16 @@ setup() {
     run mr_print_status "$mr" "$threads"
 
     assert_output --partial "
-   🏷  [Review] [My Team]                                            (↣ main)
+   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
 
-   👍  1   👎  1     Resolved threads: 1/2     Draft: yes     Can be merged: ❌"
+   👍  1   👎  1     Resolved threads: 1/2      CI: ❌       Can be merged: ❌"
 
     # ------------------------------------------------------------------------------------------------------------------
 
     mr='{
         "title": "Feature/XY-1234 Lorem Ipsum", "web_url":"https://myapp.gitlab.com/my/project/merge_requests/6",
-        "labels":["Testing","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged"
+        "labels":["Testing","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
+        "head_pipeline": {"status":"success", "web_url":"https://example.net/ci/1"}
     }'
     threads='1	unresolved:false	note_id:1
 2	unresolved:false	note_id:2'
@@ -467,9 +486,9 @@ setup() {
     run mr_print_status "$mr" "$threads"
 
     assert_output --partial  "
-   🏷  [Testing] [My Team]                                           (↣ main)
+   🏷  [Testing] [My Team]                                             (↣ main)
 
-   👍  2   👎  0     Resolved threads: 2/2                    Can be merged: ✔"
+   👍  2   👎  0     Resolved threads: 2/2      CI: ✔       Can be merged: ✔"
 
     # ------------------------------------------------------------------------------------------------------------------
 
@@ -482,9 +501,9 @@ setup() {
     run mr_print_status "$mr" "$threads"
 
     assert_output --partial "
-   🏷  [Accepted] [My Team]                                          (↣ main)
+   🏷  [Accepted] [My Team]                                            (↣ main)
 
-   👍  2   👎  0                                                     Merged"
+   👍  2   👎  0                                                   Merged"
 }
 
 @test "Searches MRs across projects to build menu" {
