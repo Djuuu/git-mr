@@ -83,7 +83,8 @@ function git_commits_extended
     local format="${prefix}%h %s${suffix}%n%b${end}"
 
     git log --reverse --no-decorate --format="${format}" "${target_branch}".."${source_branch}" |
-        grep -v "^${end}" # remove trailing blank line
+        grep -v "^${end}" | # remove trailing blank line
+        sed -r "s/${end}$//g" # remove trailing body end for bodies without trailing blank line
 }
 
 function git_commit_extended
@@ -98,7 +99,8 @@ function git_commit_extended
     local format="${prefix}%h %s${suffix}%n%b${end}"
 
     git show -s --format="${format}" "${revision}" |
-        grep -v "^${end}" # remove trailing blank line
+        grep -v "^${end}" | # remove trailing blank line
+        sed -r "s/${end}$//g" # remove trailing body end for bodies without trailing blank line
 }
 
 function git_titlize_branch
