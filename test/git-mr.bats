@@ -437,6 +437,56 @@ setup() {
     )"
 }
 
+@test "Prints MR status indicators" {
+
+    TERM=xterm-mono # disable colors
+
+    mr='{
+        "title": "Draft: Feature/XY-1234 Lorem Ipsum", "web_url":"https://myapp.gitlab.com/my/project/merge_requests/6",
+        "labels":["Review","My Team"], "target_branch": "main", "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged"
+    }'
+    threads='1	unresolved:false	note_id:1
+2	unresolved:true	note_id:2'
+
+    run mr_print_status "$mr" "$threads"
+
+    assert_output --partial "
+   🏷  [Review] [My Team]                                            (↣ main)
+
+   👍  1   👎  1     Resolved threads: 1/2     Draft: yes     Can be merged: ❌"
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    mr='{
+        "title": "Feature/XY-1234 Lorem Ipsum", "web_url":"https://myapp.gitlab.com/my/project/merge_requests/6",
+        "labels":["Testing","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged"
+    }'
+    threads='1	unresolved:false	note_id:1
+2	unresolved:false	note_id:2'
+
+    run mr_print_status "$mr" "$threads"
+
+    assert_output --partial  "
+   🏷  [Testing] [My Team]                                           (↣ main)
+
+   👍  2   👎  0     Resolved threads: 2/2                    Can be merged: ✔"
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    mr='{
+        "title": "Feature/XY-1234 Lorem Ipsum", "web_url":"https://myapp.gitlab.com/my/project/merge_requests/6",
+        "labels":["Accepted","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "state":"merged"
+    }'
+    threads=
+
+    run mr_print_status "$mr" "$threads"
+
+    assert_output --partial "
+   🏷  [Accepted] [My Team]                                          (↣ main)
+
+   👍  2   👎  0                                                     Merged"
+}
+
 @test "Searches MRs across projects to build menu" {
     load "test_helper/gitlab-mock-menu.bash"
 

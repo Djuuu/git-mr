@@ -935,6 +935,18 @@ function mr_title
     markdown_link "${issue_key} ${issue_title}" "$issue_url"
 }
 
+function mr_commit_list
+{
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+
+    if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
+        markdown_indent_list_items "$(git_commits_extended "$source_branch" "$target_branch")"
+    else
+        markdown_list "$(git_commits "$source_branch" "$target_branch")"
+    fi
+}
+
 function mr_description
 {
     local source_branch=${1:-$(git_current_branch)}
@@ -943,15 +955,13 @@ function mr_description
 
     local title; title=$(mr_title "$source_branch" "$issue_code") || exit $?
 
-    local commits
-    local description
-    if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
-        commits=$(git_commits_extended "$source_branch" "$target_branch")
-        description=$(markdown_indent_list_items "$commits")
-    else
-        commits=$(git_commits "$source_branch" "$target_branch")
-        description=$(markdown_list "$commits")
-    fi
+    mr_print_description "$title" "$(mr_commit_list "$source_branch" "$target_branch")"
+}
+
+function mr_print_description
+{
+    local title=$1
+    local commit_list=$2
 
     cat << EOF
 $(markdown_title "$title")
@@ -959,7 +969,7 @@ $(markdown_title "$title")
 
 ## Commits
 
-$description
+$commit_list
 
 EOF
 }
@@ -979,12 +989,8 @@ function mr_actions
     local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
 
     if [ ! -z "${mr_url}" ]; then
-        cat << EOF
-Merge request:
-
-  ${mr_url}
-EOF
-        mr_print_status "${mr_iid}" "$mr_detail"
+        echo -e "Merge request:\n\n  $(colorize "${mr_url}" "lightgray")"
+        mr_show_status "${mr_iid}" "$mr_detail"
         return
     fi
 
@@ -1040,13 +1046,26 @@ function mr_format_labels
         sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
 }
 
-function mr_print_status
+function mr_show_status
 {
     local mr_iid=$1
-
-    [ ! -z "$mr_iid" ] || exit_error 0 "mr_iid not provided"
-
     local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
+
+    local mr_url; mr_url=$(echo "$merge_request" | jq -r '.web_url')
+    local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
+
+    local threads; threads=${3:-$(gitlab_merge_request_threads "$project_url" "$mr_iid")}
+
+    mr_print_status "$merge_request" "$threads"
+}
+
+function mr_print_status
+{
+    local merge_request=$1
+    local threads=$2
+
+    [ -n "$merge_request" ] || exit_error 0 "merge_request not provided"
+
     local mr_url;        mr_url=$(echo "$merge_request" | jq -r '.web_url')
     local project_url;   project_url=$(gitlab_extract_project_url "$mr_url")
 
@@ -1071,7 +1090,6 @@ function mr_print_status
         else downvotes=$(colorize "$downvotes" "bold"); fi
 
     # Threads
-    local threads;        threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
     local thread_count;   thread_count="$(echo "$threads" | grep -c 'unresolved:' || true)"
     local resolved_count; resolved_count="$(echo "$threads" | grep -c 'unresolved:false' || true)"
 
@@ -1257,9 +1275,15 @@ function mr_menu_contents
 
 function mr_menu_status
 {
-    local menu_items=$1
+    local issue_code=$1
+    local menu_items=$2
 
-    echo "$GIT_MR_MENU_START"
+    local mr_count; mr_count=$(echo "$menu_items" | wc -l)
+
+    echo
+    echo "-------------------------------------------------------------------"
+    echo "${issue_code} (${mr_count} merge request$([[ $mr_count -gt 1 ]] && echo 's'))"
+    echo "-------------------------------------------------------------------"
     echo
 
     while IFS=$'\n' read -r menu_item; do
@@ -1269,24 +1293,17 @@ function mr_menu_status
         local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
 
         title=$(gitlab_title_undraft "$title")
-
-        local item_label
-        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
-
-        echo "* ${item_label}"
-
         local project_url; project_url=$(gitlab_extract_project_url "$web_url")
 
         # Load existing merge request details
         # Do NOT use `gitlab_merge_request`
         merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
 
-        mr_print_status "${mr_iid}" "$merge_request"
+        echo "* $(colorize "${project_name}" "bold"): $(terminal_link "${web_url}" "${title}" )"
+        mr_show_status "${mr_iid}" "$merge_request"
+        echo
 
     done < <(echo "$menu_items")
-
-    echo
-    echo "$GIT_MR_MENU_END"
 }
 
 function mr_menu_show
@@ -1506,8 +1523,10 @@ function mr_open
     local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
 
-    if [ ! -z "${mr_url}" ]; then
-        mr_print_status "${mr_iid}"
+    if [ -n "${mr_url}" ]; then
+        echo
+        echo -e "Merge request:\n\n  $(colorize "${mr_url}" "lightgray")"
+        mr_show_status "${mr_iid}"
         open_in_browser "${mr_url}"
         return
     fi
@@ -1816,7 +1835,7 @@ function mr_merge
 
     if [ "$(confirm "Do you want to checkout '$current_target' and pull changes?")" != "yes" ]; then echo; return; fi
 
-    echo "git checkout $current_target && git pull --rebase"
+    echo "$(colorize "git checkout $current_target && git pull --rebase" "lightgray")"
     git checkout "$current_target" && git pull --rebase
     echo
 
@@ -1824,7 +1843,7 @@ function mr_merge
 
     if [ "$(confirm "Do you want to delete local branch '$source_branch'?")" != "yes" ]; then echo; return; fi
 
-    echo "git branch -d $source_branch"
+    echo "$(colorize "git branch -d $source_branch" "lightgray")"
     git branch -d "$source_branch"
     echo
 }
@@ -1875,7 +1894,7 @@ function mr_menu
                 mr_menu_update "$menu_items"
             fi
             ;;
-        status) mr_menu_status "$menu_items" ;;
+        status) mr_menu_status "$issue_code" "$menu_items" ;;
     esac
 }
 
