@@ -29,8 +29,11 @@ function git_base_branch
         head -n1)                                # keep only first decoration
 
     # First possible merge base
-    if [ -z "$base_branch" ]; then
-        base_branch=$(git show-branch  --merge-base | head -n1)
+    if ! git show-ref -q --heads "$base_branch"; then
+        local remote; remote=$(git remote | head -n1)
+        local remote_default; remote_default=$(git symbolic-ref "refs/remotes/${remote}/HEAD" -- 2>/dev/null)
+        local default; default=${remote_default#"refs/remotes/${remote}/"}
+        base_branch=$(git show-branch --merge-base "$branch" "$default" | head -n1)
     fi
 
     echo_debug "Base branch: $base_branch"
