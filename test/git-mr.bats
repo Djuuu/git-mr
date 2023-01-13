@@ -36,6 +36,7 @@ setup_file() {
     git switch -c main
     git commit --allow-empty -m "Main 1"
     git commit --allow-empty -m "Main 2"
+    git branch feature/local
     git commit --allow-empty -m "Main 3"
 
     git switch -c epic/big-feature main
@@ -128,6 +129,37 @@ setup() {
 
     git switch main
     run git-mr base
+    assert_failure
+}
+
+@test "Determines remote name" {
+    run git_remote
+    assert_output origin
+}
+
+@test "Checks branch existence" {
+    run git_branch_exists feature/base
+    assert_success
+
+    run git_branch_exists whatever
+    assert_failure
+}
+
+@test "Determines default branch" {
+    run git_default_branch
+    assert_output "main"
+}
+
+@test "Checks remote branch existence" {
+    run git_remote_branch_exists feature/base
+    assert_success
+
+    run git_branch_exists feature/local
+    assert_success
+    run git_remote_branch_exists feature/local
+    assert_failure
+
+    run git_remote_branch_exists feature/whatever
     assert_failure
 }
 

@@ -30,15 +30,46 @@ function git_base_branch
 
     # First possible merge base
     if ! git show-ref -q --heads "$base_branch"; then
-        local remote; remote=$(git remote | head -n1)
-        local remote_default; remote_default=$(git symbolic-ref "refs/remotes/${remote}/HEAD" -- 2>/dev/null)
-        local default; default=${remote_default#"refs/remotes/${remote}/"}
-        base_branch=$(git show-branch --merge-base "$branch" "$default" | head -n1)
+        base_branch=$(git show-branch --merge-base "$branch" "$(git_default_branch)" | head -n1)
     fi
 
     echo_debug "Base branch: $base_branch"
 
     echo "$base_branch"
+}
+
+function git_remote
+{
+    git remote | head -n1
+}
+
+function git_branch_exists
+{
+    local branch=$1
+
+    git show-ref -q --heads "$branch"
+}
+
+function git_default_branch
+{
+    local remote; remote=$(git_remote)
+    local default; default=$(git symbolic-ref "refs/remotes/${remote}/HEAD" -- 2>/dev/null)
+
+    if [ -n "$default" ]; then
+        echo "${default#"refs/remotes/${remote}/"}"
+        return
+    fi
+
+    if git_branch_exists "main";   then echo "main";   return; fi
+    if git_branch_exists "master"; then echo "master"; return; fi
+}
+
+function git_remote_branch_exists
+{
+    local branch=$1
+    local remote=${2:-$(git_remote)}
+
+    [ -n "$(git ls-remote --heads "$remote" "$branch")" ]
 }
 
 function git_check_branches
@@ -1018,7 +1049,18 @@ function mr_actions
         return
     fi
 
+    if ! git_remote_branch_exists "$source_branch"; then
+        echo_error "Branch '$source_branch' does not exist on remote"
+        return
+    fi
+
     local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
+
+    if ! git_remote_branch_exists "$target_branch"; then
+        echo_error "Target branch '$target_branch' does not exist on remote"
+        return
+    fi
+
     local new_mr_url
     new_mr_url=$(gitlab_new_merge_request_url "${source_branch}" "${target_branch}")
 
@@ -1625,6 +1667,16 @@ ${description}
 --------------------------------------------------------------------------------
 
 EOF
+
+    if ! git_remote_branch_exists "$source_branch"; then
+        echo_error "Branch '$source_branch' does not exist on remote"
+        return
+    fi
+
+    if ! git_remote_branch_exists "$target_branch"; then
+        echo_error "Target branch '$target_branch' does not exist on remote"
+        return
+    fi
 
     local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${source_branch}" "${target_branch}")
 
