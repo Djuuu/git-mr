@@ -2225,7 +2225,7 @@ GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
 MD_BOLD=${MD_BOLD="**"} # Markdown bold
 MD_BR=${MD_BR="  "} # Markdown line break
 GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
-GIT_MR_MENU_END=${GIT_MR_MENU_END:-"---------------------------------------------------------------------------------"}
+GIT_MR_MENU_END=${GIT_MR_MENU_END:-"--------------------------------------------------------------------------------"}
 
 
 ################################################################################
