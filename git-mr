@@ -455,8 +455,6 @@ function gitlab_check_env
 
 function gitlab_project_url
 {
-    gitlab_check_env
-
     local remote_url
     local project_url
 
@@ -907,7 +905,8 @@ function gitlab_undraft
 
 function guess_issue_code
 {
-    [ ! -z "$JIRA_CODE_PATTERN" ] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
+    [ -n "$git_mr_unguessable_issue_code" ] && return
+    [ -n "$JIRA_CODE_PATTERN" ] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
 
     local branch=${1:-$(git_current_branch)}
 
@@ -1581,6 +1580,7 @@ function mr_print
     git_check_branches "$source_branch" "$target_branch"
 
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
+    [ -z "$issue_code" ] && git_mr_unguessable_issue_code=1
 
     cat << EOF
 
@@ -1600,6 +1600,9 @@ function mr_open
     local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
     git_check_branches "$source_branch" "$target_branch"
 
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
+    [ -z "$issue_code" ] && git_mr_unguessable_issue_code=1
+
     local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$source_branch")
     local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
     local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
@@ -1612,9 +1615,7 @@ function mr_open
         return
     fi
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    local description; description=$(mr_description "$source_branch" "$target_branch")
+    local description; description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
 
     cat << EOF
 
