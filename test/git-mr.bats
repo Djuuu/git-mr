@@ -567,25 +567,6 @@ setup() {
    👍  2   👎  0                                                   Merged"
 }
 
-@test "Searches MRs across projects to build menu" {
-    load "test_helper/gitlab-mock-menu.bash"
-
-    run mr_menu
-
-    assert_output "$(cat <<- EOF
-
-		## Menu
-
-		* Project C: [MR 31 title](https://example.net/31)
-		* Project A: [MR 11 title](https://example.net/11)
-		* Project B: [MR 21 title](https://example.net/21)
-		* Project D: [MR 41 title](https://example.net/21)
-
-		---------------------------------------------------------------------------------
-		EOF
-    )"
-}
-
 @test "Updates MR description with new commits in new section" {
     load "test_helper/gitlab-mock-mr.bash"
 
@@ -711,6 +692,118 @@ setup() {
 
     run replace_labels "toto,tata" "nope" "plop,pouet"
     assert_output "toto,tata,plop,pouet"
+}
+
+################################################################################
+# Merge request menu utility functions
+
+@test "Searches MRs across projects to build menu" {
+    load "test_helper/gitlab-mock-menu.bash"
+
+    TERM=xterm-mono # disable colors
+
+    run mr_menu
+
+    assert_output "$(cat <<- EOF
+
+		================================================================================
+		 AB-123 (4 merge requests)
+		================================================================================
+
+		## Menu
+
+		* Project C: [MR 31 title](https://example.net/31)
+		* Project A: [MR 11 title](https://example.net/11)
+		* Project B: [MR 21 title](https://example.net/21)
+		* Project D: [MR 41 title](https://example.net/21)
+
+		--------------------------------------------------------------------------------
+		EOF
+    )"
+}
+
+@test "Replaces menu in MR descriptions" {
+
+    mr_description="# [AB-123 Test feature](https://example.net/AB-123)
+
+This is an example.
+
+--------------------------------------------------------------------------------
+
+## Menu
+
+* Old Menu item 1
+
+--------------------------------------------------------------------------------
+
+## Commits
+
+* Lorem
+* Ipsum
+
+--------------------------------------------------------------------------------"
+
+    menu_content="## Menu
+
+* New Menu item 1
+* New Menu item 2
+
+--------------------------------------------------------------------------------"
+
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "# [AB-123 Test feature](https://example.net/AB-123)
+
+This is an example.
+
+--------------------------------------------------------------------------------
+
+## Menu
+
+* New Menu item 1
+* New Menu item 2
+
+--------------------------------------------------------------------------------
+
+## Commits
+
+* Lorem
+* Ipsum
+
+--------------------------------------------------------------------------------"
+
+
+    mr_description="# [AB-123 Test feature](https://example.net/AB-123)
+
+This is an example without menu.
+
+## Commits
+
+* Lorem
+* Ipsum"
+
+    menu_content="## Menu
+
+* New Menu item 1
+* New Menu item 2
+
+--------------------------------------------------------------------------------"
+
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "# [AB-123 Test feature](https://example.net/AB-123)
+
+## Menu
+
+* New Menu item 1
+* New Menu item 2
+
+--------------------------------------------------------------------------------
+
+This is an example without menu.
+
+## Commits
+
+* Lorem
+* Ipsum"
 }
 
 ################################################################################
