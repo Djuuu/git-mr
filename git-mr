@@ -443,6 +443,7 @@ function jira_transition
     jira_request "issue/${issue_code}/transitions" "POST" "$request_data" || exit $?
 }
 
+
 ################################################################################
 # Gitlab functions
 
@@ -1569,6 +1570,7 @@ function mr_menu_colorize
     done < <(echo "$mr_description")
 }
 
+
 ################################################################################
 # Merge request top-level functions
 
@@ -1979,60 +1981,63 @@ function mr_menu
 
 function mr_ip
 {
-    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
     local source_branch=${1:-$(git_current_branch)}
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
     mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
 
-    if [ ! -z "$ISSUE_CODE" ] \
-    && [ ! -z "$JIRA_IP_ID" ] \
+    if [ -n "$issue_code" ] \
+    && [ -n "$JIRA_IP_ID" ] \
     && [ "$(confirm "Do you want to update the Jira ticket status to \"In Progress\"?")" = "yes" ]; then
         echo -n "Updating Jira ticket status... "
 
-        jira_transition "$ISSUE_CODE" "$JIRA_IP_ID" && echo -e "OK\n"
+        jira_transition "$issue_code" "$JIRA_IP_ID" && echo -e "OK\n"
     fi
     if [ -z "$JIRA_IP_ID" ]; then echo_error "Set JIRA_IP_ID to be able to update Jira status\n"; fi
 }
 
 function mr_cr
 {
-    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
     local source_branch=${1:-$(git_current_branch)}
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
     mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
 
-    if [ ! -z "$ISSUE_CODE" ] \
-    && [ ! -z "$JIRA_CR_ID" ] \
+    if [ -n "$issue_code" ] \
+    && [ -n "$JIRA_CR_ID" ] \
     && [ "$(confirm "Do you want to update the Jira ticket status to \"Code Review\"?")" = "yes" ]; then
         echo -n "Updating Jira ticket status... "
 
-        jira_transition "$ISSUE_CODE" "$JIRA_CR_ID" && echo -e "OK\n"
+        jira_transition "$issue_code" "$JIRA_CR_ID" && echo -e "OK\n"
     fi
     if [ -z "$JIRA_CR_ID" ]; then echo_error "Set JIRA_CR_ID to be able to update Jira status\n"; fi
 }
 
 function mr_qa
 {
-    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
     local source_branch=${1:-$(git_current_branch)}
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
     mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
 
-    if [ ! -z "$ISSUE_CODE" ] \
-    && [ ! -z "$JIRA_QA_ID" ] \
+    if [ -n "$issue_code" ] \
+    && [ -n "$JIRA_QA_ID" ] \
     && [ "$(confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?")" = "yes" ]; then
         echo -n "Updating Jira ticket status... "
 
-        jira_transition "$ISSUE_CODE" "$JIRA_QA_ID" && echo -e "OK\n"
+        jira_transition "$issue_code" "$JIRA_QA_ID" && echo -e "OK\n"
     fi
     if [ -z "$JIRA_QA_ID" ]; then echo_error "Set JIRA_QA_ID to be able to update Jira status\n"; fi
 }
