@@ -364,17 +364,46 @@ setup() {
 ################################################################################
 # Gitlab functions
 
-@test "Extracts MR info from list" {
-    mr_summary='[{"iid":123,"web_url":"https://gitlab.com/mr/123"},{}]'
+@test "Extracts MR info from merge request summary" {
 
-    run gitlab_extract_iid "$mr_summary"
-    assert_output 123
+    GITLAB_DOMAIN="example.com"
+    GITLAB_TOKEN="example"
+    function gitlab_project_request {
+        case "$1" in
+            "merge_requests?state=opened&view=simple&source_branch=feature/xy-1234-lorem-ipsum")
+                echo '[{
+                    "id": 1234, "iid": 123, "project_id": 12,
+                    "title": "Draft: Feature/XY-1234 Lorem Ipsum",
+                    "web_url": "https://gitlab.com/mr/123"
+                },{}]'
+                ;;
+            "merge_requests?state=opened&view=simple&source_branch=feature/nope")
+                echo '[]';
+                ;;
+            *) return ;;
+        esac
+    }
 
-    run gitlab_extract_url "$mr_summary"
-    assert_output "https://gitlab.com/mr/123"
+    mr_summary=$(gitlab_merge_request_summary "feature/xy-1234-lorem-ipsum")
+
+    run gitlab_extract_iid   "$mr_summary"; assert_output 123
+    run gitlab_extract_url   "$mr_summary"; assert_output "https://gitlab.com/mr/123"
+    run gitlab_extract_title "$mr_summary"; assert_output "Draft: Feature/XY-1234 Lorem Ipsum"
+
+    mr_summary=$(gitlab_merge_request_summary "feature/nope")
+
+    run gitlab_extract_iid   "$mr_summary"; assert_output ''
+    run gitlab_extract_url   "$mr_summary"; assert_output ''
+    run gitlab_extract_title "$mr_summary"; assert_output ''
+
+    mr_summary=$(gitlab_merge_request_summary "nope")
+
+    run gitlab_extract_iid   "$mr_summary"; assert_output ''
+    run gitlab_extract_url   "$mr_summary"; assert_output ''
+    run gitlab_extract_title "$mr_summary"; assert_output ''
 }
 
-@test "Extracts MR info from detail" {
+@test "Extracts MR info from merge request detail" {
     mr_detail='{
         "title":"MR title",
         "description":"MR description",

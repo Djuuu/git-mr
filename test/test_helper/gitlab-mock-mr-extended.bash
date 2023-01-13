@@ -1,8 +1,8 @@
 GITLAB_DOMAIN="example.com"
 GITLAB_TOKEN="example"
 
-function gitlab_merge_requests_for_branch {
-    echo '[{"iid":1,"web_url":"https://example.com/some/project/-/merge_requests/1"}]'
+function gitlab_merge_request_summary {
+    echo '{"iid":1,"web_url":"https://example.com/some/project/-/merge_requests/1"}'
 }
 
 function gitlab_merge_request {
