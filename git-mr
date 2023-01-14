@@ -372,6 +372,15 @@ function open_in_browser
     echo
 }
 
+function git_mr_readonly
+{
+    [ -z "$GIT_MR_READONLY" ] && return 1
+
+    [ -n "$1" ] && echo "$(colorize "🚫 Read-only 🚫" "gray")" >&2
+
+    return 0
+}
+
 
 ################################################################################
 # Markdown formatting
@@ -449,6 +458,8 @@ function jira_request
     local auth_token; auth_token=$(echo -n "${JIRA_USER}:${JIRA_TOKEN}" | base64 -w 0)
 
     echo_debug "Jira - ${request_verb} ${request_url} ${request_data}"
+
+    [ "$request_verb" != "GET" ] && git_mr_readonly && return 0
 
     curl -Ss \
         -X "${request_verb}" \
@@ -540,6 +551,8 @@ function gitlab_project_request
 
     echo_debug "GitLab - ${request_verb} ${gitlab_project_url}/${request_url} ${request_data}"
 
+    [ "$request_verb" != "GET" ] && git_mr_readonly && echo '{}' && return 0
+
     result=$(curl -Ss \
         -X "${request_verb}" \
         -H "Private-Token: ${GITLAB_TOKEN}" \
@@ -564,6 +577,8 @@ function gitlab_request
     local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
 
     echo_debug "GitLab - ${request_verb} ${gitlab_base_url}/${request_url} ${request_data}"
+
+    [ "$request_verb" != "GET" ] && git_mr_readonly && echo '{}' && return 0
 
     result=$(curl -Ss \
         -X "${request_verb}" \
@@ -888,6 +903,7 @@ function gitlab_title_undraft
 
 function gitlab_undraft
 {
+    git_mr_readonly show
     gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
@@ -1460,6 +1476,8 @@ function mr_menu_show
 
 function mr_menu_update
 {
+    git_mr_readonly show
+
     local menu_items=$1
 
     local current_branch; current_branch=$(git_current_branch)
@@ -1500,6 +1518,8 @@ function mr_menu_update
 
 function mr_menu_update_all
 {
+    git_mr_readonly show
+
     local issue_code=$1
     local menu_items=$2
 
@@ -1800,6 +1820,7 @@ function mr_status
 
 function mr_update
 {
+    git_mr_readonly show
     gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
@@ -1960,6 +1981,7 @@ function mr_update
 
 function mr_merge
 {
+    git_mr_readonly show
     gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
@@ -2042,7 +2064,8 @@ function mr_merge
     if [ "$(confirm "Do you want to checkout '$current_target' and pull changes?")" != "yes" ]; then echo; return; fi
 
     echo "$(colorize "git checkout $current_target && git pull --rebase" "lightgray")"
-    git checkout "$current_target" && git pull --rebase
+    git_mr_readonly ||
+        (git checkout "$current_target" && git pull --rebase)
     echo
 
     # delete local branch
@@ -2050,7 +2073,8 @@ function mr_merge
     if [ "$(confirm "Do you want to delete local branch '$source_branch'?")" != "yes" ]; then echo; return; fi
 
     echo "$(colorize "git branch -d $source_branch" "lightgray")"
-    git branch -d "$source_branch"
+    git_mr_readonly ||
+        git branch -d "$source_branch"
     echo
 }
 
@@ -2102,6 +2126,8 @@ function mr_menu
 
 function mr_ip
 {
+    git_mr_readonly show
+
     [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
     [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
     [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
@@ -2123,6 +2149,8 @@ function mr_ip
 
 function mr_cr
 {
+    git_mr_readonly show
+
     [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
     [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
     [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
@@ -2144,6 +2172,8 @@ function mr_cr
 
 function mr_qa
 {
+    git_mr_readonly show
+
     [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
     [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
     [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
@@ -2165,6 +2195,8 @@ function mr_qa
 
 function mr_hook
 {
+    git_mr_readonly show
+
     local git_dir; git_dir=$(git rev-parse --git-dir)
     local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
 
@@ -2173,7 +2205,8 @@ function mr_hook
     find "${git_mr_dir}/hooks" -type f -print0 | while read -d $'\0' hook; do
         local hook_name; hook_name="$(basename $hook)"
         echo "Linking hook: ${hook_name}"
-        ln -sf "$hook" "${git_dir}/hooks/${hook_name}"
+        git_mr_readonly ||
+            ln -sf "$hook" "${git_dir}/hooks/${hook_name}"
     done
 }
 
