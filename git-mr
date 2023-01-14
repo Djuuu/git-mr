@@ -298,35 +298,6 @@ regex_escape() {
     echo "${1}" | sed -e 's/[]\/$*.^[]/\\&/g'
 }
 
-replace_labels() {
-    local labels=$1
-    local to_remove=$2
-    local to_add=$3
-
-    echo_debug "replace_labels - original labels  : $labels"
-    echo_debug "replace_labels - labels to remove : $to_remove"
-    echo_debug "replace_labels - labels to add    : $to_add"
-
-    # split
-    labels=$(    echo "$labels"    | tr "," "\n")
-    to_remove=$( echo "$to_remove" | tr "," "\n")
-    to_add=$(    echo "$to_add"    | tr "," "\n")
-
-    # remove
-    [ -n "$to_remove" ] && labels=$(echo "$labels" | grep -v "$to_remove")
-    [ -n "$to_add" ]    && labels=$(echo "$labels" | grep -v "$to_add")
-
-    # add
-    [ -n "$to_add" ] && labels=$(echo -e "${labels}\n${to_add}")
-
-    # implode
-    labels=$(echo "$labels" | tr "\n" "," | sed 's/^,//' | sed 's/,$//')
-
-    echo_debug "replace_labels - result    : $labels"
-
-    echo "$labels"
-}
-
 open_in_browser() {
     local url=$1
 
@@ -1034,44 +1005,6 @@ To create a new merge request:
 EOF
 }
 
-is_status_label() {
-    local label=$1
-
-    local system_labels; system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
-        sed 's/,,/,/g' |
-        sed 's/^,//' | sed 's/,$//' |
-        tr "," "\n")
-
-    local match;   match="$( echo "$label"         | grep "$system_labels")" || return
-    local reverse; reverse=$(echo "$system_labels" | grep "$match")          || return
-    # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
-
-    echo "$match"
-}
-
-mr_format_labels() {
-    local labels=$1
-
-    local labels_array; IFS=',' read -ra labels_array <<<"$labels"
-
-    local status_labels=()
-    local other_labels=()
-
-    for label in "${labels_array[@]}"; do
-        if [ -n "$(is_status_label "$label")" ]; then
-            status_labels+=("$(colorize "[$label]" "lightpurple" "bold")")
-        else
-            other_labels+=("[$label]")
-        fi
-    done
-
-    local status_labels_str; status_labels_str="$(printf "%s " "${status_labels[@]}")"
-    local other_labels_str;  other_labels_str="$(printf "%s " "${other_labels[@]}")"
-
-    echo "${status_labels_str}${other_labels_str}" |
-        sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
-}
-
 mr_show_status() {
     local mr_iid=$1
     local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
@@ -1238,6 +1171,77 @@ mr_print_status() {
         echo -en "            $(colorize "Merged" "lightgreen")"
     fi
     echo -e "\n"
+}
+
+
+################################################################################
+# Merge request labels utility functions
+
+replace_labels() {
+    local labels=$1
+    local to_remove=$2
+    local to_add=$3
+
+    echo_debug "replace_labels - original labels  : $labels"
+    echo_debug "replace_labels - labels to remove : $to_remove"
+    echo_debug "replace_labels - labels to add    : $to_add"
+
+    # split
+    labels=$(    echo "$labels"    | tr "," "\n")
+    to_remove=$( echo "$to_remove" | tr "," "\n")
+    to_add=$(    echo "$to_add"    | tr "," "\n")
+
+    # remove
+    [ -n "$to_remove" ] && labels=$(echo "$labels" | grep -v "$to_remove")
+    [ -n "$to_add" ]    && labels=$(echo "$labels" | grep -v "$to_add")
+
+    # add
+    [ -n "$to_add" ] && labels=$(echo -e "${labels}\n${to_add}")
+
+    # implode
+    labels=$(echo "$labels" | tr "\n" "," | sed 's/^,//' | sed 's/,$//')
+
+    echo_debug "replace_labels - result    : $labels"
+
+    echo "$labels"
+}
+
+is_status_label() {
+    local label=$1
+
+    local system_labels; system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
+        sed 's/,,/,/g' |
+        sed 's/^,//' | sed 's/,$//' |
+        tr "," "\n")
+
+    local match;   match="$( echo "$label"         | grep "$system_labels")" || return
+    local reverse; reverse=$(echo "$system_labels" | grep "$match")          || return
+    # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
+
+    echo "$match"
+}
+
+mr_format_labels() {
+    local labels=$1
+
+    local labels_array; IFS=',' read -ra labels_array <<<"$labels"
+
+    local status_labels=()
+    local other_labels=()
+
+    for label in "${labels_array[@]}"; do
+        if [ -n "$(is_status_label "$label")" ]; then
+            status_labels+=("$(colorize "[$label]" "lightpurple" "bold")")
+        else
+            other_labels+=("[$label]")
+        fi
+    done
+
+    local status_labels_str; status_labels_str="$(printf "%s " "${status_labels[@]}")"
+    local other_labels_str;  other_labels_str="$(printf "%s " "${other_labels[@]}")"
+
+    echo "${status_labels_str}${other_labels_str}" |
+        sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
 }
 
 mr_update_labels() {
