@@ -1845,7 +1845,11 @@ mr_update() {
         if [ "$target_branch" != "$current_target" ]; then
             update_prompt=1
             if [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?")" = "yes" ]; then
-                mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
+                if git_remote_branch_exists "$target_branch"; then
+                    mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
+                else
+                    echo_error "Target branch '$target_branch' does not exist on remote"
+                fi
             fi
         fi
 
