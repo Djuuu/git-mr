@@ -236,8 +236,8 @@ function terminal_link
     local href=$1
     local text=$2
 
-    if which tput > /dev/null 2>&1 && [ ! -z "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
-        printf "\e]8;;${href}\e\\${text}\e]8;;\e\\"
+    if which tput > /dev/null 2>&1 && [ -n "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
+        printf "\e]8;;%s\e\\%s\e]8;;\e\\" "$href" "$text"
     else
         echo -n "$text"
     fi
