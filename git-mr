@@ -551,7 +551,16 @@ gitlab_new_merge_request_url() {
     [ -z "$project_url" ] && return
 
     local source_branch=${1:-$(git_current_branch)}
+    if ! git_remote_branch_exists "$source_branch"; then
+        echo_error "Branch '$source_branch' does not exist on remote"
+        return
+    fi
+
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    if ! git_remote_branch_exists "$target_branch"; then
+        echo_error "Target branch '$target_branch' does not exist on remote"
+        return
+    fi
 
     local gitlab_mr_url="https://${GITLAB_DOMAIN}/${project_url}/-/merge_requests/new"
 
@@ -825,28 +834,20 @@ gitlab_undraft() {
     local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
         return
     fi
 
-    # Load existing merge request details
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
 
-    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
-
+    # Print merge request status summary
     echo
-    echo "-------------------------------------------------------------------"
-    gitlab_title_undraft "$mr_title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$source_branch" "$mr_summary" "$merge_request"
+    mr_status_block "$mr_iid"
+    echo "--------------------------------------------------------------------------------"
     echo
 
     if ! gitlab_title_is_draft "$mr_title"; then
@@ -865,8 +866,6 @@ gitlab_undraft() {
 
         if [ -n "$result" ]; then echo -e "OK\n"; fi
     fi
-
-    echo
 }
 
 
@@ -963,58 +962,46 @@ ${commit_list}
 EOF
 }
 
-mr_actions() {
-    local source_branch=${1:-$(git_current_branch)}
+mr_status_block() {
+    local mr_iid=$1
+    local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
 
-    local mr_summary=${2}
-    local mr_detail=${3}
+    local mr_title=${3:-$(gitlab_extract_title "$merge_request")}
+    local mr_url=${4:-$(gitlab_extract_url "$merge_request")}
 
-    if [ -z "$mr_summary" ]; then
-        mr_summary=$(gitlab_merge_request_summary "$source_branch") || exit $?
+    local mr_threads=$5
+    if [ -z "$mr_threads" ]; then
+        local mr_url; mr_url=$(gitlab_extract_url "$merge_request")
+        local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
+        mr_threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
     fi
 
-    local mr_iid; mr_iid=$(gitlab_extract_iid "${mr_summary}")
-    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
+    mr_print_title "$mr_title" "$mr_url"
+    mr_print_status "$merge_request" "$mr_threads"
+}
 
-    if [ -n "${mr_url}" ]; then
-        echo -e "Merge request:\n\n  $(colorize "${mr_url}" "lightgray")"
-        mr_show_status "${mr_iid}" "$mr_detail"
-        return
-    fi
+mr_print_title() {
+    local mr_title=$1
+    local mr_url=$2
 
-    if ! git_remote_branch_exists "$source_branch"; then
-        echo_error "Branch '$source_branch' does not exist on remote"
-        return
-    fi
-
-    local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
-
-    if ! git_remote_branch_exists "$target_branch"; then
-        echo_error "Target branch '$target_branch' does not exist on remote"
-        return
-    fi
-
-    local new_mr_url
-    new_mr_url=$(gitlab_new_merge_request_url "${source_branch}" "${target_branch}")
-
-    cat <<EOF
-To create a new merge request:
-
-  ${new_mr_url}
-
-EOF
+    echo "--------------------------------------------------------------------------------"
+    echo " $(terminal_link "$mr_url" "$(gitlab_title_undraft "$mr_title")")"
+    echo "--------------------------------------------------------------------------------"
 }
 
 mr_show_status() {
     local mr_iid=$1
+
     local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
 
-    local mr_url; mr_url=$(gitlab_extract_url "$merge_request")
-    local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
+    local mr_threads=$3
+    if [ -z "$mr_threads" ]; then
+        local mr_url; mr_url=$(gitlab_extract_url "$merge_request")
+        local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
+        mr_threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
+    fi
 
-    local threads; threads=${3:-$(gitlab_merge_request_threads "$project_url" "$mr_iid")}
-
-    mr_print_status "$merge_request" "$threads"
+    mr_print_status "$merge_request" "$mr_threads"
 }
 
 mr_print_status() {
@@ -1257,29 +1244,23 @@ mr_update_labels() {
     fi
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
         return
     fi
 
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+
     # Load existing merge request details
     local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
-    local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
-    local labels;        labels=$(gitlab_extract_labels "$merge_request")
+    local labels; labels=$(gitlab_extract_labels "$merge_request")
 
     # Print merge request status summary
     echo
-    echo "-------------------------------------------------------------------"
-    gitlab_title_undraft "$mr_title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$source_branch" "$mr_summary" "$merge_request"
+    mr_status_block "$mr_iid" "$merge_request"
+    echo "--------------------------------------------------------------------------------"
     echo
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
@@ -1637,11 +1618,26 @@ mr_print() {
 --------------------------------------------------------------------------------
 $(mr_description "$source_branch" "$target_branch" "$issue_code")
 
---------------------------------------------------------------------------------
-
 EOF
 
-    mr_actions "$source_branch"
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -n "$mr_summary" ]; then
+        # Print merge request status summary
+        mr_status_block "$(gitlab_extract_iid "$mr_summary")"
+    else
+        echo "--------------------------------------------------------------------------------"
+        echo
+
+        local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
+        [ -z "$new_mr_url" ] && return
+
+        cat <<EOF
+To create a new merge request:
+
+  ${new_mr_url}
+
+EOF
+    fi
 }
 
 mr_open() {
@@ -1652,42 +1648,27 @@ mr_open() {
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
     [ -z "$issue_code" ] && git_mr_unguessable_issue_code=1
 
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -n "${mr_url}" ]; then
-        echo
-        echo -e "Merge request:\n\n  $(colorize "${mr_url}" "lightgray")"
-        mr_show_status "${mr_iid}"
-        open_in_browser "${mr_url}"
-        return
-    fi
-
     local description; description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
 
     cat <<EOF
 
 --------------------------------------------------------------------------------
-${description}
-
---------------------------------------------------------------------------------
+$description
 
 EOF
 
-    if ! git_remote_branch_exists "$source_branch"; then
-        echo_error "Branch '$source_branch' does not exist on remote"
-        return
-    fi
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -n "$mr_summary" ]; then
+        open_in_browser "$(gitlab_extract_url "$mr_summary")"
 
-    if ! git_remote_branch_exists "$target_branch"; then
-        echo_error "Target branch '$target_branch' does not exist on remote"
-        return
-    fi
+        # Print merge request status summary
+        mr_status_block "$(gitlab_extract_iid "$mr_summary")"
+    else
+        echo "--------------------------------------------------------------------------------"
+        echo
 
-    local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${source_branch}" "${target_branch}")
-
-    if [ -n "${new_mr_url}" ]; then
+        local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
+        [ -z "$new_mr_url" ] && return
 
         # add description
         new_mr_url="${new_mr_url}&$(urlencode "merge_request[description]")=$(urlencode "$description")"
@@ -1696,7 +1677,7 @@ EOF
         echo_debug "Opening:"
         echo_debug "$new_mr_url"
 
-        open_in_browser "${new_mr_url}"
+        open_in_browser "$new_mr_url"
     fi
 }
 
@@ -1707,16 +1688,15 @@ mr_status() {
     git_check_branches "$source_branch" "-"
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
         return
     fi
+
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
 
     # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
@@ -1725,11 +1705,7 @@ mr_status() {
 
     # Print merge request title & status
     echo
-    echo "-------------------------------------------------------------------"
-    gitlab_title_undraft "$mr_title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$source_branch" "$mr_summary" "$merge_request"
+    mr_status_block "$mr_iid" "$merge_request"
 }
 
 mr_update() {
@@ -1740,16 +1716,15 @@ mr_update() {
     local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
         echo_error "Merge request not found"
         mr_print "$source_branch" "$target_branch"
         return
     fi
+
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
 
     # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
@@ -1817,9 +1792,8 @@ mr_update() {
 
     # Print updated merge request description
     echo
-    echo "-------------------------------------------------------------------"
-    gitlab_title_undraft "$mr_title"
-    echo "-------------------------------------------------------------------"
+    mr_print_title "$mr_title" "$mr_url"
+    echo
     echo "$new_description_display"
     if [ "$new_commit_count" -gt 0 ]; then
         if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
@@ -1845,10 +1819,11 @@ mr_update() {
         echo_error "Please install jq to be able to update merge request"
 
     else
-        local mr_update_data='{}'
+        local mr_update_data='{}' update_prompt
 
-        if [ $((updated_commit_count + new_commit_count)) -gt 0 ] &&
-           [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
+        if [ $((updated_commit_count + new_commit_count)) -gt 0 ]; then
+            update_prompt=1
+            if [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
 
                 local new_description; new_description=$(echo -e "${new_description_content}")
                 local newLines=""
@@ -1867,9 +1842,11 @@ mr_update() {
             fi
         fi
 
-        if [ "$target_branch" != "$current_target" ] &&
-           [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?")" = "yes" ]; then
-            mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
+        if [ "$target_branch" != "$current_target" ]; then
+            update_prompt=1
+            if [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?")" = "yes" ]; then
+                mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
+            fi
         fi
 
         if [ "$mr_update_data" != "{}" ]; then
@@ -1880,13 +1857,13 @@ mr_update() {
 
             # reload merge request details
             merge_request=$(gitlab_merge_request "$mr_iid")
+        else
+            [ -n "$update_prompt" ] && echo
         fi
     fi
 
     echo "--------------------------------------------------------------------------------"
-    echo
-
-    mr_actions "$source_branch" "$mr_summary" "$merge_request"
+    mr_show_status "$mr_iid" "$merge_request"
 }
 
 mr_merge() {
@@ -1896,31 +1873,28 @@ mr_merge() {
     local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
-
-    local mr_summary;  mr_summary=$(gitlab_merge_request_summary "$source_branch") || exit $?
-    local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;      mr_url=$(gitlab_extract_url "$mr_summary")
-    local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
         return
     fi
 
-    # Load existing merge request details
+    local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
+    local mr_title;    mr_title=$(gitlab_extract_title "$mr_summary")
+    local mr_url;      mr_url=$(gitlab_extract_url "$mr_summary")
+    local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
 
+    # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local title;          title=$(gitlab_extract_title "$merge_request")
     local merge_status;   merge_status=$(gitlab_extract_merge_status "$merge_request")
     local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
 
+    # Print merge request status summary
     echo
-    echo "-------------------------------------------------------------------"
-    gitlab_title_undraft "$title"
-    echo "-------------------------------------------------------------------"
+    mr_status_block "$mr_iid" "$merge_request"
+    echo "--------------------------------------------------------------------------------"
     echo
-    mr_actions "$source_branch" "$mr_summary" "$merge_request"
 
     # test merge status
     if [ "$merge_status" = "merged" ]; then
@@ -1944,12 +1918,12 @@ mr_merge() {
         return
     fi
 
-    if gitlab_title_is_draft "$title"; then
+    if gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is a draft (work in progress)"
         if [ "$(confirm "Do you want to resolve draft status?")" != "yes" ]; then echo_error; return; fi
 
         echo -n "Resolving draft status... "
-        local undraft_title; undraft_title=$(gitlab_title_undraft "$title")
+        local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
         local mr_data;       mr_data=$(jq_build "title" "$undraft_title") || exit $?
 
         local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")

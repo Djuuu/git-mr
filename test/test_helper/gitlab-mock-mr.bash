@@ -20,6 +20,6 @@ gitlab_merge_request() {
     }'
 }
 
-mr_actions() {
+mr_show_status() {
     return 0
 }
