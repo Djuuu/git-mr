@@ -368,7 +368,7 @@ setup() {
 
     GITLAB_DOMAIN="example.com"
     GITLAB_TOKEN="example"
-    function gitlab_project_request {
+    gitlab_project_request() {
         case "$1" in
             "merge_requests?state=opened&view=simple&source_branch=feature/xy-1234-lorem-ipsum")
                 echo '[{
@@ -378,7 +378,7 @@ setup() {
                 },{}]'
                 ;;
             "merge_requests?state=opened&view=simple&source_branch=feature/nope")
-                echo '[]';
+                echo '[]'
                 ;;
             *) return ;;
         esac
@@ -409,14 +409,14 @@ setup() {
         "description":"MR description",
         "merge_status":"can_be_merged",
         "target_branch":"main",
-        "labels":["aaa","bbb","ccc"],
+        "labels":["aaa","b b","c-c"],
         "head_pipeline": {"status":"success", "web_url":"https://example.net/ci"}
     }'
     assert_equal "$(gitlab_extract_title "$mr_detail")" "MR title"
     assert_equal "$(gitlab_extract_description "$mr_detail")" "MR description"
     assert_equal "$(gitlab_extract_merge_status "$mr_detail")" 'can_be_merged'
     assert_equal "$(gitlab_extract_target_branch "$mr_detail")" 'main'
-    assert_equal "$(gitlab_extract_labels "$mr_detail")" 'aaa,bbb,ccc'
+    assert_equal "$(gitlab_extract_labels "$mr_detail")" 'aaa,b b,c-c'
     assert_equal "$(gitlab_extract_pipeline_status "$mr_detail")" 'success'
     assert_equal "$(gitlab_extract_pipeline_url "$mr_detail")" 'https://example.net/ci'
 

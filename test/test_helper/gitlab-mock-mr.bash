@@ -1,11 +1,11 @@
 GITLAB_DOMAIN="example.com"
 GITLAB_TOKEN="example"
 
-function gitlab_merge_request_summary {
+gitlab_merge_request_summary() {
     echo '{"iid":1,"web_url":"https://example.com/some/project/-/merge_requests/1"}'
 }
 
-function gitlab_merge_request {
+gitlab_merge_request() {
     local oldDesc
     oldDesc="[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)"
     oldDesc="${oldDesc}$(echo "\n\n## Commits")"
@@ -20,6 +20,6 @@ function gitlab_merge_request {
     }'
 }
 
-function mr_actions {
+mr_actions() {
     return 0
 }
