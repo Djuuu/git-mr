@@ -291,21 +291,23 @@ setup() {
 }
 
 @test "Asks for confirmation" {
-    if [ "$(confirm "Do you want to resolve draft status?" <<< "yes")" = "yes" ]; then confirmed=1; else confirmed=0; fi
-    assert_equal $confirmed 1
+    run confirm "Are you sure?" <<< "yes"
+    assert_success
+    run confirm "Are you sure?" <<< "y"
+    assert_success
 
-    if [ "$(confirm "Do you want to resolve draft status?" <<< "y")" = "yes" ]; then confirmed=1; else confirmed=0; fi
-    assert_equal $confirmed 1
-
-    if [ "$(confirm "Do you want to resolve draft status?" <<< "no")" = "yes" ]; then confirmed=1; else confirmed=0; fi
-    assert_equal $confirmed 0
-
-    if [ "$(confirm "Do you want to resolve draft status?" <<< "n")" = "yes" ]; then confirmed=1; else confirmed=0; fi
-    assert_equal $confirmed 0
+    run confirm "Are you sure?" <<< "no"
+    assert_failure
+    run confirm "Are you sure?" <<< "n"
+    assert_failure
+    run confirm "Are you sure?" <<< "whatever"
+    assert_failure
 
     GIT_MR_YES=1
-    if [ "$(confirm "Do you want to resolve draft status?" <<< "n")" = "yes" ]; then confirmed=1; else confirmed=0; fi
-    assert_equal $confirmed 1
+    run confirm "Are you sure?" <<< "whatever"
+    assert_success
+    run confirm "Are you sure?"
+    assert_success
 }
 
 @test "Builds json" {

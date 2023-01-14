@@ -251,18 +251,18 @@ echo_spacer() {
 confirm() {
     local question=$1
 
-    if [ "$GIT_MR_YES" = "1" ]; then
+    if [[ $GIT_MR_YES -eq 1 ]]; then
         echo_error "$(colorize "$question" "cyan") -> yes"
-        echo "yes"
-        return
+        return 0
     fi
 
     local response
     read -r -p "$(colorize "$question" "lightcyan" "bold") [y/N] " response
     case "$response" in
-        [yY][eE][sS]|[yY]) echo "yes" ;;
-        *)                 echo "no" ;;
+        [yY][eE][sS]|[yY]) return 0 ;;
     esac
+
+    return 1
 }
 
 clear_screen() {
@@ -858,7 +858,7 @@ gitlab_undraft() {
 
     local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
 
-    if [ "$(confirm "Do you want to resolve draft status?")" = "yes" ]; then
+    if confirm "Do you want to resolve draft status?"; then
         echo -n "Resolving draft status... "
 
         mr_data=$(jq_build "title" "$undraft_title") || exit $?
@@ -1264,7 +1264,7 @@ mr_update_labels() {
     echo
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
-    if [ "$(confirm "Do you want to update the merge request labels to \"$new_labels\"?")" = "yes" ]; then
+    if confirm "Do you want to update the merge request labels to \"$new_labels\"?"; then
         echo -n "Updating merge request labels... "
 
         mr_data=$(jq_build "labels" "$new_labels") || exit $?
@@ -1413,7 +1413,7 @@ mr_menu_update() {
     mr_menu_print_description "$updated_description" "$mr_url" "$mr_title"
 
     local mr_update_data='{}'
-    if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
+    if confirm "Do you want to update the menu in the merge request description?"; then
         mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
     fi
     if [ "$mr_update_data" != "{}" ]; then
@@ -1472,7 +1472,7 @@ mr_menu_update_all() {
         mr_menu_print_description "$updated_description" "$mr_url" "$mr_title" "$project_name"
 
         mr_update_data='{}'
-        if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
+        if confirm "Do you want to update the menu in the merge request description?"; then
             mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
         fi
         if [ "$mr_update_data" != "{}" ]; then
@@ -1823,7 +1823,7 @@ mr_update() {
 
         if [ $((updated_commit_count + new_commit_count)) -gt 0 ]; then
             update_prompt=1
-            if [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
+            if confirm "Do you want to update the merge request description?"; then
 
                 local new_description; new_description=$(echo -e "${new_description_content}")
                 local newLines=""
@@ -1844,7 +1844,7 @@ mr_update() {
 
         if [ "$target_branch" != "$current_target" ]; then
             update_prompt=1
-            if [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?")" = "yes" ]; then
+            if confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?"; then
                 if git_remote_branch_exists "$target_branch"; then
                     mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
                 else
@@ -1924,7 +1924,7 @@ mr_merge() {
 
     if gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is a draft (work in progress)"
-        if [ "$(confirm "Do you want to resolve draft status?")" != "yes" ]; then echo_error; return; fi
+        if ! confirm "Do you want to resolve draft status?"; then echo_error; return; fi
 
         echo -n "Resolving draft status... "
         local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
@@ -1937,7 +1937,7 @@ mr_merge() {
 
     # Merge
 
-    if [ "$(confirm "Do you want to merge '$source_branch' into '$current_target'?")" != "yes" ]; then echo; return; fi
+    if ! confirm "Do you want to merge '$source_branch' into '$current_target'?"; then echo; return; fi
 
     echo -n "Merging '$source_branch'... "
     local result; result=$(gitlab_merge_request_merge "${mr_iid}")
@@ -1946,7 +1946,7 @@ mr_merge() {
 
     # checkout target branch
 
-    if [ "$(confirm "Do you want to checkout '$current_target' and pull changes?")" != "yes" ]; then echo; return; fi
+    if ! confirm "Do you want to checkout '$current_target' and pull changes?"; then echo; return; fi
 
     echo "$(colorize "git checkout $current_target && git pull --rebase" "lightgray")"
     git_mr_readonly ||
@@ -1955,7 +1955,7 @@ mr_merge() {
 
     # delete local branch
 
-    if [ "$(confirm "Do you want to delete local branch '$source_branch'?")" != "yes" ]; then echo; return; fi
+    if ! confirm "Do you want to delete local branch '$source_branch'?"; then echo; return; fi
 
     echo "$(colorize "git branch -d $source_branch" "lightgray")"
     git_mr_readonly ||
@@ -2022,7 +2022,7 @@ mr_ip() {
 
     if [ -n "$issue_code" ] &&
        [ -n "$JIRA_IP_ID" ] &&
-       [ "$(confirm "Do you want to update the Jira ticket status to \"In Progress\"?")" = "yes" ]; then
+       confirm "Do you want to update the Jira ticket status to \"In Progress\"?"; then
         echo -n "Updating Jira ticket status... "
 
         jira_transition "$issue_code" "$JIRA_IP_ID" && echo -e "OK\n"
@@ -2044,7 +2044,7 @@ mr_cr() {
 
     if [ -n "$issue_code" ] &&
        [ -n "$JIRA_CR_ID" ] &&
-       [ "$(confirm "Do you want to update the Jira ticket status to \"Code Review\"?")" = "yes" ]; then
+       confirm "Do you want to update the Jira ticket status to \"Code Review\"?"; then
         echo -n "Updating Jira ticket status... "
 
         jira_transition "$issue_code" "$JIRA_CR_ID" && echo -e "OK\n"
@@ -2066,7 +2066,7 @@ mr_qa() {
 
     if [ -n "$issue_code" ] &&
        [ -n "$JIRA_QA_ID" ] &&
-       [ "$(confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?")" = "yes" ]; then
+       confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?"; then
         echo -n "Updating Jira ticket status... "
 
         jira_transition "$issue_code" "$JIRA_QA_ID" && echo -e "OK\n"
