@@ -1698,6 +1698,7 @@ function mr_status
     gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
+    git_check_branches "$source_branch" "-"
 
     # Search existing merge request
 
