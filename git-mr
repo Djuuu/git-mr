@@ -1048,7 +1048,7 @@ mr_print_status() {
 
     if [ "$resolved_count" -lt "$thread_count" ]; then
         local first_unresolved_note_id
-        first_unresolved_note_id=$(echo "$threads" | grep 'unresolved:true' | cut -f 3 | cut -d ':' -f 2)
+        first_unresolved_note_id=$(echo "$threads" | grep 'unresolved:true' | cut -f 3 | cut -d ':' -f 2 | head -n 1)
         local note_url="${mr_url}#note_${first_unresolved_note_id}"
         threads_display=$(terminal_link "$note_url" "$threads_display")
     fi
