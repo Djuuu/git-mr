@@ -5,6 +5,7 @@ _git_mr() {
     local isMenuStatus
     local isMenuUpdate
     local isMenuUpdateAll
+    local isMerge
     local isUpdate
 
     # Parse current command words to get context
@@ -20,6 +21,7 @@ _git_mr() {
                 [[ "$w" == "--all" ]] && isMenuUpdateAll=1
             fi
         else
+            [[ "$w" == "merge" ]] && isMerge=1
             [[ "$w" == "update" ]] && isUpdate=1
         fi
     done
@@ -44,12 +46,17 @@ _git_mr() {
     case "$cur" in
         --*)
             __gitcomp "--code --target --verbose --extended --yes"
+            [[ -n $isMerge ]] &&
+                __gitcomp_nl_append "--force"
             [[ -n $isUpdate ]] &&
                 __gitcomp_nl_append "--new-section"
             return
             ;;
         -*)
             __gitcomp "-c --code -t --target -v --verbose -e --extended -y --yes"
+            [[ -n $isMerge ]] &&
+                __gitcomp_nl_append "-f" &&
+                __gitcomp_nl_append "--force"
             [[ -n $isUpdate ]] &&
                 __gitcomp_nl_append "-n" &&
                 __gitcomp_nl_append "--new-section"

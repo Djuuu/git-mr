@@ -1917,9 +1917,14 @@ mr_merge() {
     unresolved_thread_count=$(gitlab_merge_request_threads "$project_url" "$mr_iid" | grep -c 'unresolved:true')
 
     if [ "$unresolved_thread_count" -gt 0 ]; then
-        echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging."
-        echo_error
-        return
+        if [[ $GIT_MR_FORCE -eq 1 ]]; then
+            echo_error "There are $unresolved_thread_count unresolved threads. Merging anyway."
+            echo_error
+        else
+            echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging or use the --force option."
+            echo_error
+            return
+        fi
     fi
 
     if gitlab_title_is_draft "$mr_title"; then
@@ -2146,6 +2151,9 @@ ${b}OPTIONS${r}
        -n, --new-section
            Add new section in description for new commits (for \`git mr update\`)
 
+       -f, --force
+           Force merge even if there are unresolved threads (for \`git mr merge\`)
+
        -a, --all
            Update all merge requests (for \`git mr menu update\`).
 
@@ -2234,6 +2242,7 @@ while [[ $# -gt 0 ]]; do
         -e|-E|--extended)    GIT_MR_EXTENDED=1 ;;
         -y|-Y|--yes)         GIT_MR_YES=1     ;;
         -n|-N|--new-section) GIT_MR_UPDATE_NEW_SECTION=1 ;;
+        -f|-F|--force)       GIT_MR_FORCE=1 ;;
         -v|-V|--verbose)     GIT_MR_VERBOSE=1 ;;
 
         -h) usage; exit 0; ;;

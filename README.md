@@ -73,6 +73,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
   Bypass confirmation prompts (always answer "yes").
 * `-n`, `--new-section`  
   Add new section in description for new commits (for `git mr update`)
+* `-f`, `--force`  
+  Force merge even if there are unresolved threads (for `git mr merge`)
 * `-a`, `--all`  
   Update all merge requests (for `git mr menu update`).
 * `-v`, `--verbose`  
