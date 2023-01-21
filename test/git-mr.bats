@@ -17,6 +17,8 @@ git-mr() {
 }
 
 setup_file() {
+    export LANG=C.UTF-8 # ensure tests handle UTF-8 properly
+
     export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
     export JIRA_INSTANCE=
     export JIRA_USER=
