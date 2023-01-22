@@ -18,13 +18,18 @@ git_base_branch() {
     git show-ref -q --heads "$branch"                     || exit 3 # Branch does not exist
 
     # Nearest branch in commit history
-    local base_branch; base_branch=$( \
-        git log --oneline --decorate "${branch}" \
-            --simplify-by-decoration --decorate-refs='refs/heads/*' | # select only commits with a local branch
-        head -n2 | tail -n1                    | # select closest decoration before current HEAD
-        sed 's/[a-f0-9]\+ (\([^)]*\)) .*/\1/'  | # filters out everything but decorations
-        sed -e 's/, /\n/g'                     | # splits decorations
-        head -n1)                                # keep only first decoration
+    local base_branch
+    local refs_logs; refs_logs=$(git log --oneline --decorate "${branch}" \
+            --simplify-by-decoration --decorate-refs='refs/heads/*') # select only commits with a local branch
+
+    if [[ $(echo "$refs_logs" | wc -l) -gt 1 ]]; then
+        base_branch=$( \
+            echo "$refs_logs" |
+            head -n2 | tail -n1                    | # select closest decoration before current HEAD
+            sed 's/[a-f0-9]\+ (\([^)]*\)) .*/\1/'  | # filters out everything but decorations
+            sed -e 's/, /\n/g'                     | # splits decorations
+            head -n1)                                # keep only first decoration
+    fi
 
     # First possible merge base
     if ! git show-ref -q --heads "$base_branch"; then
@@ -47,10 +52,18 @@ git_branch_exists() {
 }
 
 git_default_branch() {
-    local remote; remote=$(git_remote)
+    local remote; remote=$(gitlab_remote || git_remote)
     local default; default=$(git symbolic-ref "refs/remotes/${remote}/HEAD" -- 2>/dev/null)
 
     if [ -n "$default" ]; then
+
+        local local_tracking
+        local_tracking=$(git branch -vv | grep "${default#"refs/remotes/"}" | sed 's/^[* ]*//' | cut -d' ' -f1)
+
+        # local branch tracking default remote with a different name
+        [[ -n $local_tracking ]] && echo "$local_tracking" && return
+
+        # short local name of remote default
         echo "${default#"refs/remotes/${remote}/"}"
         return
     fi
@@ -61,7 +74,7 @@ git_default_branch() {
 
 git_remote_branch_exists() {
     local branch=$1
-    local remote=${2:-$(git_remote)}
+    local remote=${2:-$(gitlab_remote)}
 
     [ -n "$(git ls-remote --heads "$remote" "$branch")" ]
 }
@@ -234,7 +247,7 @@ echo_error() {
 }
 
 echo_debug() {
-    [ -z "$GIT_MR_VERBOSE" ] && return 0
+    [[ $GIT_MR_VERBOSE -ne 1 ]] && return 0
 
     colorize "$1\n" "gray" >&2
 }
@@ -308,6 +321,7 @@ open_in_browser() {
     local open_command
     if   [[ "$OSTYPE" == "linux-gnu"* ]]; then open_command='xdg-open';
     elif [[ "$OSTYPE" == "darwin"*    ]]; then open_command='open';
+    elif [[ "$OSTYPE" == "msys"*      ]]; then open_command='explorer';
     fi
 
     if [ -n "$open_command" ] && [ -x "$(command -v $open_command)" ]; then
@@ -322,7 +336,7 @@ open_in_browser() {
 }
 
 git_mr_readonly() {
-    [ -z "$GIT_MR_READONLY" ] && return 1
+    [[ $GIT_MR_READONLY -ne 1 ]] && return 1
 
     [ -n "$1" ] && echo "$(colorize "🚫 Read-only 🚫" "gray")" >&2
 
@@ -441,31 +455,46 @@ gitlab_check_env() {
     [ -n "$GITLAB_TOKEN" ]  || exit_error 11 "GITLAB_TOKEN is not set"
 }
 
+gitlab_remote() {
+    local remote remote_url
+
+    for remote in $(git remote); do
+        remote_url=$(git remote get-url --push "$remote" | grep "${GITLAB_DOMAIN}" || true)
+        [[ -n "$remote_url" ]] && echo "$remote" && return 0
+    done
+
+    return 1
+}
+
 gitlab_project_url() {
+    local remote
     local remote_url
     local project_url
 
-    remote_url=$(git remote get-url --push origin | grep "${GITLAB_DOMAIN}")
+    remote=$(gitlab_remote)
+    [[ -n $remote ]] &&
+        remote_url=$(git remote get-url --push "$remote" | grep "${GITLAB_DOMAIN}")
 
     if [[ "$remote_url" = git* ]]; then
         project_url=$(echo "$remote_url" | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
-    fi
-
-    if [[ "$remote_url" = https* ]]; then
+    elif [[ "$remote_url" = https* ]]; then
         project_url=$(echo "$remote_url" | sed "s/https:\/\/${GITLAB_DOMAIN}\/\(.*\).git/\1/")
     fi
 
-    if [ -z "$project_url" ]; then
-        local remote; remote=$(git remote get-url --push origin)
-        local domain; domain=$(echo "$remote" | sed 's/.*@\(.*\):.*/\1/')
-        local message
-        read -r -d '' message <<EOF
-Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
-  origin:     ${remote}
-  current:    GITLAB_DOMAIN="${GITLAB_DOMAIN}"
-  Suggestion: GITLAB_DOMAIN="${domain}"
-EOF
-        exit_error 12 "$message" # Unable to determine Gitlab project URL
+    if [[ -z $project_url ]]; then
+        remote=$(git remote | head -n 1)
+        remote_url=$(git remote get-url --push "$remote")
+
+        local suggested_domain
+        suggested_domain=$(git remote get-url --push "$remote" | sed 's/.*@\(.*\):.*/\1/')
+
+        exit_error 12 "$(cat <<- EOF
+			Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
+			  ${remote}:     ${remote_url}
+			  current:    GITLAB_DOMAIN="${GITLAB_DOMAIN}"
+			  Suggestion: GITLAB_DOMAIN="${suggested_domain}"
+		EOF
+        )"
     fi
 
     echo "$project_url"
@@ -474,34 +503,13 @@ EOF
 gitlab_project_request() {
     gitlab_check_env
 
-    local project_url; project_url=$(gitlab_project_url) || exit $?
-    local project_id;  project_id=$(urlencode "$project_url")
-
-    [ -z "$project_id" ] && return
-
     local request_url=$1
     local request_verb=${2:-"GET"}
     local request_data=${3}
 
-    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+    local project_url; project_url=$(gitlab_project_url) || exit $?
 
-    local gitlab_project_url="${gitlab_base_url}/projects/${project_id}"
-
-    echo_debug "GitLab - ${request_verb} ${gitlab_project_url}/${request_url} ${request_data}"
-
-    [ "$request_verb" != "GET" ] && git_mr_readonly && echo '{}' && return 0
-
-    result=$(curl -Ss \
-        -X "${request_verb}" \
-        -H "Private-Token: ${GITLAB_TOKEN}" \
-        -H "Content-Type: application/json" \
-        --data "${request_data}" \
-        --max-time "${GIT_MR_TIMEOUT:-5}" \
-        "${gitlab_project_url}/${request_url}") || exit_error 10 "Gitlab request error"
-
-    [ -n "$(gitlab_check_error "$result")" ] && return
-
-    echo "$result"
+    gitlab_request "projects/$(urlencode "$project_url")/${request_url}" "$request_verb" "$request_data"
 }
 
 gitlab_request() {
@@ -517,6 +525,7 @@ gitlab_request() {
 
     [ "$request_verb" != "GET" ] && git_mr_readonly && echo '{}' && return 0
 
+    local result
     result=$(curl -Ss \
         -X "${request_verb}" \
         -H "Private-Token: ${GITLAB_TOKEN}" \
@@ -746,7 +755,8 @@ gitlab_merge_request_threads() {
                         first_unresolved_note_id: .notes | map(select(.resolvable == true and .resolved == false) | .id) | .[0]
                     }
                 ) | .[] |
-                .id + "\t" + "unresolved:" + (.unresolved | tostring) + "\t" + "note_id:" + (.first_unresolved_note_id | tostring)')
+                .id + "\t" + "unresolved:" + (.unresolved | tostring) + "\t" + "note_id:" + (.first_unresolved_note_id | tostring)' |
+                sed 's/\r//g')
 
             # append page
             if [ -z "$thread_summaries" ]; then
