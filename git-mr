@@ -230,12 +230,22 @@ colorize() {
     fi
 }
 
+has_links() {
+    if [[ $GIT_MR_NO_TERMINAL_LINK -ne 1 ]] &&
+        which tput > /dev/null 2>&1 &&
+        [ -n "$TERM" ] &&
+        [ "$(tput -T"$TERM" colors)" -ge 8 ];then
+            return 0
+    fi
+    return 1
+}
+
 # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
 terminal_link() {
     local href=$1
     local text=$2
 
-    if which tput > /dev/null 2>&1 && [ -n "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
+    if has_links; then
         printf "\e]8;;%s\e\\%s\e]8;;\e\\" "$href" "$text"
     else
         echo -n "$text"
@@ -996,6 +1006,7 @@ mr_print_title() {
 
     echo "--------------------------------------------------------------------------------"
     echo " $(terminal_link "$mr_url" "$(gitlab_title_undraft "$mr_title")")"
+    has_links || echo " ⇒ $mr_url"
     echo "--------------------------------------------------------------------------------"
 }
 
@@ -1377,6 +1388,7 @@ mr_menu_status() {
         local merge_request; merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
 
         echo "* $(colorize "$project_name" "bold"): $(terminal_link "$web_url" "$title")"
+        has_links || echo "  ⇒ $web_url"
         mr_show_status "$mr_iid" "$merge_request"
         echo
     done < <(echo "$menu_items")

@@ -335,6 +335,19 @@ full_sha() {
     assert_output "Some%20%27string%27%26%22stuff%22%20%28that%20needs%20%5Bto%5D%20be%29%20encoded%21"
 }
 
+@test "Checks terminal link support (sort of)" {
+    TERM=xterm-256color
+    GIT_MR_NO_TERMINAL_LINK=
+    run has_links; assert_success
+
+    GIT_MR_NO_TERMINAL_LINK=1
+    run has_links; assert_failure
+
+    GIT_MR_NO_TERMINAL_LINK=
+    TERM=xterm-mono # disable colors
+    run has_links; assert_failure
+}
+
 @test "Outputs conditionally depending on verbosity" {
     TERM=xterm-mono # disable colors
 
@@ -791,6 +804,7 @@ ko"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
 		--------------------------------------------------------------------------------
 
 		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
@@ -813,6 +827,7 @@ ko"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
 		--------------------------------------------------------------------------------
 
 		   🏷  [Testing] [My Team]                                             (↣ main)
@@ -833,6 +848,7 @@ ko"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
 		--------------------------------------------------------------------------------
 
 		   🏷  [Accepted] [My Team]                                            (↣ main)
@@ -871,6 +887,7 @@ ko"
 
 		--------------------------------------------------------------------------------
 		 My MR
+		 ⇒ https://gitlab.example.net/some/project/-/merge_requests/1
 		--------------------------------------------------------------------------------
 
 		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
@@ -929,6 +946,7 @@ ko"
 
 		--------------------------------------------------------------------------------
 		 My MR
+		 ⇒ https://gitlab.example.net/some/project/-/merge_requests/1
 		--------------------------------------------------------------------------------
 
 		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
