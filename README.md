@@ -1,6 +1,6 @@
 # git-mr
 
-[![Tests](https://github.com/Djuuu/git-mr/actions/workflows/test.yml/badge.svg)](https://github.com/Djuuu/git-mr/actions/workflows/test.yml)
+[![Tests](https://github.com/Djuuu/git-mr/actions/workflows/tests.yml/badge.svg)](https://github.com/Djuuu/git-mr/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Beerware%20%F0%9F%8D%BA-yellow)](https://web.archive.org/web/20160322002352/http://www.cs.trincoll.edu/hfoss/wiki/Chris_Fei:_Beerware_License)
 
 Prepares a merge request description, with link to Jira ticket and current branch commit list.

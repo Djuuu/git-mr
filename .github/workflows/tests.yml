@@ -1,0 +1,43 @@
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Run ShellCheck
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install shellcheck
+          LC_ALL=C.UTF-8 shellcheck git-mr
+
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: ['ubuntu-20.04', 'ubuntu-22.04', 'windows-2019', 'macos-12']
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - name: Show versions
+        run: |
+          bash --version
+          git --version
+
+      - name: Setup BATS
+        uses: mig4/setup-bats@v1
+        with:
+          bats-version: 1.8.2
+
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Run tests on ${{ matrix.os }}
+        run: bash -c "bats --print-output-on-failure --formatter tap ./test"
