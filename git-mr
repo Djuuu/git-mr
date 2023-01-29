@@ -179,6 +179,24 @@ git_titlize_branch() {
 ################################################################################
 # Misc. utilities
 
+# sed wrapper (use gsed if available on Mac)
+sed() {
+    if type gsed >/dev/null 2>&1; then
+        gsed "$@"
+    else
+        command sed "$@"
+    fi
+}
+
+# grep wrapper (use ggrep if available on Mac)
+grep() {
+    if type ggrep >/dev/null 2>&1; then
+        ggrep "$@"
+    else
+        command grep "$@"
+    fi
+}
+
 exit_error() {
     local code=$1
     local msg="$2"

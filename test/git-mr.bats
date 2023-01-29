@@ -119,6 +119,16 @@ full_sha() {
     assert_failure
 }
 
+@test "Uses GNU commands" {
+    run sed --version
+    assert_success
+    assert_output --partial "GNU sed"
+
+    run grep --version
+    assert_success
+    assert_output --partial "GNU grep"
+}
+
 @test "Determines current branch" {
     git switch main
     run git_current_branch
