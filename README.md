@@ -92,6 +92,15 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * `bash`, `git` and usual command-line utilities: `grep`, `sed`, `curl`, `head`, `tail`, `tr`.
 * [**`jq`**](https://stedolan.github.io/jq/) is required and needs to be in PATH.
 
+**Note for macOS users:**  
+> macOS usually comes with a pretty outdated version of Bash (3.x) and the BSD versions of `grep` and `sed`.  
+> You will need to install a more recent versions of bash (>=4.x) and the GNU versions of `sed` and `grep`.  
+> These are available on Homebrew:
+> ```shell
+> brew install bash gnu-sed grep
+> ```
+> git-mr detects these versions, so no additional path adjustments should be necessary.
+
 #### git-mr
 
 * Add the `git-mr` directory to your `PATH`<br>
