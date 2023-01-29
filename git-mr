@@ -28,10 +28,10 @@ git_base_branch() {
     if [[ $(echo "$refs_logs" | wc -l) -gt 1 ]]; then
         base_branch=$( \
             echo "$refs_logs" |
-            head -n2 | tail -n1                    | # select closest decoration before current HEAD
-            sed 's/[a-f0-9]\+ (\([^)]*\)) .*/\1/'  | # filters out everything but decorations
-            sed -e 's/, /\n/g'                     | # splits decorations
-            head -n1)                                # keep only first decoration
+            head -n2 | tail -n1                  | # select closest decoration before current HEAD
+            sed 's/[a-f0-9]* (\([^)]*\)) .*/\1/' | # filters out everything but decorations
+            sed -e 's/, /\n/g'                   | # splits decorations
+            head -n1)                              # keep only first decoration
     fi
 
     # First possible merge base
@@ -205,12 +205,34 @@ urlencode() {
     LC_ALL="$oLC_ALL"
 }
 
+has_terminal_colors() {
+    if which tput > /dev/null 2>&1 &&
+        [ -n "$TERM" ] &&
+        [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
+            return 0
+    fi
+    return 1
+}
+
+has_colors() {
+    if [[ $GIT_MR_NO_COLORS -ne 1 ]] && has_terminal_colors; then
+        return 0
+    fi
+    return 1
+}
+
+has_links() {
+    if [[ $GIT_MR_NO_TERMINAL_LINK -ne 1 ]] && has_terminal_colors; then
+        return 0
+    fi
+    return 1
+}
+
 # shellcheck disable=SC2034 # Ignore unused color variables
 colorize() {
     local input=$1
 
-    if which tput > /dev/null 2>&1 && [ -n "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
-
+    if has_colors; then
         local bold='\e[1m'; local nobold='\e[21m'
 
         local red='\e[31m';    local lightred='\e[91m'
@@ -228,20 +250,9 @@ colorize() {
         done
         echo -en "$input"
         echo -en "$reset"
-
     else
         echo "$input"
     fi
-}
-
-has_links() {
-    if [[ $GIT_MR_NO_TERMINAL_LINK -ne 1 ]] &&
-        which tput > /dev/null 2>&1 &&
-        [ -n "$TERM" ] &&
-        [ "$(tput -T"$TERM" colors)" -ge 8 ];then
-            return 0
-    fi
-    return 1
 }
 
 # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
@@ -1361,7 +1372,7 @@ mr_menu_print_title() {
     local current_index=$3
 
     local search_url; search_url="https://${GITLAB_DOMAIN}/dashboard/merge_requests?scope=all&state=all&search=$(urlencode "$issue_code")&in=title&sort=created_asc"
-    local mr_count; mr_count=$(echo "$menu_items" | wc -l)
+    local mr_count; mr_count=$(echo "$menu_items" | wc -l | tr -d ' ')
 
     echo "================================================================================"
     [ -z "$current_index" ] &&
@@ -2259,9 +2270,8 @@ GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
 
 git rev-parse > /dev/null 2>&1 || exit_error 1 "Not a git repository"
 
-if [ ! -x "$(command -v jq)" ]; then
-    exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
-fi
+[[ ! -x "$(command -v jq)" ]]     && exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
+[[ "${BASH_VERSINFO:-0}" -lt 4 ]] && exit_error 2 "Your bash version is too old: $BASH_VERSION"
 
 
 # Parse options
@@ -2319,7 +2329,7 @@ esac
 # Error code reference:
 #
 #   1   Not a git repository
-#   2   jq is not installed
+#   2   Dependency missing (jq is not installed, bash is too old)
 #   3   Git branch error
 #
 #  10   Gitlab request error

@@ -9,6 +9,9 @@ load "test_helper/bats-assert/load"
 setup_file() {
     export LANG=C.UTF-8 # ensure tests handle UTF-8 properly
 
+    export GIT_MR_NO_COLORS=1
+    export GIT_MR_NO_TERMINAL_LINK=1
+
     export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
     export JIRA_INSTANCE=
     export JIRA_USER=
@@ -323,8 +326,6 @@ full_sha() {
 # Misc. utilities
 
 @test "Exits with error" {
-    TERM=xterm-mono # disable colors
-
     run exit_error 3 "Nope!"
     assert_failure
     assert_output --partial "Nope!"
@@ -333,6 +334,19 @@ full_sha() {
 @test "Encodes URL arguments" {
     run urlencode "Some 'string'&\"stuff\" (that needs [to] be) encoded!"
     assert_output "Some%20%27string%27%26%22stuff%22%20%28that%20needs%20%5Bto%5D%20be%29%20encoded%21"
+}
+
+@test "Checks terminal color support" {
+    TERM=xterm-256color
+    GIT_MR_NO_COLORS=
+    run has_colors; assert_success
+
+    GIT_MR_NO_COLORS=1
+    run has_colors; assert_failure
+
+    GIT_MR_NO_COLORS=
+    TERM=ansi-mono # disable colors
+    run has_colors; assert_failure
 }
 
 @test "Checks terminal link support (sort of)" {
@@ -344,13 +358,11 @@ full_sha() {
     run has_links; assert_failure
 
     GIT_MR_NO_TERMINAL_LINK=
-    TERM=xterm-mono # disable colors
+    TERM=ansi-mono # disable colors
     run has_links; assert_failure
 }
 
 @test "Outputs conditionally depending on verbosity" {
-    TERM=xterm-mono # disable colors
-
     GIT_MR_VERBOSE=1
     run echo_debug "Some debug output"
     assert_success
@@ -415,8 +427,6 @@ full_sha() {
 }
 
 @test "Has read-only mode" {
-    TERM=xterm-mono # disable colors
-
     GIT_MR_READONLY=1
     run git_mr_readonly
     assert_success
@@ -534,8 +544,6 @@ full_sha() {
 }
 
 @test "Determines Gitlab project URL" {
-    TERM=xterm-mono # disable colors
-
     GITLAB_DOMAIN="test.example.net"
 
     run gitlab_project_url
@@ -574,8 +582,6 @@ full_sha() {
 }
 
 @test "Warns for Gitlab API request errors" {
-    TERM=xterm-mono # disable colors
-
     run gitlab_check_error '{"error":"failed"}'
     assert_output "\nGitlab error:\n  {\"error\":\"failed\"}\n
 ko"
@@ -789,9 +795,6 @@ ko"
 }
 
 @test "Prints MR status indicators" {
-
-    TERM=xterm-mono # disable colors
-
     mr='{
         "title": "Draft: Feature/XY-1234 Lorem Ipsum", "web_url":"https://gitlab.example.net/my/project/merge_requests/6",
         "labels":["Review","My Team"], "target_branch": "main", "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
@@ -861,7 +864,6 @@ ko"
 @test "Updates MR description with new commits in new section" {
     load "test_helper/gitlab-mock-mr.bash"
 
-    TERM=xterm-mono # disable colors
     GIT_MR_EXTENDED=
     GIT_MR_UPDATE_NEW_SECTION=1
 
@@ -919,7 +921,6 @@ ko"
 @test "Updates MR description with new commits with extended description" {
     load "test_helper/gitlab-mock-mr-extended.bash"
 
-    TERM=xterm-mono # disable colors
     GIT_MR_EXTENDED=1
     GIT_MR_UPDATE_NEW_SECTION=
 
@@ -1019,8 +1020,6 @@ ko"
 
 @test "Searches MRs across projects to build menu" {
     load "test_helper/gitlab-mock-menu.bash"
-
-    TERM=xterm-mono # disable colors
 
     run mr_menu
 
