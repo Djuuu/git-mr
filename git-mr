@@ -1248,18 +1248,31 @@ replace_labels() {
 is_status_label() {
     local label=$1
 
-    local system_labels; system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
+    local status_labels=${2:-"${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}"}
+    status_labels=$(echo "$status_labels" |
         sed 's/,,/,/g' |
         sed 's/^,//' | sed 's/,$//' |
         tr "," "\n")
 
     local match
-    match="$( echo "$label" | grep "$system_labels")" || return
+    match="$( echo "$label" | grep "$status_labels")" || return
 
     # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
-    (echo "$system_labels" | grep "$match" > /dev/null) || return
+    (echo "$status_labels" | grep "$match" > /dev/null) || return
 
     echo "$match"
+}
+
+is_status_cr_label() {
+    is_status_label "$1" "$GITLAB_CR_LABELS"
+}
+
+is_status_qa_label() {
+    is_status_label "$1" "$GITLAB_QA_LABELS"
+}
+
+is_status_ok_label() {
+    is_status_label "$1" "$GITLAB_OK_LABELS"
 }
 
 mr_format_labels() {
@@ -1271,8 +1284,15 @@ mr_format_labels() {
     local other_labels=()
 
     for label in "${labels_array[@]}"; do
-        if [ -n "$(is_status_label "$label")" ]; then
-            status_labels+=("$(colorize "[$label]" "lightpurple" "bold")")
+        if [ -n "$(is_status_cr_label "$label")" ]; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_CR_LABEL_COLOR:-lightblue bold})")
+        elif [ -n "$(is_status_qa_label "$label")" ]; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_QA_LABEL_COLOR:-lightpurple bold})")
+        elif [ -n "$(is_status_ok_label "$label")" ]; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_OK_LABEL_COLOR:-lightgreen})")
         else
             other_labels+=("[$label]")
         fi
@@ -2312,6 +2332,8 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 set -- "${args[@]}"
+
+
 
 
 # Run
