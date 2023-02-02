@@ -8,7 +8,6 @@ gitlab_request() {
                 {"iid": 21,"title":"MR 21 title","web_url":"https://example.net/21","state":"opened","project_id": 2},
                 {"iid": 41,"title":"MR 41 title","web_url":"https://example.net/21","state":"closed","project_id": 4}
             ]'
-            return 0
             ;;
 
         "projects?"*)
@@ -18,7 +17,6 @@ gitlab_request() {
                 {"id":3,"name":"Project C"},
                 {"id":4,"name":"Project D"}
             ]'
-            return 0
             ;;
 
         *)

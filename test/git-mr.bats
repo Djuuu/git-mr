@@ -1135,6 +1135,74 @@ This is an example without menu.
 }
 
 ################################################################################
+# Status change functions
+
+@test "Toggles MR labels & Jira ticket status" {
+    load "test_helper/gitlab-mock-toggle-status.bash"
+
+    GIT_MR_YES=1
+
+    GIT_MR_MOCK_LABELS='"Review","Testing","Accepted","My Team"'
+    run mr_ip
+    assert_output "$(cat <<- EOF
+
+		--------------------------------------------------------------------------------
+
+		Do you want to update the merge request labels to "My Team"? -> yes
+		Updating merge request labels... OK
+
+		Do you want to update the Jira ticket status to "In Progress"? -> yes
+		Updating Jira ticket status... OK
+		EOF
+    )"
+
+    GIT_MR_MOCK_LABELS='"Testing","Accepted","My Team"'
+    run mr_cr
+    assert_output "$(cat <<- EOF
+
+		--------------------------------------------------------------------------------
+
+		Do you want to update the merge request labels to "My Team,Review"? -> yes
+		Updating merge request labels... OK
+
+		Do you want to update the Jira ticket status to "Code Review"? -> yes
+		Updating Jira ticket status... OK
+		EOF
+    )"
+
+    GIT_MR_MOCK_LABELS='"Review","Accepted","My Team"'
+    run mr_qa
+    assert_output "$(cat <<- EOF
+
+		--------------------------------------------------------------------------------
+
+		Do you want to update the merge request labels to "My Team,Testing"? -> yes
+		Updating merge request labels... OK
+
+		Do you want to update the Jira ticket status to "Quality Assurance"? -> yes
+		Updating Jira ticket status... OK
+		EOF
+    )"
+
+    GIT_MR_MOCK_LABELS='"Review","Testing","My Team"'
+    run mr_accept
+    assert_output "$(cat <<- EOF
+
+		--------------------------------------------------------------------------------
+
+		Do you want to update the merge request labels to "My Team,Accepted"? -> yes
+		Updating merge request labels... OK
+
+		Do you want to resolve draft status? -> yes
+		Resolving draft status... OK
+
+		Do you want to update the Jira ticket status to "Accepted"? -> yes
+		Updating Jira ticket status... OK
+		EOF
+    )"
+}
+
+################################################################################
 # Merge request top-level functions
 
 @test "Provides pre-commit-msg hook" {

@@ -1306,7 +1306,7 @@ mr_format_labels() {
 }
 
 mr_update_labels() {
-    local source_branch=${1:-$(git_current_branch)}
+    local mr_iid=$1
 
     # strip leading & trailing label commas
     local to_remove; to_remove=$(echo -e "$2" | sed 's/^,*//' | sed 's/,*$//')
@@ -1316,16 +1316,6 @@ mr_update_labels() {
         echo_error "No label to add or remove"
         return
     fi
-
-    # Search existing merge request
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [ -z "$mr_summary" ]; then
-        echo_error "Merge request not found"
-        mr_print "$source_branch"
-        return
-    fi
-
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
 
     # Load existing merge request details
     local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
@@ -2104,7 +2094,16 @@ mr_ip() {
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
-    mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
+        echo_error "Merge request not found"
+        mr_print "$source_branch"
+        return
+    fi
+
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+
+    mr_update_labels "${mr_iid}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
 
     if [ -n "$issue_code" ] &&
        [ -n "$JIRA_IP_ID" ] &&
@@ -2126,7 +2125,16 @@ mr_cr() {
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
-    mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
+        echo_error "Merge request not found"
+        mr_print "$source_branch"
+        return
+    fi
+
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+
+    mr_update_labels "${mr_iid}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
 
     if [ -n "$issue_code" ] &&
        [ -n "$JIRA_CR_ID" ] &&
@@ -2148,7 +2156,16 @@ mr_qa() {
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
-    mr_update_labels "${source_branch}" "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
+        echo_error "Merge request not found"
+        mr_print "$source_branch"
+        return
+    fi
+
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+
+    mr_update_labels "${mr_iid}" "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
 
     if [ -n "$issue_code" ] &&
        [ -n "$JIRA_QA_ID" ] &&
@@ -2158,6 +2175,49 @@ mr_qa() {
         jira_transition "$issue_code" "$JIRA_QA_ID" && echo -e "OK\n"
     fi
     if [ -z "$JIRA_QA_ID" ]; then echo_error "Set JIRA_QA_ID to be able to update Jira status\n"; fi
+}
+
+mr_accept() {
+    git_mr_readonly show
+
+    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
+    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
+    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
+
+    local source_branch=${1:-$(git_current_branch)}
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
+
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [ -z "$mr_summary" ]; then
+        echo_error "Merge request not found"
+        mr_print "$source_branch"
+        return
+    fi
+
+    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
+
+    mr_update_labels "${mr_iid}" "${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_OK_LABELS}"
+
+    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
+    if gitlab_title_is_draft "$mr_title"; then
+        if confirm "Do you want to resolve draft status?"; then
+            echo -n "Resolving draft status... "
+            local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
+
+            mr_data=$(jq_build "title" "$undraft_title") || exit $?
+            local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+
+            if [ -n "$result" ]; then echo -e "OK\n"; fi
+        fi
+    fi
+
+    if [ -n "$issue_code" ] &&
+       [ -n "$JIRA_OK_ID" ] &&
+       confirm "Do you want to update the Jira ticket status to \"Accepted\"?"; then
+        echo -n "Updating Jira ticket status... "
+        jira_transition "$issue_code" "$JIRA_OK_ID" && echo -e "OK\n"
+    fi
+    if [ -z "$JIRA_OK_ID" ]; then echo_error "Set JIRA_OK_ID to be able to update Jira status\n"; fi
 }
 
 mr_hook() {
@@ -2197,8 +2257,8 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--all]  [SEARCH_TERM]
        ${u}git${r} ${u}mr${r} [OPTION...]  menu status          [SEARCH_TERM]
 
-       ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa)  [BRANCH]
-       ${u}git${r} ${u}mr${r} [OPTION...]  undraft     [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|accept)  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  undraft            [BRANCH]
 
        ${u}git${r} ${u}mr${r} hook
 
@@ -2276,6 +2336,7 @@ ${b}CONFIGURATION${r}
            export JIRA_IP_ID="xx" # "In Progress" status ID
            export JIRA_CR_ID="xx" # "Code Review" status ID
            export JIRA_QA_ID="xx" # "Quality Assurance" status ID
+           export JIRA_OK_ID="xx" # "Accepted" status ID
 
            # Check "Delete source branch" by default (defaults to 1)
            export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
@@ -2348,9 +2409,10 @@ case $1 in
 
     menu) mr_menu "${@:2}" ;;
 
-    p|ip|IP) mr_ip "${@:2}" ;;
-    r|cr|CR) mr_cr "${@:2}" ;;
-    q|qa|QA) mr_qa "${@:2}" ;;
+    p|ip|IP)     mr_ip     "${@:2}" ;;
+    r|cr|CR)     mr_cr     "${@:2}" ;;
+    q|qa|QA)     mr_qa     "${@:2}" ;;
+    a|ac|accept) mr_accept "${@:2}" ;;
 
     undraft) gitlab_undraft "${@:2}" ;;
 

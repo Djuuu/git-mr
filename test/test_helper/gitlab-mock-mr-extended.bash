@@ -3,7 +3,6 @@ gitlab_request() {
     case "$1" in
         "projects/my%2Fproject/merge_requests?state=opened&view=simple&source_branch=feature/AB-123-test-feature")
             echo '[{"iid":1,"web_url":"https://gitlab.example.net/some/project/-/merge_requests/1"}]'
-            return 0
             ;;
 
         "projects/my%2Fproject/merge_requests/1")
@@ -23,7 +22,6 @@ gitlab_request() {
                 "title":"My MR", "target_branch":"feature/base",
                 "description":"'"$oldDesc"'"
             }'
-            return 0
             ;;
 
         *)

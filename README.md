@@ -17,7 +17,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr status`](#git-mr-status)
     + [`git mr update`](#git-mr-update)
     + [`git mr menu`](#git-mr-menu)
-    + [`git mr ip|cr|qa`](#git-mr-ipcrqa)
+    + [`git mr ip|cr|qa|accept`](#git-mr-ipcrqaaccept)
     + [`git mr undraft`](#git-mr-undraft)
     + [`git mr merge`](#git-mr-merge)
     + [`git mr hook`](#git-mr-hook)
@@ -42,7 +42,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>update [--all]</i>  <i>[SEARCH_TERM]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>status</i>          <i>[SEARCH_TERM]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa)</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa|accept)</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>     <i>[BRANCH]</i>
 
 <b>git mr</b> <b>hook</b>
@@ -165,6 +165,7 @@ export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA st
 export JIRA_IP_ID="xx" # "In progress" status ID
 export JIRA_CR_ID="xx" # "Code review" status ID
 export JIRA_QA_ID="xx" # "Quality Assurance" status ID
+export JIRA_OK_ID="xx" # "Accepted" status ID
 
 # Check "Delete source branch" by default (defaults to 1)
 export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
@@ -267,10 +268,10 @@ Searches for all (non-closed) merge requests with the current issue code in the 
 
 ----------------------------------------------------------------
 
-### `git mr ip|cr|qa`
+### `git mr ip|cr|qa|accept`
 
 <pre>
-<b>git mr</b> <i>[OPTION...]</i> <b>ip|cr|qa</b> <i>[BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>ip|cr|qa|accept</b> <i>[BRANCH]</i>
 </pre>
 
 This will:
@@ -282,6 +283,7 @@ This will:
   - `JIRA_IP_ID`
   - `JIRA_CR_ID`
   - `JIRA_QA_ID`
+  - `JIRA_OK_ID`
 
 #### `git mr ip` _("in progress")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS`
@@ -297,6 +299,12 @@ This will:
 * adds Gitlab labels defined in `GITLAB_QA_LABELS`
 * sets Jira ticket to status ID defined in `JIRA_QA_ID`
 
+#### `git mr accept` _("accepted")_
+* removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_QA_LABELS`
+* adds Gitlab labels defined in `GITLAB_OK_LABELS`
+* removes Gitlab draft status
+* sets Jira ticket to status ID defined in `JIRA_OK_ID`
+
 ----------------------------------------------------------------
 
 ### `git mr undraft`
@@ -305,7 +313,7 @@ This will:
 <b>git mr</b> <i>[OPTION...]</i> <b>undraft</b> <i>[BRANCH]</i>
 </pre>
 
-This will resolve the Gitlab _Work in Progress_ status.
+This will resolve the Gitlab _Draft_ (_Work in Progress_) status.
 
 ----------------------------------------------------------------
 
