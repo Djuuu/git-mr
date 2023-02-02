@@ -332,7 +332,7 @@ jq_build() {
     local value=${2}
     local initial_data=${3:-"{}"}
 
-    local is_obj; is_obj=$(echo "$value" | grep '^\{.*\}$')
+    local is_obj; is_obj=$(echo "$value" | grep '^{.*}$')
     local is_num; is_num=$(echo "$value" | grep '^[0-9]*$')
 
     local current_object
