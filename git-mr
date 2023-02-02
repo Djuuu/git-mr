@@ -269,7 +269,7 @@ colorize() {
         echo -en "$input"
         echo -en "$reset"
     else
-        echo "$input"
+        echo -en "$input"
     fi
 }
 

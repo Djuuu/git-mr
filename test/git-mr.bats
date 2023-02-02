@@ -234,23 +234,23 @@ full_sha() {
 
     run git_check_branches "" main
     assert_failure
-    assert_output --partial "Not on any branch"
+    assert_output "Not on any branch"
 
     run git_check_branches test main
     assert_failure
-    assert_output --partial "Branch 'test' does not exist"
+    assert_output "Branch 'test' does not exist"
 
     run git_check_branches main epic/big-feature
     assert_failure
-    assert_output --partial "On default branch"
+    assert_output "On default branch"
 
     run git_check_branches master epic/big-feature
     assert_failure
-    assert_output --partial "On default branch"
+    assert_output "On default branch"
 
     run git_check_branches feature/base ""
     assert_failure
-    assert_output --partial "Unable to determine target branch"
+    assert_output "Unable to determine target branch"
 }
 
 @test "Lists current branch commits" {
@@ -338,7 +338,7 @@ full_sha() {
 @test "Exits with error" {
     run exit_error 3 "Nope!"
     assert_failure
-    assert_output --partial "Nope!"
+    assert_output "Nope!"
 }
 
 @test "Encodes URL arguments" {
@@ -376,7 +376,7 @@ full_sha() {
     GIT_MR_VERBOSE=1
     run echo_debug "Some debug output"
     assert_success
-    assert_output --partial "Some debug output"
+    assert_output "Some debug output"
 
     GIT_MR_VERBOSE=0
     run echo_debug "Some debug output"
@@ -558,7 +558,7 @@ full_sha() {
 
     run gitlab_project_url
     assert_failure
-    assert_output --partial "$(cat <<- EOF
+    assert_output "$(cat <<- EOF
 		Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
 		  fs-local:     ../remote
 		  current:    GITLAB_DOMAIN="test.example.net"
@@ -570,14 +570,14 @@ full_sha() {
     git remote add remote1 "git@${GITLAB_DOMAIN}:my/project.git"
     run gitlab_project_url
     assert_success
-    assert_output --partial "my/project"
+    assert_output "my/project"
     git remote remove remote1
 
     # HTTPS URL
     git remote add gitlab1 "https://${GITLAB_DOMAIN}/my/project.git"
     run gitlab_project_url
     assert_success
-    assert_output --partial "my/project"
+    assert_output "my/project"
     git remote remove gitlab1
 }
 
@@ -593,12 +593,22 @@ full_sha() {
 
 @test "Warns for Gitlab API request errors" {
     run gitlab_check_error '{"error":"failed"}'
-    assert_output "\nGitlab error:\n  {\"error\":\"failed\"}\n
-ko"
+    assert_output "$(cat <<- EOF
+
+		Gitlab error:
+		  {"error":"failed"}
+		ko
+		EOF
+    )"
 
     run gitlab_check_error '{"message":"failed"}'
-    assert_output "\nGitlab error:\n  {\"message\":\"failed\"}\n
-ko"
+    assert_output "$(cat <<- EOF
+
+		Gitlab error:
+		  {"message":"failed"}
+		ko
+		EOF
+    )"
 }
 
 @test "Determines new merge request URL" {
@@ -609,7 +619,7 @@ ko"
     }
 
     run gitlab_new_merge_request_url
-    assert_output --partial "Target branch 'feature/base' does not exist on remote"
+    assert_output "Target branch 'feature/base' does not exist on remote"
 
     # bypass remote branch existence check
     git_remote_branch_exists() { return 0; }
@@ -751,7 +761,7 @@ ko"
 
     git switch feature/base
     run git-mr code
-    assert_output --partial "Unable to guess issue code"
+    assert_output "Unable to guess issue code"
 }
 
 @test "Generates MR title from Jira issue title" {
