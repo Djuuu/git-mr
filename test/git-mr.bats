@@ -1012,6 +1012,30 @@ full_sha() {
     assert_output "toto,tata,plop,pouet"
 }
 
+@test "Compares labels" {
+    run labels_differ;                         assert_failure
+    run labels_differ "aaa"         "aaa";     assert_failure
+    run labels_differ "aaa,bbb"     "aaa,bbb"; assert_failure
+
+    run labels_differ "aaa,bbb"     "";            assert_success
+    run labels_differ "aaa,bbb"     "aaa,bbb,ccc"; assert_success
+    run labels_differ "aaa,ccc"     "aaa,bbb,ccc"; assert_success
+    run labels_differ "aaa,bbb,ccc" "aaa,bbb";     assert_success
+    run labels_differ "aaa,bbb,ccc" "aaa,ccc";     assert_success
+    run labels_differ ""            "aaa,bbb,ccc"; assert_success
+
+    run labels_differ "aaa,bbb,ccc" "aaa,bbb,ccc"; assert_failure
+    run labels_differ "aaa,bbb,ccc" "aaa,ccc,bbb"; assert_failure
+    run labels_differ "aaa,bbb,ccc" "bbb,aaa,ccc"; assert_failure
+    run labels_differ "aaa,bbb,ccc" "bbb,ccc,aaa"; assert_failure
+    run labels_differ "aaa,bbb,ccc" "ccc,aaa,bbb"; assert_failure
+    run labels_differ "aaa,bbb,ccc" "ccc,bbb,aaa"; assert_failure
+
+    run labels_differ "aaa,bbb,ccc" "ccc,bbb,aaa,ccc"; assert_failure
+
+    run labels_differ "aaa,bbb,ccc" ",,ccc,bbb,aaa,,ccc"; assert_failure
+}
+
 @test "Identifies workflow-specific labels" {
     GITLAB_IP_LABELS="wip1,wip2"
     GITLAB_CR_LABELS="cr1,cr2"
@@ -1212,6 +1236,17 @@ This is an example without menu.
 
 		Do you want to update the merge request labels to "My Team,Testing"? -> yes
 		Updating merge request labels... OK
+
+		Do you want to update the Jira ticket status to "Quality Assurance"? -> yes
+		Updating Jira ticket status... OK
+		EOF
+    )"
+
+    GIT_MR_MOCK_LABELS='"Testing","My Team"' # no label change
+    run mr_qa
+    assert_output "$(cat <<- EOF
+
+		--------------------------------------------------------------------------------
 
 		Do you want to update the Jira ticket status to "Quality Assurance"? -> yes
 		Updating Jira ticket status... OK

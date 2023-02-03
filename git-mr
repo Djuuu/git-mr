@@ -1260,6 +1260,20 @@ replace_labels() {
     echo "$labels"
 }
 
+labels_differ() {
+    local old_labels=$1
+    local new_labels=$2
+
+    [[ $old_labels = "$new_labels" ]] && return 1
+
+    local old_sorted; old_sorted=$(echo "$old_labels" | tr "," "\n" | grep . | sort -u | tr "\n" ",")
+    local new_sorted; new_sorted=$(echo "$new_labels" | tr "," "\n" | grep . | sort -u | tr "\n" ",")
+
+    [[ $old_sorted = "$new_sorted" ]] && return 1
+
+    return 0
+}
+
 is_status_label() {
     local label=$1
 
@@ -1350,7 +1364,8 @@ mr_update_labels() {
     echo
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
-    if confirm "Do you want to update the merge request labels to \"$new_labels\"?"; then
+    if labels_differ "$labels" "$new_labels" &&
+       confirm "Do you want to update the merge request labels to \"$new_labels\"?"; then
         echo -n "Updating merge request labels... "
 
         mr_data=$(jq_build "labels" "$new_labels") || exit $?
