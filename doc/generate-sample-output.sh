@@ -14,9 +14,10 @@ pushd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null
 . ../git-mr
 
 
-GITLAB_OK_LABELS="Accepted"
-GITLAB_QA_LABELS="Testing"
+GITLAB_IP_LABELS="WIP"
 GITLAB_CR_LABELS="Review"
+GITLAB_QA_LABELS="Testing"
+GITLAB_OK_LABELS="Accepted"
 
 issue_code="XY-1234"
 
@@ -99,7 +100,7 @@ sample_mr_status() {
 
     local mr='{
         "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
-        "labels":["Review","My Team"], "target_branch": "main",
+        "labels":["WIP","My Team"], "target_branch": "main",
         "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
         "head_pipeline": {"status":"failed", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'

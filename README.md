@@ -157,9 +157,10 @@ Other optional configuration variables:
 export GITLAB_DEFAULT_LABELS="Review,My Team"
 
 # Gitlab status labels (comma-separated, without spaces in between)
-export GITLAB_CR_LABELS="Review"             # Labels set on CR step
-export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
-export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
+export GITLAB_IP_LABELS="WIP"      # Label(s) set on IP step
+export GITLAB_CR_LABELS="Review"   # Label(s) set on CR step
+export GITLAB_QA_LABELS="Testing"  # Label(s) set on QA step
+export GITLAB_OK_LABELS="Accepted" # Label(s) set on Accepted step
 
 # Jira status - transition IDs
 export JIRA_IP_ID="xx" # "In progress" transition ID
@@ -276,6 +277,7 @@ Searches for all (non-closed) merge requests with the current issue code in the 
 
 This will:
 * Set Gitlab labels according to:
+  - `GITLAB_IP_LABELS`
   - `GITLAB_CR_LABELS`
   - `GITLAB_QA_LABELS`
   - `GITLAB_OK_LABELS`
@@ -287,20 +289,21 @@ This will:
 
 #### `git mr ip` _("in progress")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS`
+* adds Gitlab labels defined in `GITLAB_IP_LABELS`
 * transitions Jira ticket using `JIRA_IP_ID`
 
 #### `git mr cr` _("code review")_
-* removes Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS`
+* removes Gitlab labels defined in `GITLAB_IP_LABELS`, `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_CR_LABELS`
 * transitions Jira ticket using `JIRA_CR_ID`
 
 #### `git mr qa` _("quality assurance")_
-* removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS`
+* removes Gitlab labels defined in `GITLAB_IP_LABELS`, `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_QA_LABELS`
 * transitions Jira ticket using `JIRA_QA_ID`
 
 #### `git mr accept` _("accepted")_
-* removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_QA_LABELS`
+* removes Gitlab labels defined in `GITLAB_IP_LABELS`, `GITLAB_CR_LABELS`, and `GITLAB_QA_LABELS`
 * adds Gitlab labels defined in `GITLAB_OK_LABELS`
 * removes Gitlab draft status
 * transitions Jira ticket using `JIRA_OK_ID`

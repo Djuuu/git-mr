@@ -1,3 +1,4 @@
+GITLAB_IP_LABELS="WIP"
 GITLAB_CR_LABELS="Review"
 GITLAB_QA_LABELS="Testing"
 GITLAB_OK_LABELS="Accepted"
@@ -8,7 +9,7 @@ JIRA_TOKEN="hcnoiuyrsqgl"
 JIRA_IP_ID="110"
 JIRA_CR_ID="120"
 JIRA_QA_ID="130"
-JIRA_OK_ID=
+JIRA_OK_ID="140"
 
 mr_status_block() {
     return 0

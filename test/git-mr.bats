@@ -1013,16 +1013,24 @@ full_sha() {
 }
 
 @test "Identifies workflow-specific labels" {
+    GITLAB_IP_LABELS="wip1,wip2"
     GITLAB_CR_LABELS="cr1,cr2"
     GITLAB_QA_LABELS="qa1,qa2"
     GITLAB_OK_LABELS="ok1,ok2"
 
-    run is_status_label "cr1"; assert_output "cr1"
-    run is_status_label "cr2"; assert_output "cr2"
-    run is_status_label "qa1"; assert_output "qa1"
-    run is_status_label "qa2"; assert_output "qa2"
-    run is_status_label "ok1"; assert_output "ok1"
-    run is_status_label "ok2"; assert_output "ok2"
+    run is_status_label "wip1"; assert_output "wip1"
+    run is_status_label "wip2"; assert_output "wip2"
+    run is_status_label "cr1";  assert_output "cr1"
+    run is_status_label "cr2";  assert_output "cr2"
+    run is_status_label "qa1";  assert_output "qa1"
+    run is_status_label "qa2";  assert_output "qa2"
+    run is_status_label "ok1";  assert_output "ok1"
+    run is_status_label "ok2";  assert_output "ok2"
+
+    run is_status_ip_label "wip1"; assert_output "wip1"; run is_status_ip_label "cr1";  assert_output ""
+    run is_status_cr_label "cr1";  assert_output "cr1";  run is_status_cr_label "qa1";  assert_output ""
+    run is_status_qa_label "qa1";  assert_output "qa1";  run is_status_qa_label "ok1";  assert_output ""
+    run is_status_ok_label "ok1";  assert_output "ok1";  run is_status_ok_label "wip1"; assert_output ""
 
     run is_status_label "test"; assert_output ""
     run is_status_label "zcr12"; assert_output ""
@@ -1158,7 +1166,7 @@ This is an example without menu.
 
 		--------------------------------------------------------------------------------
 
-		Do you want to update the merge request labels to "My Team"? -> yes
+		Do you want to update the merge request labels to "My Team,WIP"? -> yes
 		Updating merge request labels... OK
 
 		Do you want to update the Jira ticket status to "In Progress"? -> yes
@@ -1166,7 +1174,7 @@ This is an example without menu.
 		EOF
     )"
 
-    GIT_MR_MOCK_LABELS='"Testing","Accepted","My Team"'
+    GIT_MR_MOCK_LABELS='"WIP","Testing","Accepted","My Team"'
     run mr_cr
     assert_output "$(cat <<- EOF
 
@@ -1180,7 +1188,7 @@ This is an example without menu.
 		EOF
     )"
 
-    GIT_MR_MOCK_LABELS='"Review","Accepted","My Team"'
+    GIT_MR_MOCK_LABELS='"WIP","Review","Accepted","My Team"'
     run mr_qa
     assert_output "$(cat <<- EOF
 
@@ -1194,7 +1202,8 @@ This is an example without menu.
 		EOF
     )"
 
-    GIT_MR_MOCK_LABELS='"Review","Testing","My Team"'
+    GIT_MR_MOCK_LABELS='"WIP","Review","Testing","My Team"'
+    JIRA_OK_ID= # no Jira transition
     run mr_accept
     tab=$'\t'
     assert_output "$(cat <<-EOF
