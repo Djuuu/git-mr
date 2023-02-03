@@ -1196,7 +1196,8 @@ This is an example without menu.
 
     GIT_MR_MOCK_LABELS='"Review","Testing","My Team"'
     run mr_accept
-    assert_output "$(cat <<- EOF
+    tab=$'\t'
+    assert_output "$(cat <<-EOF
 
 		--------------------------------------------------------------------------------
 
@@ -1207,7 +1208,17 @@ This is an example without menu.
 		Resolving draft status... OK
 
 		Do you want to update the Jira ticket status to "Accepted"? -> yes
-		Updating Jira ticket status... OK
+
+		Set JIRA_OK_ID to be able to update Jira status
+
+		Available Jira transitions:
+
+		${tab}1${tab}"TODO"                   ${tab}-> TODO                   ${tab}[To Do]
+		${tab}2${tab}"In Progress"            ${tab}-> In Progress            ${tab}[In Progress]
+		${tab}3${tab}"Code Review"            ${tab}-> Code Review            ${tab}[In Progress]
+		${tab}4${tab}"QA"                     ${tab}-> QA                     ${tab}[In Progress]
+		${tab}5${tab}"Ready to go"            ${tab}-> Ready to go            ${tab}[In Progress]
+		${tab}6${tab}"Delivered"              ${tab}-> Delivered              ${tab}[Done]
 		EOF
     )"
 }

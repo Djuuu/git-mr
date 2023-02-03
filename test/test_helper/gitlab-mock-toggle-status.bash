@@ -8,7 +8,7 @@ JIRA_TOKEN="hcnoiuyrsqgl"
 JIRA_IP_ID="110"
 JIRA_CR_ID="120"
 JIRA_QA_ID="130"
-JIRA_OK_ID="140"
+JIRA_OK_ID=
 
 mr_status_block() {
     return 0
@@ -34,7 +34,21 @@ gitlab_request() {
 jira_request() {
     case "$1" in
         "issue/AB-123/transitions")
+
+            if [[ "$2" = "POST" ]]; then
+                return 0;
+            fi
+
+            echo '{"transitions": [
+                {"id":"1", "name":"TODO",        "to":{"id":"1", "name":"TODO",        "statusCategory":{"name":"To Do"}}},
+                {"id":"2", "name":"In Progress", "to":{"id":"2", "name":"In Progress", "statusCategory":{"name":"In Progress"}}},
+                {"id":"3", "name":"Code Review", "to":{"id":"3", "name":"Code Review", "statusCategory":{"name":"In Progress"}}},
+                {"id":"4", "name":"QA",          "to":{"id":"4", "name":"QA",          "statusCategory":{"name":"In Progress"}}},
+                {"id":"5", "name":"Ready to go", "to":{"id":"5", "name":"Ready to go", "statusCategory":{"name":"In Progress"}}},
+                {"id":"6", "name":"Delivered",   "to":{"id":"6", "name":"Delivered",   "statusCategory":{"name":"Done"}}}
+            ]}'
             ;;
+
         *)
             echo "$1" > mr-accept-jira_request.log
             return 1

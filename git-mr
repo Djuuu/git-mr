@@ -477,6 +477,21 @@ jira_ticket_data() {
     jira_request "issue/${issue_code}?fields=summary" || exit $?
 }
 
+jira_show_transitions() {
+    local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code "$(git_current_branch)")}}
+
+    echo "Available Jira transitions:"
+    echo
+    jira_request "issue/${issue_code}/transitions" |
+        jq -r '.transitions[] | [
+            "", .id,
+            "\"" + .name + "\"" + (" " * (23 - (.name | length))),
+            "-> " + (.to | .name + (" " * (23 - (.name | length)))),
+            "[" + .to.statusCategory.name + "]"
+        ] | @tsv' |
+        sed 's/\r//g'
+}
+
 jira_transition() {
     jira_check_env
 
@@ -2105,14 +2120,15 @@ mr_ip() {
 
     mr_update_labels "${mr_iid}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
 
-    if [ -n "$issue_code" ] &&
-       [ -n "$JIRA_IP_ID" ] &&
-       confirm "Do you want to update the Jira ticket status to \"In Progress\"?"; then
-        echo -n "Updating Jira ticket status... "
-
-        jira_transition "$issue_code" "$JIRA_IP_ID" && echo -e "OK\n"
+    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"In Progress\"?"; then
+        if [ -n "$JIRA_IP_ID" ]; then
+            echo -n "Updating Jira ticket status... "
+            jira_transition "$issue_code" "$JIRA_IP_ID" && echo -e "OK\n"
+        else
+            echo_error "\nSet JIRA_IP_ID to be able to update Jira status\n"
+            jira_show_transitions "$issue_code"
+        fi
     fi
-    if [ -z "$JIRA_IP_ID" ]; then echo_error "Set JIRA_IP_ID to be able to update Jira status\n"; fi
 }
 
 mr_cr() {
@@ -2136,14 +2152,15 @@ mr_cr() {
 
     mr_update_labels "${mr_iid}" "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
 
-    if [ -n "$issue_code" ] &&
-       [ -n "$JIRA_CR_ID" ] &&
-       confirm "Do you want to update the Jira ticket status to \"Code Review\"?"; then
-        echo -n "Updating Jira ticket status... "
-
-        jira_transition "$issue_code" "$JIRA_CR_ID" && echo -e "OK\n"
+    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"Code Review\"?"; then
+        if [ -n "$JIRA_CR_ID" ]; then
+            echo -n "Updating Jira ticket status... "
+            jira_transition "$issue_code" "$JIRA_CR_ID" && echo -e "OK\n"
+        else
+            echo_error "\nSet JIRA_CR_ID to be able to update Jira status\n"
+            jira_show_transitions "$issue_code"
+        fi
     fi
-    if [ -z "$JIRA_CR_ID" ]; then echo_error "Set JIRA_CR_ID to be able to update Jira status\n"; fi
 }
 
 mr_qa() {
@@ -2167,14 +2184,15 @@ mr_qa() {
 
     mr_update_labels "${mr_iid}" "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
 
-    if [ -n "$issue_code" ] &&
-       [ -n "$JIRA_QA_ID" ] &&
-       confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?"; then
-        echo -n "Updating Jira ticket status... "
-
-        jira_transition "$issue_code" "$JIRA_QA_ID" && echo -e "OK\n"
+    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?"; then
+        if [ -n "$JIRA_QA_ID" ]; then
+            echo -n "Updating Jira ticket status... "
+            jira_transition "$issue_code" "$JIRA_QA_ID" && echo -e "OK\n"
+        else
+            echo_error "\nSet JIRA_QA_ID to be able to update Jira status\n"
+            jira_show_transitions "$issue_code"
+        fi
     fi
-    if [ -z "$JIRA_QA_ID" ]; then echo_error "Set JIRA_QA_ID to be able to update Jira status\n"; fi
 }
 
 mr_accept() {
@@ -2211,13 +2229,15 @@ mr_accept() {
         fi
     fi
 
-    if [ -n "$issue_code" ] &&
-       [ -n "$JIRA_OK_ID" ] &&
-       confirm "Do you want to update the Jira ticket status to \"Accepted\"?"; then
-        echo -n "Updating Jira ticket status... "
-        jira_transition "$issue_code" "$JIRA_OK_ID" && echo -e "OK\n"
+    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"Accepted\"?"; then
+        if [ -n "$JIRA_OK_ID" ]; then
+            echo -n "Updating Jira ticket status... "
+            jira_transition "$issue_code" "$JIRA_OK_ID" && echo -e "OK\n"
+        else
+            echo_error "\nSet JIRA_OK_ID to be able to update Jira status\n"
+            jira_show_transitions "$issue_code"
+        fi
     fi
-    if [ -z "$JIRA_OK_ID" ]; then echo_error "Set JIRA_OK_ID to be able to update Jira status\n"; fi
 }
 
 mr_hook() {
@@ -2332,11 +2352,11 @@ ${b}CONFIGURATION${r}
            export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
            export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
 
-           # Jira status IDs
-           export JIRA_IP_ID="xx" # "In Progress" status ID
-           export JIRA_CR_ID="xx" # "Code Review" status ID
-           export JIRA_QA_ID="xx" # "Quality Assurance" status ID
-           export JIRA_OK_ID="xx" # "Accepted" status ID
+           # Jira status - transition IDs
+           export JIRA_IP_ID="xx" # "In Progress" transition ID
+           export JIRA_CR_ID="xx" # "Code Review" transition ID
+           export JIRA_QA_ID="xx" # "Quality Assurance" transition ID
+           export JIRA_OK_ID="xx" # "Accepted" transition ID
 
            # Check "Delete source branch" by default (defaults to 1)
            export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1

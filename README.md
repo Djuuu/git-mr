@@ -161,11 +161,11 @@ export GITLAB_CR_LABELS="Review"             # Labels set on CR step
 export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
 export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
 
-# Jira status IDs
-export JIRA_IP_ID="xx" # "In progress" status ID
-export JIRA_CR_ID="xx" # "Code review" status ID
-export JIRA_QA_ID="xx" # "Quality Assurance" status ID
-export JIRA_OK_ID="xx" # "Accepted" status ID
+# Jira status - transition IDs
+export JIRA_IP_ID="xx" # "In progress" transition ID
+export JIRA_CR_ID="xx" # "Code review" transition ID
+export JIRA_QA_ID="xx" # "Quality Assurance" transition ID
+export JIRA_OK_ID="xx" # "Accepted" transition ID
 
 # Check "Delete source branch" by default (defaults to 1)
 export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
@@ -279,7 +279,7 @@ This will:
   - `GITLAB_CR_LABELS`
   - `GITLAB_QA_LABELS`
   - `GITLAB_OK_LABELS`
-* set Jira ticket to status ID defined in:
+* transition Jira ticket using ID defined in:
   - `JIRA_IP_ID`
   - `JIRA_CR_ID`
   - `JIRA_QA_ID`
@@ -287,23 +287,23 @@ This will:
 
 #### `git mr ip` _("in progress")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS`
-* sets Jira ticket to status ID defined in `JIRA_IP_ID`
+* transitions Jira ticket using `JIRA_IP_ID`
 
 #### `git mr cr` _("code review")_
 * removes Gitlab labels defined in `GITLAB_QA_LABELS`, and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_CR_LABELS`
-* sets Jira ticket to status ID defined in `JIRA_CR_ID`
+* transitions Jira ticket using `JIRA_CR_ID`
 
 #### `git mr qa` _("quality assurance")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_QA_LABELS`
-* sets Jira ticket to status ID defined in `JIRA_QA_ID`
+* transitions Jira ticket using `JIRA_QA_ID`
 
 #### `git mr accept` _("accepted")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, and `GITLAB_QA_LABELS`
 * adds Gitlab labels defined in `GITLAB_OK_LABELS`
 * removes Gitlab draft status
-* sets Jira ticket to status ID defined in `JIRA_OK_ID`
+* transitions Jira ticket using `JIRA_OK_ID`
 
 ----------------------------------------------------------------
 
