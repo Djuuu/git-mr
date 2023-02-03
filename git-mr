@@ -2109,10 +2109,6 @@ mr_menu() {
 mr_ip() {
     git_mr_readonly show
 
-    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
-
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
@@ -2140,10 +2136,6 @@ mr_ip() {
 
 mr_cr() {
     git_mr_readonly show
-
-    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
@@ -2173,10 +2165,6 @@ mr_cr() {
 mr_qa() {
     git_mr_readonly show
 
-    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
-
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
@@ -2204,10 +2192,6 @@ mr_qa() {
 
 mr_accept() {
     git_mr_readonly show
-
-    [ -n "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ -n "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ -n "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
 
     local source_branch=${1:-$(git_current_branch)}
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}

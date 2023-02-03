@@ -1160,6 +1160,22 @@ This is an example without menu.
 
     GIT_MR_YES=1
 
+    GITLAB_IP_LABELS="" # labels can be empty for a given step
+    GIT_MR_MOCK_LABELS='"Review","Testing","Accepted","My Team"'
+    run mr_ip
+    assert_output "$(cat <<- EOF
+
+		--------------------------------------------------------------------------------
+
+		Do you want to update the merge request labels to "My Team"? -> yes
+		Updating merge request labels... OK
+
+		Do you want to update the Jira ticket status to "In Progress"? -> yes
+		Updating Jira ticket status... OK
+		EOF
+    )"
+
+    GITLAB_IP_LABELS="WIP"
     GIT_MR_MOCK_LABELS='"Review","Testing","Accepted","My Team"'
     run mr_ip
     assert_output "$(cat <<- EOF
