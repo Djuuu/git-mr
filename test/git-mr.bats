@@ -326,6 +326,12 @@ full_sha() {
 @test "Makes title from branch" {
     run git_titlize_branch feature/AB-123-some_branch_title
     assert_output "Feature/AB-123 Some branch title"
+
+    run git_titlize_branch AB-123-some_branch_title
+    assert_output "AB-123 Some branch title"
+
+    run git_titlize_branch task/other_branch-title
+    assert_output "Task/Other branch title"
 }
 
 ################################################################################
@@ -765,6 +771,21 @@ full_sha() {
 
     run mr_title
     assert_output "[AB-123 This is an issue](https://mycompany.example.net/browse/AB-123)"
+
+    run mr_title feature/without-code
+    assert_output "$(cat <<- EOF
+		Unable to guess issue code
+		Feature/Without code
+		EOF
+    )" # includes stderr
+
+    run mr_title feature/CD-456-unknown-code 2>/dev/null
+    assert_output "$(cat <<- EOF
+		Unable to get issue title from Jira
+		  issue_code: CD-456
+		CD-456
+		EOF
+    )" # includes stderr
 }
 
 @test "Generates MR description from commits" {
