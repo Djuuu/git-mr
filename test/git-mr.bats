@@ -614,7 +614,7 @@ full_sha() {
 @test "Determines new merge request URL" {
     GITLAB_DEFAULT_LABELS="Label A,Label C"
     gitlab_project_request() {
-        [[ $1 = "labels" ]] &&
+        [[ $1 == "labels" ]] &&
             echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}]'
     }
 
@@ -700,7 +700,7 @@ full_sha() {
 
 @test "Extracts Gitlab merge request threads" {
     gitlab_request() {
-        [[ $1 = "projects/test/merge_requests/123/discussions?per_page=100&page=1" ]] &&
+        [[ $1 == "projects/test/merge_requests/123/discussions?per_page=100&page=1" ]] &&
             echo '[
                 {"id": "n1","notes": [{"id": 11},{"id": 12,"resolvable": false}]},
                 {"id": "n2","notes": [{"id": 21},{"id": 22,"resolvable": true, "resolved": false}]},
@@ -719,7 +719,7 @@ full_sha() {
 @test "Fetches default Gitlab label ids" {
     GITLAB_DEFAULT_LABELS="Label A,Label C"
     gitlab_project_request() {
-        [[ $1 = "labels" ]] &&
+        [[ $1 == "labels" ]] &&
             echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}]'
     }
 

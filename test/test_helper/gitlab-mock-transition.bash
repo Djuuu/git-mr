@@ -36,7 +36,7 @@ jira_request() {
     case "$1" in
         "issue/AB-123/transitions")
 
-            if [[ "$2" = "POST" ]]; then
+            if [[ "$2" == "POST" ]]; then
                 return 0;
             fi
 
