@@ -481,7 +481,6 @@ jira_show_transitions() {
     local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code "$(git_current_branch)")}}
 
     echo "Available Jira transitions:"
-    echo
     jira_request "issue/${issue_code}/transitions" |
         jq -r '.transitions[] | [
             "", .id,
@@ -1236,10 +1235,6 @@ replace_labels() {
     local to_remove=$2
     local to_add=$3
 
-    echo_debug "replace_labels - original labels  : $labels"
-    echo_debug "replace_labels - labels to remove : $to_remove"
-    echo_debug "replace_labels - labels to add    : $to_add"
-
     # split
     labels=$(    echo "$labels"    | tr "," "\n")
     to_remove=$( echo "$to_remove" | tr "," "\n")
@@ -1254,8 +1249,6 @@ replace_labels() {
 
     # implode
     labels=$(echo "$labels" | tr "\n" "," | sed 's/^,//' | sed 's/,$//')
-
-    echo_debug "replace_labels - result    : $labels"
 
     echo "$labels"
 }
@@ -1341,27 +1334,22 @@ mr_format_labels() {
         sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
 }
 
+
+################################################################################
+# Merge request transition utility functions
+
 mr_update_labels() {
     local mr_iid=$1
+    local labels=$2
 
     # strip leading & trailing label commas
-    local to_remove; to_remove=$(echo -e "$2" | sed 's/^,*//' | sed 's/,*$//')
-    local to_add;    to_add=$(echo -e "$3" | sed 's/^,*//' | sed 's/,*$//')
+    local to_remove; to_remove=$(echo -e "$3" | sed 's/^,*//' | sed 's/,*$//')
+    local to_add;    to_add=$(echo -e "$4" | sed 's/^,*//' | sed 's/,*$//')
 
     if [ -z "$to_remove" ] && [ -z "$to_add" ]; then
         echo_error "No label to add or remove"
         return
     fi
-
-    # Load existing merge request details
-    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
-    local labels; labels=$(gitlab_extract_labels "$merge_request")
-
-    # Print merge request status summary
-    echo
-    mr_status_block "$mr_iid" "$merge_request"
-    echo "--------------------------------------------------------------------------------"
-    echo
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
     if labels_differ "$labels" "$new_labels" &&
@@ -1373,6 +1361,50 @@ mr_update_labels() {
 
         if [ -n "$result" ]; then echo -e "OK\n"; fi
     fi
+}
+
+mr_gitlab_undraft() {
+    local mr_iid=$1
+    local mr_summary=$2
+
+    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
+
+    gitlab_title_is_draft "$mr_title" ||
+        return 0
+
+    confirm "Do you want to resolve draft status?" ||
+        return 0
+
+    echo -n "Resolving draft status... "
+
+    local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
+    mr_data=$(jq_build "title" "$undraft_title") || exit $?
+
+    local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+    [[ -n $result ]] && echo -e "OK\n"
+}
+
+mr_jira_transition() {
+    local issue_code=$1
+    local jira_target_status=$2
+    local jira_transition_id_var=$3
+
+    local jira_transition_id=${!jira_transition_id_var}
+
+    [[ -n $issue_code ]] ||
+        return 0
+
+    confirm "Do you want to update the Jira ticket status to \"${jira_target_status}\"?" ||
+        return 0
+
+    if [[ -z $jira_transition_id ]]; then
+        echo_error "Set ${jira_transition_id_var} to be able to update Jira status."
+        jira_show_transitions "$issue_code"
+        return 0
+    fi
+
+    echo -n "Updating Jira ticket status... "
+    jira_transition "$issue_code" "$jira_transition_id" && echo -e "OK\n"
 }
 
 
@@ -2121,129 +2153,71 @@ mr_menu() {
     esac
 }
 
-mr_ip() {
+mr_transition() {
     git_mr_readonly show
 
-    local source_branch=${1:-$(git_current_branch)}
+    local transition=${1}
+    local source_branch=${2:-$(git_current_branch)}
+
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
     local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [ -z "$mr_summary" ]; then
+    if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
-        return
+        return 1
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
 
-    mr_update_labels "${mr_iid}" "${GITLAB_CR_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}" "${GITLAB_IP_LABELS}"
+    # Load existing merge request details
+    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
+    local labels; labels=$(gitlab_extract_labels "$merge_request")
 
-    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"In Progress\"?"; then
-        if [ -n "$JIRA_IP_ID" ]; then
-            echo -n "Updating Jira ticket status... "
-            jira_transition "$issue_code" "$JIRA_IP_ID" && echo -e "OK\n"
-        else
-            echo_error "\nSet JIRA_IP_ID to be able to update Jira status\n"
-            jira_show_transitions "$issue_code"
-        fi
-    fi
-}
+    # Print merge request status summary
+    echo
+    mr_status_block "$mr_iid" "$merge_request"
+    echo "--------------------------------------------------------------------------------"
+    echo
 
-mr_cr() {
-    git_mr_readonly show
+    local name labels_to_add labels_to_remove jira_transition_var
+    case "$transition" in
+        IP)
+            name="In Progress"
+            labels_to_add="${GITLAB_IP_LABELS}"
+            labels_to_remove="${GITLAB_CR_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}"
+            jira_transition_var="JIRA_IP_ID"
+            ;;
+        CR)
+            name="Code Review"
+            labels_to_add="${GITLAB_CR_LABELS}"
+            labels_to_remove="${GITLAB_IP_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}"
+            jira_transition_var="JIRA_CR_ID"
+            ;;
+        QA)
+            name="Quality Assurance"
+            labels_to_add="${GITLAB_QA_LABELS}"
+            labels_to_remove="${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_OK_LABELS}"
+            jira_transition_var="JIRA_QA_ID"
+            ;;
+        OK)
+            name="Accepted"
+            labels_to_add="${GITLAB_OK_LABELS}"
+            labels_to_remove="${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}"
+            jira_transition_var="JIRA_OK_ID"
+            ;;
+        *)
+            echo_error "Invalid transition"
+            return 1
+            ;;
+    esac
 
-    local source_branch=${1:-$(git_current_branch)}
-    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
+    mr_update_labels "$mr_iid" "$labels" "$labels_to_remove" "$labels_to_add"
 
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [ -z "$mr_summary" ]; then
-        echo_error "Merge request not found"
-        mr_print "$source_branch"
-        return
-    fi
+    [[ $transition = "OK" ]] &&
+        mr_gitlab_undraft "$mr_iid" "$mr_summary"
 
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-
-    mr_update_labels "${mr_iid}" "${GITLAB_IP_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}" "${GITLAB_CR_LABELS}"
-
-    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"Code Review\"?"; then
-        if [ -n "$JIRA_CR_ID" ]; then
-            echo -n "Updating Jira ticket status... "
-            jira_transition "$issue_code" "$JIRA_CR_ID" && echo -e "OK\n"
-        else
-            echo_error "\nSet JIRA_CR_ID to be able to update Jira status\n"
-            jira_show_transitions "$issue_code"
-        fi
-    fi
-}
-
-mr_qa() {
-    git_mr_readonly show
-
-    local source_branch=${1:-$(git_current_branch)}
-    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
-
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [ -z "$mr_summary" ]; then
-        echo_error "Merge request not found"
-        mr_print "$source_branch"
-        return
-    fi
-
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-
-    mr_update_labels "${mr_iid}" "${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_OK_LABELS}" "${GITLAB_QA_LABELS}"
-
-    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?"; then
-        if [ -n "$JIRA_QA_ID" ]; then
-            echo -n "Updating Jira ticket status... "
-            jira_transition "$issue_code" "$JIRA_QA_ID" && echo -e "OK\n"
-        else
-            echo_error "\nSet JIRA_QA_ID to be able to update Jira status\n"
-            jira_show_transitions "$issue_code"
-        fi
-    fi
-}
-
-mr_accept() {
-    git_mr_readonly show
-
-    local source_branch=${1:-$(git_current_branch)}
-    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
-
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [ -z "$mr_summary" ]; then
-        echo_error "Merge request not found"
-        mr_print "$source_branch"
-        return
-    fi
-
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-
-    mr_update_labels "${mr_iid}" "${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_OK_LABELS}"
-
-    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
-    if gitlab_title_is_draft "$mr_title"; then
-        if confirm "Do you want to resolve draft status?"; then
-            echo -n "Resolving draft status... "
-            local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
-
-            mr_data=$(jq_build "title" "$undraft_title") || exit $?
-            local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
-
-            if [ -n "$result" ]; then echo -e "OK\n"; fi
-        fi
-    fi
-
-    if [ -n "$issue_code" ] && confirm "Do you want to update the Jira ticket status to \"Accepted\"?"; then
-        if [ -n "$JIRA_OK_ID" ]; then
-            echo -n "Updating Jira ticket status... "
-            jira_transition "$issue_code" "$JIRA_OK_ID" && echo -e "OK\n"
-        else
-            echo_error "\nSet JIRA_OK_ID to be able to update Jira status\n"
-            jira_show_transitions "$issue_code"
-        fi
-    fi
+    mr_jira_transition "$issue_code" "$name" "$jira_transition_var"
 }
 
 mr_hook() {
@@ -2436,10 +2410,10 @@ case $1 in
 
     menu) mr_menu "${@:2}" ;;
 
-    p|ip|IP)     mr_ip     "${@:2}" ;;
-    r|cr|CR)     mr_cr     "${@:2}" ;;
-    q|qa|QA)     mr_qa     "${@:2}" ;;
-    a|ac|accept) mr_accept "${@:2}" ;;
+    p|ip|IP)     mr_transition "IP" "${@:2}" ;;
+    r|cr|CR)     mr_transition "CR" "${@:2}" ;;
+    q|qa|QA)     mr_transition "QA" "${@:2}" ;;
+    a|ac|accept) mr_transition "OK" "${@:2}" ;;
 
     undraft) gitlab_undraft "${@:2}" ;;
 

@@ -1180,99 +1180,149 @@ This is an example without menu.
 # Status change functions
 
 @test "Toggles MR labels & Jira ticket status" {
-    load "test_helper/gitlab-mock-toggle-status.bash"
+    load "test_helper/gitlab-mock-transition.bash"
+
+    labels_output() {
+        cat <<- EOF
+
+			Do you want to update the merge request labels to "${1}"? -> yes
+			Updating merge request labels... OK
+			EOF
+    }
+
+    jira_output() {
+        cat <<- EOF
+
+			Do you want to update the Jira ticket status to "${1}"? -> yes
+			Updating Jira ticket status... OK
+			EOF
+    }
+
+    undraft_output() {
+        cat <<- EOF
+
+			Do you want to resolve draft status? -> yes
+			Resolving draft status... OK
+			EOF
+    }
+
+    separator=$'\n'"--------------------------------------------------------------------------------"
+    tab=$'\t'
 
     GIT_MR_YES=1
 
-    GITLAB_IP_LABELS="" # labels can be empty for a given step
+    # In Progress ------------------------------------------------------------------
+
     GIT_MR_MOCK_LABELS='"Review","Testing","Accepted","My Team"'
-    run mr_ip
-    assert_output "$(cat <<- EOF
 
-		--------------------------------------------------------------------------------
-
-		Do you want to update the merge request labels to "My Team"? -> yes
-		Updating merge request labels... OK
-
-		Do you want to update the Jira ticket status to "In Progress"? -> yes
-		Updating Jira ticket status... OK
+    GITLAB_IP_LABELS="" # labels can be empty
+    run mr_transition "IP"
+    assert_output "$(cat <<-EOF
+		${separator}
+		$(labels_output "My Team")
+		$(jira_output "In Progress")
 		EOF
     )"
 
     GITLAB_IP_LABELS="WIP"
-    GIT_MR_MOCK_LABELS='"Review","Testing","Accepted","My Team"'
-    run mr_ip
+    run mr_transition "IP"
     assert_output "$(cat <<- EOF
-
-		--------------------------------------------------------------------------------
-
-		Do you want to update the merge request labels to "My Team,WIP"? -> yes
-		Updating merge request labels... OK
-
-		Do you want to update the Jira ticket status to "In Progress"? -> yes
-		Updating Jira ticket status... OK
+		${separator}
+		$(labels_output "My Team,WIP")
+		$(jira_output "In Progress")
 		EOF
     )"
+
+    # Code Review ------------------------------------------------------------------
 
     GIT_MR_MOCK_LABELS='"WIP","Testing","Accepted","My Team"'
-    run mr_cr
+
+    GITLAB_CR_LABELS="" # labels can be empty
+    run mr_transition "CR"
     assert_output "$(cat <<- EOF
-
-		--------------------------------------------------------------------------------
-
-		Do you want to update the merge request labels to "My Team,Review"? -> yes
-		Updating merge request labels... OK
-
-		Do you want to update the Jira ticket status to "Code Review"? -> yes
-		Updating Jira ticket status... OK
+		${separator}
+		$(labels_output "My Team")
+		$(jira_output "Code Review")
 		EOF
     )"
+
+    GITLAB_CR_LABELS="Review"
+    run mr_transition "CR"
+    assert_output "$(cat <<- EOF
+		${separator}
+		$(labels_output "My Team,Review")
+		$(jira_output "Code Review")
+		EOF
+    )"
+
+    # Quality Assurance ------------------------------------------------------------
 
     GIT_MR_MOCK_LABELS='"WIP","Review","Accepted","My Team"'
-    run mr_qa
+
+    GITLAB_QA_LABELS="" # labels can be empty
+    run mr_transition "QA"
     assert_output "$(cat <<- EOF
-
-		--------------------------------------------------------------------------------
-
-		Do you want to update the merge request labels to "My Team,Testing"? -> yes
-		Updating merge request labels... OK
-
-		Do you want to update the Jira ticket status to "Quality Assurance"? -> yes
-		Updating Jira ticket status... OK
+		${separator}
+		$(labels_output "My Team")
+		$(jira_output "Quality Assurance")
 		EOF
     )"
 
-    GIT_MR_MOCK_LABELS='"Testing","My Team"' # no label change
-    run mr_qa
+    GITLAB_QA_LABELS="Testing"
+    run mr_transition "QA"
     assert_output "$(cat <<- EOF
-
-		--------------------------------------------------------------------------------
-
-		Do you want to update the Jira ticket status to "Quality Assurance"? -> yes
-		Updating Jira ticket status... OK
+		${separator}
+		$(labels_output "My Team,Testing")
+		$(jira_output "Quality Assurance")
 		EOF
     )"
+
+    # Accepted ---------------------------------------------------------------------
 
     GIT_MR_MOCK_LABELS='"WIP","Review","Testing","My Team"'
-    JIRA_OK_ID= # no Jira transition
-    run mr_accept
-    tab=$'\t'
+
+    GITLAB_OK_LABELS="" # labels can be empty
+    run mr_transition "OK"
     assert_output "$(cat <<-EOF
+		${separator}
+		$(labels_output "My Team")
+		$(undraft_output)
+		$(jira_output "Accepted")
+		EOF
+    )"
 
-		--------------------------------------------------------------------------------
+    GITLAB_OK_LABELS="Accepted"
+    run mr_transition "OK"
+    assert_output "$(cat <<-EOF
+		${separator}
+		$(labels_output "My Team,Accepted")
+		$(undraft_output)
+		$(jira_output "Accepted")
+		EOF
+    )"
 
-		Do you want to update the merge request labels to "My Team,Accepted"? -> yes
-		Updating merge request labels... OK
+    # No label change --------------------------------------------------------------
 
-		Do you want to resolve draft status? -> yes
-		Resolving draft status... OK
+    GIT_MR_MOCK_LABELS='"Testing","My Team"' # no label change
+    run mr_transition "QA"
+    assert_output "$(cat <<- EOF
+		${separator}
+		$(jira_output "Quality Assurance")
+		EOF
+    )"
+
+    # No Jira transition -----------------------------------------------------------
+
+    JIRA_OK_ID= # no Jira transition
+    run mr_transition "OK"
+    assert_output "$(cat <<-EOF
+		${separator}
+		$(labels_output "My Team,Accepted")
+		$(undraft_output)
 
 		Do you want to update the Jira ticket status to "Accepted"? -> yes
-
-		Set JIRA_OK_ID to be able to update Jira status
-
+		Set JIRA_OK_ID to be able to update Jira status.
 		Available Jira transitions:
-
 		${tab}1${tab}"TODO"                   ${tab}-> TODO                   ${tab}[To Do]
 		${tab}2${tab}"In Progress"            ${tab}-> In Progress            ${tab}[In Progress]
 		${tab}3${tab}"Code Review"            ${tab}-> Code Review            ${tab}[In Progress]
