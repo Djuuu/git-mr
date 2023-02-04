@@ -225,7 +225,7 @@ urlencode() {
 }
 
 has_terminal_colors() {
-    which tput > /dev/null 2>&1 &&
+    command -v tput > /dev/null 2>&1 &&
     [[ -n $TERM ]] &&
     [[ "$(tput -T"$TERM" colors)" -ge 8 ]]
 }
@@ -308,13 +308,12 @@ confirm() {
     read -r -p "$(colorize "$question" "lightcyan" "bold") [y/N] " response
     case "$response" in
         [yY][eE][sS]|[yY]) return 0 ;;
+        *)                 return 1 ;;
     esac
-
-    return 1
 }
 
 clear_screen() {
-    which tput > /dev/null 2>&1 &&
+    command -v tput > /dev/null 2>&1 &&
     [[ -n $TERM ]] &&
         tput -x clear
 }
@@ -357,7 +356,7 @@ open_in_browser() {
     elif [[ "$OSTYPE" == "msys"*      ]]; then open_command='explorer';
     fi
 
-    if [[ -n $open_command && -x "$(command -v $open_command)" ]]; then
+    if [[ -n $open_command && -x "$(command -v "$open_command")" ]]; then
         $open_command "${url}" > /dev/null 2>&1
         return
     fi
@@ -1162,14 +1161,14 @@ mr_print_status() {
     # 1st row ------------------------------------------------------------------
     # Labels
     echo -en "   \U0001F3F7  ${labels_display}"
-    echo_spacer $spacer_chars_l
+    echo_spacer "$spacer_chars_l"
     # Draft status
     if [[ -n $draft_str ]]; then
         echo -en "  $(colorize "$draft_str" "orange")  "
     else
         echo_spacer $((2 - spacer_chars_l - spacer_chars_r))
     fi
-    echo_spacer $spacer_chars_r
+    echo_spacer "$spacer_chars_r"
     # Target
     echo -e "${target_display}\n"
 
@@ -2113,6 +2112,7 @@ mr_menu() {
             then mr_menu_update_all "$issue_code" "$menu_items"
             else mr_menu_update     "$menu_items"; fi ;;
         status) mr_menu_status "$issue_code" "$menu_items" ;;
+        *) return 1 ;;
     esac
 }
 
