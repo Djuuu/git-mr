@@ -300,7 +300,7 @@ confirm() {
     local question=$1
 
     if [[ $GIT_MR_YES -eq 1 ]]; then
-        echo_error "$(colorize "$question" "cyan") -> yes"
+        echo "$(colorize "${question}" "cyan" >&2) -> yes" >&2
         return 0
     fi
 
