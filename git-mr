@@ -16,9 +16,11 @@ git_current_branch() {
 git_base_branch() {
     local branch=${1:-$(git_current_branch)}
 
-    [[ -n $branch ]]                                   || exit 3 # Not on any branch
-    [[ "$branch" != "main" && "$branch" != "master" ]] || exit 3 # On default branch
-    git show-ref -q --heads "$branch"                  || exit 3 # Branch does not exist
+    local default_branch; default_branch=$(git_default_branch)
+
+    [[ -n $branch ]]                   || exit 3 # Not on any branch
+    [[ $branch != "$default_branch" ]] || exit 3 # On default branch
+    git show-ref -q --heads "$branch"  || exit 3 # Branch does not exist
 
     # Nearest branch in commit history
     local base_branch
@@ -36,7 +38,7 @@ git_base_branch() {
 
     # First possible merge base
     if ! git show-ref -q --heads "$base_branch"; then
-        base_branch=$(git show-branch --merge-base "$branch" "$(git_default_branch)" | head -n1)
+        base_branch=$(git show-branch --merge-base "$branch" "$default_branch" | head -n1)
     fi
 
     echo_debug "Base branch: $base_branch"
@@ -89,7 +91,7 @@ git_check_branches() {
     [[ -n $source_branch ]] ||
         exit_error 3 "Not on any branch"
 
-    [[ $source_branch != "main" && $source_branch != "master" ]] ||
+    [[ $source_branch != "$(git_default_branch)" ]] ||
         exit_error 3 "On default branch"
 
     git show-ref -q --heads "$source_branch" ||

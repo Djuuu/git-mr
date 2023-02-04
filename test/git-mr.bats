@@ -244,10 +244,6 @@ full_sha() {
     assert_failure
     assert_output "On default branch"
 
-    run git_check_branches master epic/big-feature
-    assert_failure
-    assert_output "On default branch"
-
     run git_check_branches feature/base ""
     assert_failure
     assert_output "Unable to determine target branch"
