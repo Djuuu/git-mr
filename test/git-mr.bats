@@ -116,7 +116,7 @@ full_sha() {
 @test "Fails outside a Git repository" {
     cd /tmp
     run git-mr
-    assert_failure
+    assert_failure "$ERR_GIT_REPO"
 }
 
 @test "Uses GNU commands" {
@@ -170,11 +170,11 @@ full_sha() {
 
     git checkout -f "$(git rev-parse HEAD)"
     run git-mr base
-    assert_failure
+    assert_failure "$ERR_GIT"
 
     git switch main
     run git-mr base
-    assert_failure
+    assert_failure "$ERR_GIT"
 }
 
 @test "Determines remote name" {
@@ -233,19 +233,19 @@ full_sha() {
     assert_output ""
 
     run git_check_branches "" main
-    assert_failure
+    assert_failure "$ERR_GIT"
     assert_output "Not on any branch"
 
     run git_check_branches test main
-    assert_failure
+    assert_failure "$ERR_GIT"
     assert_output "Branch 'test' does not exist"
 
     run git_check_branches main epic/big-feature
-    assert_failure
+    assert_failure "$ERR_GIT"
     assert_output "On default branch"
 
     run git_check_branches feature/base ""
-    assert_failure
+    assert_failure "$ERR_GIT"
     assert_output "Unable to determine target branch"
 }
 
@@ -338,8 +338,8 @@ full_sha() {
 # Misc. utilities
 
 @test "Exits with error" {
-    run exit_error 3 "Nope!"
-    assert_failure
+    run exit_error 99 "Nope!"
+    assert_failure 99
     assert_output "Nope!"
 }
 
@@ -535,7 +535,7 @@ full_sha() {
     git remote add other1 "git@other-domain.net:other1.git"
     git remote add other2 "https://other-domain.net/other2.git"
     run gitlab_remote
-    assert_failure
+    assert_failure "$ERR_GIT_REPO"
 
     # SSH URL
     git remote add gitlab1 "git@${GITLAB_DOMAIN}:my/project.git"
@@ -559,7 +559,7 @@ full_sha() {
     GITLAB_DOMAIN="test.example.net"
 
     run gitlab_project_url
-    assert_failure
+    assert_failure "$ERR_GIT_REPO"
     assert_output "$(cat <<- EOF
 		Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
 		  fs-local:     ../remote
@@ -660,11 +660,11 @@ full_sha() {
     run gitlab_extract_title "$mr_summary"; assert_output "Draft: Feature/XY-1234 Lorem Ipsum"
 
     run gitlab_merge_request_summary "feature/nope"
-    assert_failure
+    assert_failure "$ERR_GITLAB"
     assert_output ""
 
     run gitlab_merge_request_summary "nope"
-    assert_failure
+    assert_failure "$ERR_GITLAB"
     assert_output ""
 
     run gitlab_extract_iid   ""; assert_output ''

@@ -18,9 +18,9 @@ git_base_branch() {
 
     local default_branch; default_branch=$(git_default_branch)
 
-    [[ -n $branch ]]                   || exit 3 # Not on any branch
-    [[ $branch != "$default_branch" ]] || exit 3 # On default branch
-    git show-ref -q --heads "$branch"  || exit 3 # Branch does not exist
+    [[ -n $branch ]]                   || exit "$ERR_GIT" # Not on any branch
+    [[ $branch != "$default_branch" ]] || exit "$ERR_GIT" # On default branch
+    git show-ref -q --heads "$branch"  || exit "$ERR_GIT" # Branch does not exist
 
     # Nearest branch in commit history
     local base_branch
@@ -66,15 +66,15 @@ git_default_branch() {
         local_tracking=$(git branch -vv | grep "${default#"refs/remotes/"}" | sed 's/^[* ]*//' | cut -d' ' -f1)
 
         # local branch tracking default remote with a different name
-        [[ -n $local_tracking ]] && echo "$local_tracking" && return
+        [[ -n $local_tracking ]] && echo "$local_tracking" && return 0
 
         # short local name of remote default
         echo "${default#"refs/remotes/${remote}/"}"
-        return
+        return 0
     fi
 
-    git_branch_exists "main"   && echo "main"   && return
-    git_branch_exists "master" && echo "master" && return
+    git_branch_exists "main"   && echo "main"   && return 0
+    git_branch_exists "master" && echo "master" && return 0
 }
 
 git_remote_branch_exists() {
@@ -89,16 +89,16 @@ git_check_branches() {
     local target_branch="$2"
 
     [[ -n $source_branch ]] ||
-        exit_error 3 "Not on any branch"
+        exit_error "$ERR_GIT" "Not on any branch"
 
     [[ $source_branch != "$(git_default_branch)" ]] ||
-        exit_error 3 "On default branch"
+        exit_error "$ERR_GIT" "On default branch"
 
     git show-ref -q --heads "$source_branch" ||
-        exit_error 3 "Branch '$source_branch' does not exist"
+        exit_error "$ERR_GIT" "Branch '$source_branch' does not exist"
 
     [[ -n $target_branch ]] ||
-        exit_error 3 "Unable to determine target branch"
+        exit_error "$ERR_GIT" "Unable to determine target branch"
 
     return 0
 }
@@ -348,7 +348,7 @@ regex_escape() {
 open_in_browser() {
     local url=$1
 
-    [[ -n $url ]] || return
+    [[ -n $url ]] || return "$ERR_MR"
 
     local open_command
     if   [[ "$OSTYPE" == "linux-gnu"* ]]; then open_command='xdg-open';
@@ -358,13 +358,14 @@ open_in_browser() {
 
     if [[ -n $open_command && -x "$(command -v "$open_command")" ]]; then
         $open_command "${url}" > /dev/null 2>&1
-        return
+        return 0
     fi
 
     echo_error "Unable to open browser"
     echo_error
     echo "${url}"
     echo
+    return "$ERR_MR"
 }
 
 git_mr_readonly() {
@@ -397,7 +398,7 @@ markdown_link() {
 
     if [[ -z $url ]]; then
         echo "[$label]"
-        return
+        return 0
     fi
 
     echo "[$label]($url)"
@@ -430,9 +431,9 @@ markdown_indent_list_items() {
 # Jira functions
 
 jira_check_env() {
-    [[ -n $JIRA_USER ]]     || exit_error 21 "JIRA_USER is not set"
-    [[ -n $JIRA_TOKEN ]]    || exit_error 21 "JIRA_TOKEN is not set"
-    [[ -n $JIRA_INSTANCE ]] || exit_error 21 "JIRA_INSTANCE is not set"
+    [[ -n $JIRA_USER ]]     || exit_error "$ERR_MR_ENV" "JIRA_USER is not set"
+    [[ -n $JIRA_TOKEN ]]    || exit_error "$ERR_MR_ENV" "JIRA_TOKEN is not set"
+    [[ -n $JIRA_INSTANCE ]] || exit_error "$ERR_MR_ENV" "JIRA_INSTANCE is not set"
 }
 
 jira_request() {
@@ -456,13 +457,13 @@ jira_request() {
         -H "Content-Type: application/json" \
         --data "${request_data}" \
         --max-time "${GIT_MR_TIMEOUT:-5}" \
-        "${jira_base_url}/${request_url}" || exit_error 20 "Jira request error"
+        "${jira_base_url}/${request_url}" || exit_error "$ERR_JIRA_API" "Jira request error"
 }
 
 jira_ticket_data() {
     jira_check_env
 
-    local issue_code=$1;  [[ -n $issue_code ]] || exit_error 0 "issue_code required"
+    local issue_code=$1;  [[ -n $issue_code ]] || exit_error "$ERR_MR" "issue_code required"
 
     jira_request "issue/${issue_code}?fields=summary" || exit $?
 }
@@ -484,11 +485,11 @@ jira_show_transitions() {
 jira_transition() {
     jira_check_env
 
-    local issue_code=$1;     [[ -n $issue_code    ]] || exit_error 0 "issue_code required"
-    local transition_id=$2;  [[ -n $transition_id ]] || exit_error 0 "transition_id required"
+    local issue_code=$1;     [[ -n $issue_code    ]] || exit_error "$ERR_MR" "issue_code required"
+    local transition_id=$2;  [[ -n $transition_id ]] || exit_error "$ERR_MR" "transition_id required"
 
-    local transition;   transition=$(jq_build "id" "$transition_id")        || exit $?
-    local request_data; request_data=$(jq_build "transition" "$transition") || exit $?
+    local transition;   transition=$(jq_build "id" "$transition_id")        || exit "$ERR_MR"
+    local request_data; request_data=$(jq_build "transition" "$transition") || exit "$ERR_MR"
 
     jira_request "issue/${issue_code}/transitions" "POST" "$request_data" || exit $?
 }
@@ -498,8 +499,8 @@ jira_transition() {
 # Gitlab functions
 
 gitlab_check_env() {
-    [[ -n $GITLAB_DOMAIN ]] || exit_error 11 "GITLAB_DOMAIN is not set"
-    [[ -n $GITLAB_TOKEN ]]  || exit_error 11 "GITLAB_TOKEN is not set"
+    [[ -n $GITLAB_DOMAIN ]] || exit_error "$ERR_MR_ENV" "GITLAB_DOMAIN is not set"
+    [[ -n $GITLAB_TOKEN ]]  || exit_error "$ERR_MR_ENV" "GITLAB_TOKEN is not set"
 }
 
 gitlab_remote() {
@@ -510,7 +511,7 @@ gitlab_remote() {
         [[ -n "$remote_url" ]] && echo "$remote" && return 0
     done
 
-    return 1
+    return "$ERR_GIT_REPO"
 }
 
 gitlab_project_url() {
@@ -535,7 +536,7 @@ gitlab_project_url() {
         local suggested_domain
         suggested_domain=$(git remote get-url --push "$remote" | sed 's/.*@\(.*\):.*/\1/')
 
-        exit_error 12 "$(cat <<- EOF
+        exit_error "$ERR_GIT_REPO" "$(cat <<- EOF
 			Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
 			  ${remote}:     ${remote_url}
 			  current:    GITLAB_DOMAIN="${GITLAB_DOMAIN}"
@@ -579,9 +580,9 @@ gitlab_request() {
         -H "Content-Type: application/json" \
         --data "${request_data}" \
         --max-time "${GIT_MR_TIMEOUT:-5}" \
-        "${gitlab_base_url}/${request_url}") || exit_error 10 "Gitlab request error"
+        "${gitlab_base_url}/${request_url}") || exit_error "$ERR_GITLAB_API" "Gitlab request error"
 
-    [[ -z "$(gitlab_check_error "$result")" ]] || return
+    [[ -z "$(gitlab_check_error "$result")" ]] || return "$ERR_GITLAB"
 
     echo "$result"
 }
@@ -604,18 +605,16 @@ gitlab_new_merge_request_url() {
 
     local project_url; project_url=$(gitlab_project_url) || exit $?
 
-    [[ -n $project_url ]] || return
-
     local source_branch=${1:-$(git_current_branch)}
     if ! git_remote_branch_exists "$source_branch"; then
         echo_error "Branch '$source_branch' does not exist on remote"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
     if ! git_remote_branch_exists "$target_branch"; then
         echo_error "Target branch '$target_branch' does not exist on remote"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local gitlab_mr_url="https://${GITLAB_DOMAIN}/${project_url}/-/merge_requests/new"
@@ -651,7 +650,7 @@ gitlab_merge_request_summary() {
     local result
     result=$(gitlab_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
 
-    [[ -n $result && $result != "[]" ]] || return
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result" | jq '.[0]'
 }
@@ -659,14 +658,14 @@ gitlab_merge_request_summary() {
 gitlab_merge_requests_search() {
     gitlab_check_env
 
-    local search_term=$1;  [[ -n $search_term ]] || exit_error 0 "search_term required"
+    local search_term=$1;  [[ -n $search_term ]] || exit_error "$ERR_MR" "search_term required"
 
     local result
     result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
-    [[ -n $result && $result != "[]" ]] || return
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id}) | .[]')
-    [[ -n $result && $result != "[]" ]] || return
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result"
 }
@@ -675,10 +674,10 @@ gitlab_projects() {
     local result
 
     result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=100") || exit $?
-    [[ -n $result && $result != "[]" ]] || return
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     result=$(echo "$result" | jq 'map({id: .id, name: .name, path_with_namespace: .path_with_namespace})')
-    [[ -n $result && $result != "[]" ]] || return
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result"
 }
@@ -686,7 +685,7 @@ gitlab_projects() {
 gitlab_merge_request() {
     gitlab_check_env
 
-    local mr_iid=$1;  [[ -n $mr_iid ]] || return
+    local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
 
     gitlab_project_request "merge_requests/$mr_iid"
 }
@@ -716,7 +715,7 @@ gitlab_extract_merge_status() {
 
     if [[ "$(echo "$mr_detail" | jq -r '.state')" == "merged" ]]; then
         echo "merged"
-        return
+        return 0
     fi
 
     echo "$mr_detail" | jq -r '.merge_status'
@@ -763,8 +762,8 @@ gitlab_merge_request_threads() {
     local project_url=$1
     local mr_iid=$2
 
-    [[ -n $project_url ]] || return
-    [[ -n $mr_iid ]]      || return
+    [[ -n $project_url ]] || exit_error "$ERR_MR" "No project_url provided"
+    [[ -n $mr_iid ]]      || exit_error "$ERR_MR" "No mr_iid provided"
 
     local thread_summaries
     local per_page=100
@@ -831,8 +830,8 @@ gitlab_default_label_ids() {
 gitlab_merge_request_update() {
     gitlab_check_env
 
-    local mr_iid=$1;   [[ -n $mr_iid ]]  || { echo_error "No mr_iid provided"; return; }
-    local mr_data=$2;  [[ -n $mr_data ]] || { echo_error "No data provided";   return; }
+    local mr_iid=$1;   [[ -n $mr_iid ]]  || exit_error "$ERR_MR" "No mr_iid provided"
+    local mr_data=$2;  [[ -n $mr_data ]] || exit_error "$ERR_MR" "No data provided"
 
     gitlab_project_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
@@ -840,7 +839,7 @@ gitlab_merge_request_update() {
 gitlab_merge_request_merge() {
     gitlab_check_env
 
-    local mr_iid=$1;  [[ -n $mr_iid ]] || { echo_error "No mr_iid provided"; return; }
+    local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
 
     gitlab_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
 }
@@ -879,7 +878,7 @@ gitlab_undraft() {
     if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
@@ -894,7 +893,7 @@ gitlab_undraft() {
     if ! gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is not a draft"
         echo_error
-        return
+        return 0
     fi
 
     local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
@@ -902,7 +901,7 @@ gitlab_undraft() {
     if confirm "Do you want to resolve draft status?"; then
         echo -n "Resolving draft status... "
 
-        local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit $?
+        local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
 
         local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
         [[ -n $result ]] && echo -e "OK\n"
@@ -915,7 +914,7 @@ gitlab_undraft() {
 
 guess_issue_code() {
     [[ -z $git_mr_unguessable_issue_code ]] || return
-    [[ -n $JIRA_CODE_PATTERN ]] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
+    [[ -n $JIRA_CODE_PATTERN ]] || { echo_error "JIRA_CODE_PATTERN not set - unable to guess issue code"; return "$ERR_MR_ENV"; }
 
     local branch=${1:-$(git_current_branch)}
 
@@ -925,7 +924,7 @@ guess_issue_code() {
 
     if [[ -z $issue_code ]]; then
         echo_error "Unable to guess issue code"
-        return
+        return 1
     fi
 
     echo_debug "Issue code: $issue_code"
@@ -939,7 +938,7 @@ mr_title() {
 
     if [[ -z $issue_code ]]; then
         git_titlize_branch "$source_branch"
-        return
+        return 0
     fi
 
     local issue_content; issue_content=$(jira_ticket_data "$issue_code")
@@ -957,7 +956,7 @@ mr_title() {
             echo_error "  $issue_content"
 
         echo "$issue_key"
-        return
+        return 0
     fi
 
     local issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
@@ -981,7 +980,7 @@ mr_description() {
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
     local issue_code=${3:-${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}}
 
-    local title; title=$(mr_title "$source_branch" "$issue_code") || exit $?
+    local title; title=$(mr_title "$source_branch" "$issue_code")
 
     mr_print_description "$title" "$(mr_commit_list "$source_branch" "$target_branch")"
 }
@@ -1048,7 +1047,7 @@ mr_print_status() {
     local merge_request=$1
     local threads=$2
 
-    [[ -n $merge_request ]] || exit_error 0 "merge_request not provided"
+    [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
     local mr_url;      mr_url=$(gitlab_extract_url "$merge_request")
     local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
@@ -1248,10 +1247,10 @@ is_status_label() {
         tr "," "\n")
 
     local match
-    match="$( echo "$label" | grep "$status_labels")" || return
+    match="$( echo "$label" | grep "$status_labels")" || return 1
 
     # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
-    (echo "$status_labels" | grep "$match" > /dev/null) || return
+    (echo "$status_labels" | grep "$match" > /dev/null) || return 1
 
     echo "$match"
 }
@@ -1319,7 +1318,7 @@ mr_update_labels() {
 
     if [[ -z $to_remove && -z $to_add ]]; then
         echo_error "No label to add or remove"
-        return
+        return 0
     fi
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
@@ -1327,7 +1326,7 @@ mr_update_labels() {
        confirm "Do you want to update the merge request labels to \"$new_labels\"?"; then
         echo -n "Updating merge request labels... "
 
-        local mr_data; mr_data=$(jq_build "labels" "$new_labels") || exit $?
+        local mr_data; mr_data=$(jq_build "labels" "$new_labels") || exit "$ERR_MR"
         local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
 
         [[ -n $result ]] && echo -e "OK\n"
@@ -1347,7 +1346,7 @@ mr_gitlab_undraft() {
     echo -n "Resolving draft status... "
 
     local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
-    local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit $?
+    local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
 
     local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
     [[ -n $result ]] && echo -e "OK\n"
@@ -1382,7 +1381,7 @@ mr_menu_merge_requests() {
     local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code)}}
 
     local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$issue_code") || exit $?
-    [[ -n $mr_summaries ]] || return
+    [[ -n $mr_summaries ]] || return "$ERR_GITLAB"
 
     # Load project names into bash associative array
     declare -A project_arr
@@ -1494,7 +1493,7 @@ mr_menu_update() {
         echo_error "Merge request not found"
         echo
         mr_menu_contents "$menu_items"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
@@ -1512,7 +1511,7 @@ mr_menu_update() {
 
     local mr_update_data='{}'
     if confirm "Do you want to update the menu in the merge request description?"; then
-        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
+        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit "$ERR_MR"
     fi
     if [[ $mr_update_data != "{}" ]]; then
         echo -n "Updating merge request..."
@@ -1570,7 +1569,7 @@ mr_menu_update_all() {
 
         mr_update_data='{}'
         if confirm "Do you want to update the menu in the merge request description?"; then
-            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
+            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit "$ERR_MR"
         fi
         if [[ $mr_update_data != "{}" ]]; then
             echo -n "Updating merge request..."
@@ -1788,7 +1787,7 @@ mr_status() {
     if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
@@ -1816,7 +1815,7 @@ mr_update() {
     if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
         mr_print "$source_branch" "$target_branch"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
@@ -1940,7 +1939,7 @@ mr_update() {
                         new_description=$(echo -e "${new_description}\n${newLines}$(markdown_list "$new_commit_messages_content_str")")
                 fi
                 new_description=$(echo -e "$new_description")$'\n'
-                mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
+                mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit "$ERR_MR"
             fi
         fi
 
@@ -1948,7 +1947,7 @@ mr_update() {
             update_prompt=1
             if confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?"; then
                 if git_remote_branch_exists "$target_branch"; then
-                    mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit $?
+                    mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit "$ERR_MR"
                 else
                     echo_error "Target branch '$target_branch' does not exist on remote"
                 fi
@@ -1983,7 +1982,7 @@ mr_merge() {
     if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
-        return
+        return "$ERR_GITLAB"
     fi
 
     local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
@@ -2006,12 +2005,12 @@ mr_merge() {
     if [[ $merge_status == "merged" ]]; then
         echo_error "Merge request is already merged."
         echo_error
-        return
+        return 0
     fi
     if [[ $merge_status != "can_be_merged" ]]; then
         echo_error "Merge request can not be merged. You probably need to rebase the branch and resolve conflicts."
         echo_error
-        return
+        return "$ERR_GITLAB"
     fi
 
     # test open threads
@@ -2025,37 +2024,37 @@ mr_merge() {
         else
             echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging or use the --force option."
             echo_error
-            return
+            return "$ERR_USER"
         fi
     fi
 
     if gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is a draft (work in progress)"
-        confirm "Do you want to resolve draft status?" || { echo_error; return; }
+        confirm "Do you want to resolve draft status?" || { echo_error; return 0; }
 
         echo -n "Resolving draft status... "
         local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
-        local mr_data;       mr_data=$(jq_build "title" "$undraft_title") || exit $?
+        local mr_data;       mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
 
         local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
         [[ -n $result ]] && echo -e "OK\n"
 
-        [[ -n $result ]] || { echo_error; return; } # interrupt on error
+        [[ -n $result ]] || { echo_error; return "$ERR_GITLAB"; } # interrupt on error
     fi
 
     # Merge
 
-    confirm "Do you want to merge '$source_branch' into '$current_target'?" || { echo; return; }
+    confirm "Do you want to merge '$source_branch' into '$current_target'?" || { echo; return 0; }
 
     echo -n "Merging '$source_branch'... "
     local result; result=$(gitlab_merge_request_merge "${mr_iid}")
     [[ -n $result ]] && echo -e "OK\n"
 
-    [[ -n $result ]] || { echo_error; return; } # interrupt on error
+    [[ -n $result ]] || { echo_error; return "$ERR_GITLAB"; } # interrupt on error
 
     # checkout target branch
 
-    confirm "Do you want to checkout '$current_target' and pull changes?" || { echo; return; }
+    confirm "Do you want to checkout '$current_target' and pull changes?" || { echo; return 0; }
 
     echo "$(colorize "git checkout $current_target && git pull --rebase" "lightgray")"
     git_mr_readonly ||
@@ -2064,7 +2063,7 @@ mr_merge() {
 
     # delete local branch
 
-    confirm "Do you want to delete local branch '$source_branch'?" || { echo; return; }
+    confirm "Do you want to delete local branch '$source_branch'?" || { echo; return 0; }
 
     echo "$(colorize "git branch -d $source_branch" "lightgray")"
     git_mr_readonly ||
@@ -2096,14 +2095,14 @@ mr_menu() {
     local source_branch; source_branch=$(git_current_branch)
     local issue_code=${GIT_MR_CODE:-${1:-$(guess_issue_code "$source_branch")}}
 
-    [[ -n $issue_code ]] || return
+    [[ -n $issue_code ]] || exit_error "$ERR_USER" "Issue code or search term required for menu."
 
     # All non-closed merge requests for issue code
     local menu_items; menu_items=$(mr_menu_merge_requests "$issue_code")
 
     if [[ -z $menu_items ]]; then
         echo_error "No merge requests found for '$issue_code'."
-        return
+        return "$ERR_GITLAB"
     fi
 
     case "$git_mr_menu_mode" in
@@ -2112,7 +2111,7 @@ mr_menu() {
             then mr_menu_update_all "$issue_code" "$menu_items"
             else mr_menu_update     "$menu_items"; fi ;;
         status) mr_menu_status "$issue_code" "$menu_items" ;;
-        *) return 1 ;;
+        *) return "$ERR_MR" ;;
     esac
 }
 
@@ -2128,7 +2127,7 @@ mr_transition() {
     if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
         mr_print "$source_branch"
-        return 1
+        return "$ERR_GITLAB"
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
@@ -2171,7 +2170,7 @@ mr_transition() {
             ;;
         *)
             echo_error "Invalid transition"
-            return 1
+            return "$ERR_JIRA"
             ;;
     esac
 
@@ -2313,6 +2312,22 @@ EOF
 
 
 ################################################################################
+# Error codes
+
+#ERR=1             # General error
+ERR_USER=9         # User error
+ERR_GIT=10         # Git error
+ERR_GIT_REPO=11    # Git repository error
+ERR_GITLAB=20      # Gitlab error
+ERR_GITLAB_API=21  # Gitlab request error
+ERR_JIRA=30        # Jira error
+ERR_JIRA_API=31    # Jira request error
+ERR_MR=90          # Git-MR error
+ERR_MR_DEPS=91     # Dependency issue
+ERR_MR_ENV=92      # Environment configuration issue
+
+
+################################################################################
 # Hardcoded constants
 GITLAB_DRAFT_PREFIX="Draft"
 GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
@@ -2331,10 +2346,10 @@ GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
 
 # Init
 
-git rev-parse > /dev/null 2>&1    || exit_error 1 "Not a git repository"
+git rev-parse > /dev/null 2>&1    || exit_error "$ERR_GIT_REPO" "Not a git repository"
 
-[[ -x "$(command -v jq)" ]]       || exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
-[[ "${BASH_VERSINFO:-0}" -ge 4 ]] || exit_error 2 "Your bash version is too old: $BASH_VERSION"
+[[ -x "$(command -v jq)" ]]       || exit_error "$ERR_MR_DEPS" "Git-MR requires jq [https://stedolan.github.io/jq/]"
+[[ "${BASH_VERSINFO:-0}" -ge 4 ]] || exit_error "$ERR_MR_DEPS" "Your bash version is too old: $BASH_VERSION"
 
 
 # Parse options
@@ -2357,8 +2372,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 set -- "${args[@]}"
-
-
 
 
 # Run
@@ -2389,19 +2402,3 @@ case $1 in
     *) mr_print "$@" ;;
 
 esac
-
-
-################################################################################
-# Error code reference:
-#
-#   1   Not a git repository
-#   2   Dependency missing (jq is not installed, bash is too old)
-#   3   Git branch error
-#
-#  10   Gitlab request error
-#  11   GITLAB_DOMAIN|GITLAB_TOKEN is not set
-#  12   Unable to determine Gitlab project URL
-#
-#  20   Jira request error
-#  21   JIRA_USER|JIRA_TOKEN|JIRA_INSTANCE is not set
-#
