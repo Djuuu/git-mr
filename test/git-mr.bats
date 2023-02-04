@@ -657,17 +657,17 @@ full_sha() {
     run gitlab_extract_url   "$mr_summary"; assert_output "https://gitlab.example.net/mr/123"
     run gitlab_extract_title "$mr_summary"; assert_output "Draft: Feature/XY-1234 Lorem Ipsum"
 
-    mr_summary=$(gitlab_merge_request_summary "feature/nope")
+    run gitlab_merge_request_summary "feature/nope"
+    assert_failure
+    assert_output ""
 
-    run gitlab_extract_iid   "$mr_summary"; assert_output ''
-    run gitlab_extract_url   "$mr_summary"; assert_output ''
-    run gitlab_extract_title "$mr_summary"; assert_output ''
+    run gitlab_merge_request_summary "nope"
+    assert_failure
+    assert_output ""
 
-    mr_summary=$(gitlab_merge_request_summary "nope")
-
-    run gitlab_extract_iid   "$mr_summary"; assert_output ''
-    run gitlab_extract_url   "$mr_summary"; assert_output ''
-    run gitlab_extract_title "$mr_summary"; assert_output ''
+    run gitlab_extract_iid   ""; assert_output ''
+    run gitlab_extract_url   ""; assert_output ''
+    run gitlab_extract_title ""; assert_output ''
 }
 
 @test "Extracts MR info from merge request detail" {

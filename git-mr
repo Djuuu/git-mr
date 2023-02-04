@@ -16,8 +16,8 @@ git_current_branch() {
 git_base_branch() {
     local branch=${1:-$(git_current_branch)}
 
-    [[ -z $branch ]]                                   && exit 3 # Not on any branch
-    [[ "$branch" == "main" || "$branch" == "master" ]] && exit 3 # On default branch
+    [[ -n $branch ]]                                   || exit 3 # Not on any branch
+    [[ "$branch" != "main" && "$branch" != "master" ]] || exit 3 # On default branch
     git show-ref -q --heads "$branch"                  || exit 3 # Branch does not exist
 
     # Nearest branch in commit history
@@ -86,17 +86,16 @@ git_check_branches() {
     local source_branch="$1"
     local target_branch="$2"
 
-    [ -z "$source_branch" ] &&
+    [[ -n $source_branch ]] ||
         exit_error 3 "Not on any branch"
 
-    [[ $source_branch == "main" ]] ||
-        [[ $source_branch == "master" ]] &&
+    [[ $source_branch != "main" && $source_branch != "master" ]] ||
         exit_error 3 "On default branch"
 
     git show-ref -q --heads "$source_branch" ||
         exit_error 3 "Branch '$source_branch' does not exist"
 
-    [ -z "$target_branch" ] &&
+    [[ -n $target_branch ]] ||
         exit_error 3 "Unable to determine target branch"
 
     return 0
@@ -281,7 +280,7 @@ echo_error() {
 }
 
 echo_debug() {
-    [[ $GIT_MR_VERBOSE -ne 1 ]] && return 0
+    [[ $GIT_MR_VERBOSE -eq 1 ]] || return 0
 
     colorize "$1\n" "gray" >&2
 }
@@ -348,9 +347,7 @@ regex_escape() {
 open_in_browser() {
     local url=$1
 
-    if [ -z "$url" ]; then
-        return
-    fi
+    [[ -n $url ]] || return
 
     local open_command
     if   [[ "$OSTYPE" == "linux-gnu"* ]]; then open_command='xdg-open';
@@ -370,7 +367,7 @@ open_in_browser() {
 }
 
 git_mr_readonly() {
-    [[ $GIT_MR_READONLY -ne 1 ]] && return 1
+    [[ $GIT_MR_READONLY -eq 1 ]] || return 1
 
     [[ -n $1 ]] &&
         echo "$(colorize "🚫 Read-only 🚫" "gray")" >&2
@@ -583,7 +580,7 @@ gitlab_request() {
         --max-time "${GIT_MR_TIMEOUT:-5}" \
         "${gitlab_base_url}/${request_url}") || exit_error 10 "Gitlab request error"
 
-    [ -n "$(gitlab_check_error "$result")" ] && return
+    [[ -z "$(gitlab_check_error "$result")" ]] || return
 
     echo "$result"
 }
@@ -606,7 +603,7 @@ gitlab_new_merge_request_url() {
 
     local project_url; project_url=$(gitlab_project_url) || exit $?
 
-    [ -z "$project_url" ] && return
+    [[ -n $project_url ]] || return
 
     local source_branch=${1:-$(git_current_branch)}
     if ! git_remote_branch_exists "$source_branch"; then
@@ -653,9 +650,7 @@ gitlab_merge_request_summary() {
     local result
     result=$(gitlab_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
 
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return
 
     echo "$result" | jq '.[0]'
 }
@@ -667,15 +662,10 @@ gitlab_merge_requests_search() {
 
     local result
     result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
-
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return
 
     result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id}) | .[]')
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return
 
     echo "$result"
 }
@@ -684,14 +674,10 @@ gitlab_projects() {
     local result
 
     result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=100") || exit $?
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return
 
     result=$(echo "$result" | jq 'map({id: .id, name: .name, path_with_namespace: .path_with_namespace})')
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return
 
     echo "$result"
 }
@@ -699,9 +685,7 @@ gitlab_projects() {
 gitlab_merge_request() {
     gitlab_check_env
 
-    local mr_iid=$1
-
-    [ -z "$mr_iid" ] && return
+    local mr_iid=$1;  [[ -n $mr_iid ]] || return
 
     gitlab_project_request "merge_requests/$mr_iid"
 }
@@ -778,8 +762,8 @@ gitlab_merge_request_threads() {
     local project_url=$1
     local mr_iid=$2
 
-    [ -z "$project_url" ] && return
-    [ -z "$mr_iid" ] && return
+    [[ -n $project_url ]] || return
+    [[ -n $mr_iid ]]      || return
 
     local thread_summaries
     local per_page=100
@@ -846,8 +830,8 @@ gitlab_default_label_ids() {
 gitlab_merge_request_update() {
     gitlab_check_env
 
-    local mr_iid=$1;   if [[ -z $mr_iid ]];  then echo_error "No mr_iid provided"; return; fi
-    local mr_data=$2;  if [[ -z $mr_data ]]; then echo_error "No data provided";   return; fi
+    local mr_iid=$1;   [[ -n $mr_iid ]]  || { echo_error "No mr_iid provided"; return; }
+    local mr_data=$2;  [[ -n $mr_data ]] || { echo_error "No data provided";   return; }
 
     gitlab_project_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
@@ -855,7 +839,7 @@ gitlab_merge_request_update() {
 gitlab_merge_request_merge() {
     gitlab_check_env
 
-    local mr_iid=$1;  if [[ -z $mr_iid ]]; then echo_error "No mr_iid provided"; return; fi
+    local mr_iid=$1;  [[ -n $mr_iid ]] || { echo_error "No mr_iid provided"; return; }
 
     gitlab_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
 }
@@ -929,8 +913,8 @@ gitlab_undraft() {
 # Merge request utility functions
 
 guess_issue_code() {
-    [ -n "$git_mr_unguessable_issue_code" ] && return
-    [ -n "$JIRA_CODE_PATTERN" ] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
+    [[ -z $git_mr_unguessable_issue_code ]] || return
+    [[ -n $JIRA_CODE_PATTERN ]] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
 
     local branch=${1:-$(git_current_branch)}
 
@@ -1397,9 +1381,7 @@ mr_menu_merge_requests() {
     local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code)}}
 
     local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$issue_code") || exit $?
-    if [ -z "$mr_summaries" ]; then
-        return
-    fi
+    [[ -n $mr_summaries ]] || return
 
     # Load project names into bash associative array
     declare -A project_arr
@@ -1724,7 +1706,7 @@ mr_print() {
     git_check_branches "$source_branch" "$target_branch"
 
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
-    [ -z "$issue_code" ] && git_mr_unguessable_issue_code=1
+    [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
     cat <<EOF
 
@@ -1742,7 +1724,7 @@ EOF
         echo
 
         local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
-        [ -z "$new_mr_url" ] && return
+        [[ -n $new_mr_url ]] || return
 
         cat <<EOF
 To create a new merge request:
@@ -1759,7 +1741,7 @@ mr_open() {
     git_check_branches "$source_branch" "$target_branch"
 
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
-    [ -z "$issue_code" ] && git_mr_unguessable_issue_code=1
+    [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
     local description; description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
 
@@ -1781,7 +1763,7 @@ EOF
         echo
 
         local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
-        [ -z "$new_mr_url" ] && return
+        [[ -n $new_mr_url ]] || return
 
         # add description
         new_mr_url="${new_mr_url}&$(urlencode "merge_request[description]")=$(urlencode "$description")"
@@ -2048,7 +2030,7 @@ mr_merge() {
 
     if gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is a draft (work in progress)"
-        if ! confirm "Do you want to resolve draft status?"; then echo_error; return; fi
+        confirm "Do you want to resolve draft status?" || { echo_error; return; }
 
         echo -n "Resolving draft status... "
         local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
@@ -2062,7 +2044,7 @@ mr_merge() {
 
     # Merge
 
-    if ! confirm "Do you want to merge '$source_branch' into '$current_target'?"; then echo; return; fi
+    confirm "Do you want to merge '$source_branch' into '$current_target'?" || { echo; return; }
 
     echo -n "Merging '$source_branch'... "
     local result; result=$(gitlab_merge_request_merge "${mr_iid}")
@@ -2072,7 +2054,7 @@ mr_merge() {
 
     # checkout target branch
 
-    if ! confirm "Do you want to checkout '$current_target' and pull changes?"; then echo; return; fi
+    confirm "Do you want to checkout '$current_target' and pull changes?" || { echo; return; }
 
     echo "$(colorize "git checkout $current_target && git pull --rebase" "lightgray")"
     git_mr_readonly ||
@@ -2081,7 +2063,7 @@ mr_merge() {
 
     # delete local branch
 
-    if ! confirm "Do you want to delete local branch '$source_branch'?"; then echo; return; fi
+    confirm "Do you want to delete local branch '$source_branch'?" || { echo; return; }
 
     echo "$(colorize "git branch -d $source_branch" "lightgray")"
     git_mr_readonly ||
@@ -2113,9 +2095,7 @@ mr_menu() {
     local source_branch; source_branch=$(git_current_branch)
     local issue_code=${GIT_MR_CODE:-${1:-$(guess_issue_code "$source_branch")}}
 
-    if [ -z "$issue_code" ]; then
-        return
-    fi
+    [[ -n $issue_code ]] || return
 
     # All non-closed merge requests for issue code
     local menu_items; menu_items=$(mr_menu_merge_requests "$issue_code")
@@ -2207,7 +2187,7 @@ mr_hook() {
     local git_dir; git_dir=$(git rev-parse --git-dir)
     local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
 
-    [ ! -d "${git_dir}/hooks" ] && mkdir "${git_dir}/hooks"
+    [[ -d "${git_dir}/hooks" ]] || mkdir "${git_dir}/hooks"
 
     local hook
     while read -r -d $'\0' hook; do
@@ -2345,14 +2325,14 @@ GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
 # Run
 
 # Exit if not running script directly (ex: when sourcing)
-[ "$(basename "$0")" != 'git-mr' ] && return 0;
+[[ "$(basename "$0")" == 'git-mr' ]] || return 0;
 
 # Init
 
 git rev-parse > /dev/null 2>&1    || exit_error 1 "Not a git repository"
 
-[[ ! -x "$(command -v jq)" ]]     && exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
-[[ "${BASH_VERSINFO:-0}" -lt 4 ]] && exit_error 2 "Your bash version is too old: $BASH_VERSION"
+[[ -x "$(command -v jq)" ]]       || exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
+[[ "${BASH_VERSINFO:-0}" -ge 4 ]] || exit_error 2 "Your bash version is too old: $BASH_VERSION"
 
 
 # Parse options
