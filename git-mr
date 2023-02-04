@@ -901,9 +901,9 @@ gitlab_undraft() {
     if confirm "Do you want to resolve draft status?"; then
         echo -n "Resolving draft status... "
 
-        mr_data=$(jq_build "title" "$undraft_title") || exit $?
-        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+        local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit $?
 
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
         [[ -n $result ]] && echo -e "OK\n"
     fi
 }
@@ -1326,7 +1326,7 @@ mr_update_labels() {
        confirm "Do you want to update the merge request labels to \"$new_labels\"?"; then
         echo -n "Updating merge request labels... "
 
-        mr_data=$(jq_build "labels" "$new_labels") || exit $?
+        local mr_data; mr_data=$(jq_build "labels" "$new_labels") || exit $?
         local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
 
         [[ -n $result ]] && echo -e "OK\n"
@@ -1346,7 +1346,7 @@ mr_gitlab_undraft() {
     echo -n "Resolving draft status... "
 
     local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
-    mr_data=$(jq_build "title" "$undraft_title") || exit $?
+    local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit $?
 
     local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
     [[ -n $result ]] && echo -e "OK\n"
