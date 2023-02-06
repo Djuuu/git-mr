@@ -1239,20 +1239,9 @@ labels_differ() {
 
 is_status_label() {
     local label=$1
+    local status_labels=",${2-"${GITLAB_IP_LABELS},${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}"},"
 
-    local status_labels=${2:-"${GITLAB_IP_LABELS},${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}"}
-    status_labels=$(echo "$status_labels" |
-        sed 's/,,/,/g' |
-        sed 's/^,//' | sed 's/,$//' |
-        tr "," "\n")
-
-    local match
-    match="$( echo "$label" | grep "$status_labels")" || return 1
-
-    # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
-    (echo "$status_labels" | grep "$match" > /dev/null) || return 1
-
-    echo "$match"
+    echo "$status_labels" | grep -q ",$label,"
 }
 
 is_status_ip_label() {
@@ -1280,16 +1269,16 @@ mr_format_labels() {
     local other_labels=()
 
     for label in "${labels_array[@]}"; do
-        if [[ -n "$(is_status_ip_label "$label")" ]]; then
+        if is_status_ip_label "$label"; then
             # shellcheck disable=SC2086 # Allow splitting of terminal color
             status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_IP_LABEL_COLOR:-orange})")
-        elif [[ -n "$(is_status_cr_label "$label")" ]]; then
+        elif is_status_cr_label "$label"; then
             # shellcheck disable=SC2086 # Allow splitting of terminal color
             status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_CR_LABEL_COLOR:-lightblue bold})")
-        elif [[ -n "$(is_status_qa_label "$label")" ]]; then
+        elif is_status_qa_label "$label"; then
             # shellcheck disable=SC2086 # Allow splitting of terminal color
             status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_QA_LABEL_COLOR:-lightpurple bold})")
-        elif [[ -n "$(is_status_ok_label "$label")" ]]; then
+        elif is_status_ok_label "$label"; then
             # shellcheck disable=SC2086 # Allow splitting of terminal color
             status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_OK_LABEL_COLOR:-lightgreen})")
         else
