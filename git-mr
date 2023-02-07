@@ -698,7 +698,7 @@ gitlab_merge_requests_search() {
 gitlab_projects() {
     local result
 
-    result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=100") || exit $?
+    result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=${GIT_MR_LAST_PROJECTS_LIMIT:-40}") || exit $?
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     result=$(echo "$result" | jq 'map({id: .id, name: .name, path_with_namespace: .path_with_namespace})')
@@ -1433,6 +1433,9 @@ mr_menu_contents() {
             "web_url="      + (.web_url      | @sh) + ";\n"
         ')"
 
+        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
+            project_name=$(echo "$web_url" | sed -e "s/https:\/\/$GITLAB_DOMAIN\///" -e "s/\/-\/merge_requests\/[0-9]*\$//")
+
         title=$(gitlab_title_undraft "$title")
 
         local item_label; item_label="${project_name}: $(markdown_link "${title}" "$web_url")"
@@ -1483,6 +1486,9 @@ mr_menu_status() {
             "title="        + (.title        | @sh) + ";\n" +
             "web_url="      + (.web_url      | @sh) + ";\n"
         ')"
+
+        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
+            project_name=$(echo "$web_url" | sed -e "s/https:\/\/$GITLAB_DOMAIN\///" -e "s/\/-\/merge_requests\/[0-9]*\$//")
 
         title=$(gitlab_title_undraft "$title")
         local project_url; project_url=$(gitlab_extract_project_url "$web_url")
@@ -1591,6 +1597,9 @@ mr_menu_update_all() {
             "mr_title="     + (.title        | @sh) + ";\n" +
             "project_name=" + (.project_name | @sh) + ";\n"
         ')"
+
+        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
+            project_name=$(echo "$mr_url" | sed -e "s/https:\/\/$GITLAB_DOMAIN\///" -e "s/\/-\/merge_requests\/[0-9]*\$//")
 
         # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
         # Here, we can expect other target projects here.
