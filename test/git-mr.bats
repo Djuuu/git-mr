@@ -22,6 +22,7 @@ setup_file() {
 
     cd "${BATS_TEST_DIRNAME}" || exit
 
+    [[ -d data ]] && rm -rf data
     mkdir data && cd data || exit
 
     git init --bare remote
@@ -324,10 +325,10 @@ full_sha() {
 }
 
 @test "Makes title from branch" {
-    run git_titlize_branch feature/AB-123-some_branch_title
+    run git_titlize_branch feature/AB-123-some-branch_title
     assert_output "Feature/AB-123 Some branch title"
 
-    run git_titlize_branch AB-123-some_branch_title
+    run git_titlize_branch AB-123-some-branch_title
     assert_output "AB-123 Some branch title"
 
     run git_titlize_branch task/other_branch-title
@@ -403,6 +404,14 @@ full_sha() {
 
     run echo_spacer -1 'x'
     assert_output ""
+}
+
+@test "Trims strings" {
+    run trim "  some string  " " "
+    assert_output "some string"
+
+    run trim ",,some,list,," ","
+    assert_output "some,list"
 }
 
 @test "Asks for confirmation" {
@@ -490,14 +499,14 @@ full_sha() {
 @test "Formats markdown lists" {
     run markdown_list "$(cat <<- EOF
 		one
-		two
-		three
+		two two
+		three three three
 		EOF
     )"
     assert_output "$(cat <<- EOF
 		* **one**..
-		* **two**..
-		* **three**..
+		* **two two**..
+		* **three three three**..
 		EOF
     )"
 }
@@ -744,6 +753,9 @@ full_sha() {
     run gitlab_title_is_draft "My MR"
     assert_failure
 
+    run gitlab_title_is_draft "My Draft: MR"
+    assert_failure
+
     run gitlab_title_to_draft "My MR"
     assert_output "Draft: My MR"
 
@@ -765,6 +777,9 @@ full_sha() {
     git switch feature/base
     run git-mr code
     assert_output "Unable to guess issue code"
+
+    run guess_issue_code feature/AB-123-CD-456-test-feature
+    assert_output "CD-456" # debatable
 }
 
 @test "Generates MR title from Jira issue title" {
@@ -1029,14 +1044,23 @@ full_sha() {
 # Merge request labels utility functions
 
 @test "Replaces labels" {
-    run replace_labels "toto,tata,titi" "tata" "tutu"
-    assert_output "toto,titi,tutu"
+    run replace_labels ""     ""     "";     assert_output ""
+    run replace_labels ""     "toto" "";     assert_output ""
+    run replace_labels ""     ""     "toto"; assert_output "toto"
+    run replace_labels "toto" ""     "";     assert_output "toto"
 
-    run replace_labels "toto,tata" "tata,toto"
-    assert_output ""
+    run replace_labels "toto,tata" "titi" "";     assert_output "toto,tata"
+    run replace_labels "toto,tata" ""     "titi"; assert_output "toto,tata,titi"
 
-    run replace_labels "toto,tata" "nope" "plop,pouet"
-    assert_output "toto,tata,plop,pouet"
+    run replace_labels "toto,tata,titi" "toto" "tutu"; assert_output "tata,titi,tutu"
+    run replace_labels "toto,tata,titi" "tata" "tutu"; assert_output "toto,titi,tutu"
+    run replace_labels "toto,tata,titi" "titi" "tutu"; assert_output "toto,tata,tutu"
+    run replace_labels "toto,tata,titi" "plop" "tutu"; assert_output "toto,tata,titi,tutu"
+
+    run replace_labels "toto,ta ta,titi" "plop,ta ta,plouf" "tutu,pouet"; assert_output "toto,titi,tutu,pouet"
+
+    run replace_labels "to to,ta ta,ti ti" "to to,plop"    "ta ta,pouet"; assert_output "ti ti,ta ta,pouet"
+    run replace_labels "to to,ta ta,ti ti" ",,plop,ta ta," "pouet,ti ti"; assert_output "to to,pouet,ti ti"
 }
 
 @test "Compares labels" {
@@ -1060,7 +1084,7 @@ full_sha() {
 
     run labels_differ "aaa,bbb,ccc" "ccc,bbb,aaa,ccc"; assert_failure
 
-    run labels_differ "aaa,bbb,ccc" ",,ccc,bbb,aaa,,ccc"; assert_failure
+    run labels_differ "aaa,b bb,cc c" ",,cc c,b bb,aaa,,cc c"; assert_failure
 }
 
 @test "Identifies workflow-specific labels" {
@@ -1136,8 +1160,14 @@ full_sha() {
 }
 
 @test "Formats labels" {
-    run mr_format_labels "abc-1,def-2"
-    assert_output "[abc-1] [def-2]"
+    run mr_format_labels ""
+    assert_output ""
+
+    run mr_format_labels "abc 1"
+    assert_output "[abc 1]"
+
+    run mr_format_labels "abc 1,def-2"
+    assert_output "[abc 1] [def-2]"
 }
 
 ################################################################################

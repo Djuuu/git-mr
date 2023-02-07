@@ -27,13 +27,14 @@ git_base_branch() {
     local refs_logs; refs_logs=$(git log --oneline --decorate "${branch}" \
             --simplify-by-decoration --decorate-refs='refs/heads/*') # select only commits with a local branch
 
-    if [[ $(echo "$refs_logs" | wc -l) -gt 1 ]]; then
+    local ref_count; ref_count="${refs_logs//[!$'\n']/}"; ref_count=$((${#ref_count} + 1))
+    if [[ $ref_count -gt 1 ]]; then
         base_branch=$( \
             echo "$refs_logs" |
-            head -n2 | tail -n1                  | # select closest decoration before current HEAD
-            sed 's/[a-f0-9]* (\([^)]*\)) .*/\1/' | # filters out everything but decorations
-            sed -e 's/, /\n/g'                   | # splits decorations
-            head -n1)                              # keep only first decoration
+            sed '
+                2!d  # keep only 2nd line (closest decoration before current HEAD)
+                s/[a-f0-9]* (\([^),]*\).*/\1/  # keep only first decoration
+            ')
     fi
 
     # First possible merge base
@@ -61,9 +62,11 @@ git_default_branch() {
     local default; default=$(git symbolic-ref "refs/remotes/${remote}/HEAD" -- 2>/dev/null)
 
     if [[ -n $default ]]; then
-
         local local_tracking
-        local_tracking=$(git branch -vv | grep "${default#"refs/remotes/"}" | sed 's/^[* ]*//' | cut -d' ' -f1)
+        local_tracking=$(git branch -vv | grep "${default#"refs/remotes/"}")
+        local_tracking=${local_tracking:2} # remove first 2 characters ("  " or "* ")
+        local_tracking=${local_tracking%% *} # remove all trailing characters after first space (included)
+        # -> only short local branch name remains
 
         # local branch tracking default remote with a different name
         [[ -n $local_tracking ]] && echo "$local_tracking" && return 0
@@ -171,7 +174,9 @@ git_titlize_branch() {
 
     # Formatting
     local title_ref;   title_ref="${prefix^}${issue_id}"
-    local title_label; title_label="$(echo "${label^}" | sed 's/[-_]/ /g')"
+    local title_label; title_label=${label^}
+    title_label=${title_label//-/ }
+    title_label=${title_label//_/ }
 
     echo "${title_ref}${title_label}"
 }
@@ -296,6 +301,20 @@ echo_spacer() {
     done
 }
 
+trim() {
+    # shellcheck disable=SC2064 # expand now to restore initial value on exit
+    trap "$(shopt -p extglob)" RETURN
+    shopt -s extglob
+
+    local str=$1
+    local char=$2
+
+    str=${str##*("$2")} # trim leading characters
+    str=${str%%*("$2")} # trim trailing characters
+
+    echo "$str"
+}
+
 confirm() {
     local question=$1
 
@@ -410,7 +429,7 @@ markdown_list() {
     local prefix="* ${MD_BOLD}"
     local suffix="${MD_BOLD}${MD_BR}"
 
-    echo "$content" | sed "s/.*/${prefix}&${suffix}/"
+    echo "${prefix}${content//$'\n'/${suffix}$'\n'${prefix}}${suffix}"
 }
 
 markdown_indent_list_items() {
@@ -479,7 +498,7 @@ jira_show_transitions() {
             "-> " + (.to | .name + (" " * (23 - (.name | length)))),
             "[" + .to.statusCategory.name + "]"
         ] | @tsv' |
-        sed 's/\r//g'
+        tr -d '\r'
 }
 
 jira_transition() {
@@ -524,9 +543,13 @@ gitlab_project_url() {
         remote_url=$(git remote get-url --push "$remote" | grep "${GITLAB_DOMAIN}")
 
     if [[ "$remote_url" == git* ]]; then
-        project_url=$(echo "$remote_url" | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+        project_url=$remote_url
+        project_url=${project_url#"git@${GITLAB_DOMAIN}:"}
+        project_url=${project_url%".git"}
     elif [[ "$remote_url" == https* ]]; then
-        project_url=$(echo "$remote_url" | sed "s/https:\/\/${GITLAB_DOMAIN}\/\(.*\).git/\1/")
+        project_url=$remote_url
+        project_url=${project_url#"https://${GITLAB_DOMAIN}/"}
+        project_url=${project_url%".git"}
     fi
 
     if [[ -z $project_url ]]; then
@@ -749,9 +772,9 @@ gitlab_extract_project_url() {
     local mr_url=$1
 
     local project_url
-    project_url=$(echo "$mr_url" |
-        sed "s/https:\/\/$GITLAB_DOMAIN\///" | # remove prefix
-        sed "s/\/-\/merge_requests\/[0-9]*\$//") # remove suffix
+    project_url=$(echo "$mr_url" | sed \
+        -e "s/https:\/\/$GITLAB_DOMAIN\///" \
+        -e "s/\/-\/merge_requests\/[0-9]*\$//")
 
     project_url=$(urlencode "$project_url")
 
@@ -791,7 +814,7 @@ gitlab_merge_request_threads() {
                     }
                 ) | .[] |
                 .id + "\t" + "unresolved:" + (.unresolved | tostring) + "\t" + "note_id:" + (.first_unresolved_note_id | tostring)' |
-                sed 's/\r//g')
+                tr -d '\r')
 
             # append page
             if [[ -z $thread_summaries ]]; then
@@ -842,9 +865,7 @@ gitlab_merge_request_merge() {
 gitlab_title_is_draft() {
     local title=$1
     for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
-        if echo "$title" | grep -q "^${prefix}:"; then
-            return 0
-        fi
+        [[ $title =~ ^${prefix}: ]] && return 0
     done
     return 1
 }
@@ -857,7 +878,7 @@ gitlab_title_to_draft() {
 gitlab_title_undraft() {
     local title=$1
     for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
-        title=$(echo "$title" | sed "s/^${prefix}:\s*//g")
+        title=${title#"${prefix}: "}
     done
     echo "$title"
 }
@@ -1109,8 +1130,9 @@ mr_print_status() {
     local threads_display="${resolved_count_display}/${thread_count_display}"
 
     if [[ $resolved_count -lt "$thread_count" ]]; then
-        local first_unresolved_note_id
-        first_unresolved_note_id=$(echo "$threads" | grep 'unresolved:true' | cut -f 3 | cut -d ':' -f 2 | head -n 1)
+        local first_unresolved_thread; first_unresolved_thread=$(echo "$threads" | grep -m 1 'unresolved:true')
+        local first_unresolved_note_id; first_unresolved_note_id="${first_unresolved_thread##*:}"
+
         local note_url="${mr_url}#note_${first_unresolved_note_id}"
         threads_display=$(terminal_link "$note_url" "$threads_display")
     fi
@@ -1221,19 +1243,22 @@ replace_labels() {
     local to_add=$3
 
     # split
-    labels=$(    echo "$labels"    | tr "," "\n")
-    to_remove=$( echo "$to_remove" | tr "," "\n")
-    to_add=$(    echo "$to_add"    | tr "," "\n")
+    labels=${labels//,/$'\n'}
+    to_remove=${to_remove//,/$'\n'}
+    to_add=${to_add//,/$'\n'}
 
     # remove
-    [[ -n $to_remove ]] && labels=$(echo "$labels" | grep -v "$to_remove")
-    [[ -n $to_add ]]    && labels=$(echo "$labels" | grep -v "$to_add")
+    labels=$(echo "$labels" | grep -vx "$to_remove"$'\n'"$to_add")
 
     # add
-    [[ -n $to_add ]] && labels=$(echo -e "${labels}\n${to_add}")
+    [[ -n $to_add ]] && labels="${labels},${to_add}"
 
     # implode
-    labels=$(echo "$labels" | tr "\n" "," | sed 's/^,//' | sed 's/,$//')
+    labels=${labels//$'\n'/,}
+
+    # trim commas
+    labels=${labels%,}
+    labels=${labels#,}
 
     echo "$labels"
 }
@@ -1244,12 +1269,11 @@ labels_differ() {
 
     [[ $old_labels == "$new_labels" ]] && return 1
 
-    local old_sorted; old_sorted=$(echo "$old_labels" | tr "," "\n" | grep . | sort -u | tr "\n" ",")
-    local new_sorted; new_sorted=$(echo "$new_labels" | tr "," "\n" | grep . | sort -u | tr "\n" ",")
+    # split to lines,  sort and de-duplicate,              remove potential empty line,    join back to comma-separated string
+    old_labels=$(echo "${old_labels//,/$'\n'}" | sort -u); old_labels=${old_labels#$'\n'}; old_labels=${old_labels//$'\n'/,}
+    new_labels=$(echo "${new_labels//,/$'\n'}" | sort -u); new_labels=${new_labels#$'\n'}; new_labels=${new_labels//$'\n'/,}
 
-    [[ $old_sorted == "$new_sorted" ]] && return 1
-
-    return 0
+    [[ $old_labels != "$new_labels" ]]
 }
 
 is_status_label() {
@@ -1304,8 +1328,8 @@ mr_format_labels() {
     local status_labels_str; status_labels_str="$(printf "%s " "${status_labels[@]}")"
     local other_labels_str;  other_labels_str="$(printf "%s " "${other_labels[@]}")"
 
-    echo "${status_labels_str}${other_labels_str}" |
-        sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
+    # shellcheck disable=SC2086 # trim whitespace
+    echo ${status_labels_str}${other_labels_str}
 }
 
 
@@ -1315,10 +1339,8 @@ mr_format_labels() {
 mr_update_labels() {
     local mr_iid=$1
     local labels=$2
-
-    # strip leading & trailing label commas
-    local to_remove; to_remove=$(echo -e "$3" | sed 's/^,*//' | sed 's/,*$//')
-    local to_add;    to_add=$(echo -e "$4" | sed 's/^,*//' | sed 's/,*$//')
+    local to_remove=$3
+    local to_add=$4
 
     if [[ -z $to_remove && -z $to_add ]]; then
         echo_error "No label to add or remove"
@@ -1894,12 +1916,12 @@ mr_update() {
         if [[ -n $old ]]; then
             if [[ $old == "$curr" ]]; then
                 # same sha-1 - only decorate
-                new_description_display=$(echo "$new_description_display" | sed "s/$old/$(colorize "$curr" "$sameColor")/")
-                new_description_content=$(echo "$new_description_content" | sed "s/$old/$curr/")
+                new_description_display=${new_description_display//"$old"/"$(colorize "$curr" "$sameColor")"}
+                new_description_content=${new_description_content//"$old"/"$curr"}
             else
                 # different sha-1 - replace & decorate
-                new_description_display=$(echo "$new_description_display" | sed "s/$old/$(colorize "$curr" "$updatedColor")/")
-                new_description_content=$(echo "$new_description_content" | sed "s/$old/$curr/")
+                new_description_display=${new_description_display//"$old"/"$(colorize "$curr" "$updatedColor")"}
+                new_description_content=${new_description_content//"$old"/"$curr"}
                 updated_commit_count=$((updated_commit_count + 1))
             fi
         else
@@ -1908,7 +1930,7 @@ mr_update() {
                 new_commit="$(git_commit_extended "$curr")" ||
                 new_commit="$(echo "$commit_messages" | grep "$curr")"
 
-            new_commit_messages_display+=("$(echo "$new_commit" | sed "s/$curr/$(colorize "$curr" "$newColor")/")")
+            new_commit_messages_display+=("${new_commit//"$curr"/$(colorize "$curr" "$newColor")}")
             new_commit_messages_content+=("$new_commit")
         fi
     done
@@ -2191,25 +2213,25 @@ mr_transition() {
         IP)
             name="In Progress"
             labels_to_add="${GITLAB_IP_LABELS}"
-            labels_to_remove="${GITLAB_CR_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_CR_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}" ",")
             jira_transition_var="JIRA_IP_ID"
             ;;
         CR)
             name="Code Review"
             labels_to_add="${GITLAB_CR_LABELS}"
-            labels_to_remove="${GITLAB_IP_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_IP_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}" ",")
             jira_transition_var="JIRA_CR_ID"
             ;;
         QA)
             name="Quality Assurance"
             labels_to_add="${GITLAB_QA_LABELS}"
-            labels_to_remove="${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_OK_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_OK_LABELS}" ",")
             jira_transition_var="JIRA_QA_ID"
             ;;
         OK)
             name="Accepted"
             labels_to_add="${GITLAB_OK_LABELS}"
-            labels_to_remove="${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" ",")
             jira_transition_var="JIRA_OK_ID"
             ;;
         *)
