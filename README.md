@@ -373,3 +373,5 @@ The following hooks are provided for convenience:
 ### `prepare-commit-msg`
 
 Ensures your commit messages are prefixed with the code of related issue.
+
+![git mr prepare-commit-msg hook](doc/git-mr-prepare-commit-msg.png)

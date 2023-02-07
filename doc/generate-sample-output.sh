@@ -290,6 +290,21 @@ EOF
     echo
 }
 
+sample_mr_prepare_commit_msg() {
+
+    local branch="feature/xy-1234-lorem-ipsum"
+    colorize "\n___________________________________________________________________________________________\n\n\n" "gray"
+    echo "$(colorize "me@mystation" "green"):$(colorize "~/my-project" "lightblue") $(colorize "($branch)" "purple") $(colorize "↔ ✔" "green")"
+    echo "$ git commit -m \"Consectetur adipiscing elit\""
+
+    cat <<EOF
+Prefixing message with issue code: XY-1234
+[feature/xy-1234-lorem-ipsum 2ba273f865] XY-1234 Consectetur adipiscing elit
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+EOF
+    echo
+}
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 sample_mr
@@ -302,3 +317,5 @@ sample_mr_merge
 
 sample_mr_menu
 sample_mr_menu_status
+
+sample_mr_prepare_commit_msg
