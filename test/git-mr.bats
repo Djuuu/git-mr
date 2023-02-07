@@ -705,13 +705,13 @@ full_sha() {
 @test "Extracts Gitlab project part from MR URL" {
     mr_url="https://gitlab.example.net/some/project/-/merge_requests/123"
 
-    run gitlab_extract_project_url "$mr_url"
-    assert_output "some%2Fproject"
+    run gitlab_extract_project_url_part "$mr_url"
+    assert_output "some/project"
 }
 
 @test "Extracts Gitlab merge request threads" {
     gitlab_request() {
-        [[ $1 == "projects/test/merge_requests/123/discussions?per_page=100&page=1" ]] &&
+        [[ $1 == "projects/some%2Fproject/merge_requests/123/discussions?per_page=100&page=1" ]] &&
             echo '[
                 {"id": "n1","notes": [{"id": 11},{"id": 12,"resolvable": false}]},
                 {"id": "n2","notes": [{"id": 21},{"id": 22,"resolvable": true, "resolved": false}]},
@@ -719,7 +719,7 @@ full_sha() {
             ]'
     }
 
-    run gitlab_merge_request_threads "test" "123"
+    run gitlab_merge_request_threads "https://gitlab.example.net/some/project/-/merge_requests/123"
     assert_output "$(cat <<- EOF
 		n2	unresolved:true	note_id:22
 		n3	unresolved:false	note_id:null
