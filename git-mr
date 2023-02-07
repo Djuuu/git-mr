@@ -582,7 +582,9 @@ gitlab_request() {
         --max-time "${GIT_MR_TIMEOUT:-5}" \
         "${gitlab_base_url}/${request_url}") || exit_error "$ERR_GITLAB_API" "Gitlab request error"
 
-    [[ -z "$(gitlab_check_error "$result")" ]] || return "$ERR_GITLAB"
+    if [[ $request_verb != "GET" ]]; then
+        [[ -z "$(gitlab_check_error "$result")" ]] || return "$ERR_GITLAB"
+    fi
 
     echo "$result"
 }
@@ -664,7 +666,7 @@ gitlab_merge_requests_search() {
     result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
-    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id}) | .[]')
+    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id})')
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result"
@@ -814,17 +816,10 @@ gitlab_default_label_ids() {
 
     local gitlab_labels; gitlab_labels=$(gitlab_project_request "labels")
 
-    # split in multiple lines
-    gitlab_labels=$(echo "$gitlab_labels" | sed "s/},/},\n/g")
-
-    # extact ids
-    local default_labels oIFS
-    oIFS="$IFS"; IFS=','; read -ra default_labels <<<"$GITLAB_DEFAULT_LABELS"; IFS="$oIFS"; unset oIFS
-    for label in "${default_labels[@]}"; do
-        local label_id; label_id=$(echo "$gitlab_labels" | jq -r '.[] | select(.name == "'"$label"'") | .id')
-        [[ -n $label_id ]] &&
-            echo "$label_id"
-    done
+    echo "$GITLAB_DEFAULT_LABELS" | jq -R -r \
+        --argjson gitlab_labels "$gitlab_labels" \
+        'split(",") | .[] | . as $name | $gitlab_labels | map(select(.name == $name) | .id) | .[]' |
+        tr -d '\r'
 }
 
 gitlab_merge_request_update() {
@@ -881,8 +876,13 @@ gitlab_undraft() {
         return "$ERR_GITLAB"
     fi
 
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
+    local mr_iid \
+        mr_title
+
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="   + (.iid   | @sh) + ";\n" +
+        "mr_title=" + (.title | @sh) + ";\n"
+    ')"
 
     # Print merge request status summary
     echo
@@ -943,8 +943,13 @@ mr_title() {
 
     local issue_content; issue_content=$(jira_ticket_data "$issue_code")
 
-    local issue_key;     issue_key=$(echo "$issue_content" | jq -r '.key // empty')
-    local issue_title;   issue_title=$(echo "$issue_content" | jq -r '.fields.summary // empty')
+    local issue_key \
+        issue_title
+
+    eval "$(echo "$issue_content" | jq -r '
+      "issue_key="   + (.key            // empty | @sh) + ";\n" +
+      "issue_title=" + (.fields.summary // empty | @sh) + ";\n"
+    ')"
 
     [[ -z $issue_key ]] &&
         issue_key=${issue_code^^}
@@ -1009,7 +1014,6 @@ mr_status_block() {
 
     local mr_threads=$5
     if [[ -z $mr_threads ]]; then
-        local mr_url; mr_url=$(gitlab_extract_url "$merge_request")
         local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
         mr_threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
     fi
@@ -1049,21 +1053,40 @@ mr_print_status() {
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
-    local mr_url;      mr_url=$(gitlab_extract_url "$merge_request")
+    local mr_url \
+        title \
+        labels \
+        labels_count \
+        upvotes \
+        downvotes \
+        merge_status \
+        pipeline_status \
+        pipeline_url \
+        current_target
+
+    eval "$(echo "$merge_request" | jq -r '
+      "mr_url="          + (.web_url               | @sh) + ";\n" +
+      "title="           + (.title                 | @sh) + ";\n" +
+      "labels="          + (.labels | join(",")    | @sh) + ";\n" +
+      "labels_count="    + (.labels | length       | @sh) + ";\n" +
+      "upvotes="         + (.upvotes               | @sh) + ";\n" +
+      "downvotes="       + (.downvotes             | @sh) + ";\n" +
+      "state="           + (.state                 | @sh) + ";\n" +
+      "merge_status="    + (if .state == "merged"
+                            then "merged"
+                            else .merge_status end | @sh) + ";\n" +
+      "pipeline_status=" + (.head_pipeline.status  | @sh) + ";\n" +
+      "pipeline_url="    + (.head_pipeline.web_url | @sh) + ";\n" +
+      "current_target="  + (.target_branch         | @sh) + ";\n"
+    ')"
+
     local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
 
     # Labels
-    local labels; labels=$(gitlab_extract_labels "$merge_request")
     local labels_display; labels_display=$(mr_format_labels "$labels")
-
-    local labels_count; labels_count=$(echo "$labels" | sed 's/[^,]//g' | wc -m)
     local labels_str_len=$((${#labels} + $((labels_count * 2)) + 4)) # 2 spaces + 2 for larger icon
 
     # Votes
-
-    local upvotes;   upvotes=$(echo "$merge_request" | jq -r '.upvotes')
-    local downvotes; downvotes=$(echo "$merge_request" | jq -r '.downvotes')
-
     if [[ $upvotes -gt 1 ]];   then upvotes=$(colorize "$upvotes" "bold" "lightgreen")
     elif [[ $upvotes -gt 0 ]]; then upvotes=$(colorize "$upvotes" "bold" "lightyellow")
                                else upvotes=$(colorize "$upvotes" "bold"); fi
@@ -1092,18 +1115,12 @@ mr_print_status() {
         threads_display=$(terminal_link "$note_url" "$threads_display")
     fi
 
-    # Title
-    local title; title=$(gitlab_extract_title "$merge_request")
-
     # Merge status
-    local merge_status; merge_status=$(gitlab_extract_merge_status "$merge_request")
     local merge_status_icon; if [[ $merge_status == "merged" || $merge_status == "can_be_merged" ]];
         then merge_status_icon="$(colorize "\U00002714" "lightgreen" "bold")"; # heavy check mark
         else merge_status_icon="$(colorize "\U0000274C" "lightred" "bold")"; fi # cross mark
 
     # Pipeline status
-    local pipeline_status; pipeline_status="$(gitlab_extract_pipeline_status "$merge_request")"
-    local pipeline_url; pipeline_url="$(gitlab_extract_pipeline_url "$merge_request")"
     local pipeline_icon
     case "$pipeline_status" in
         created|waiting_for_resource|preparing|pending|running)
@@ -1121,8 +1138,6 @@ mr_print_status() {
         ci_str="CI: $pipeline_icon"
 
     # Merge target
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
-
     local target_display
     target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
     target_display="${target_display}$(colorize "$current_target" "lightpurple")"
@@ -1372,20 +1387,10 @@ mr_menu_merge_requests() {
     local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$issue_code") || exit $?
     [[ -n $mr_summaries ]] || return "$ERR_GITLAB"
 
-    # Load project names into bash associative array
-    declare -A project_arr
-    local id name
-    while IFS="=" read -r id name; do
-        project_arr[$id]="$name"
-    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]' | sed 's/\r//g')
-
     # Enrich merge request summaries with project names
-    while IFS=$'\n' read -r mr_summary; do
-        local project_id; project_id=$(echo "$mr_summary" | jq -r '.project_id')
-        local project_name; project_name=${project_arr[$project_id]}
-
-        echo "$mr_summary" | jq -c --arg project_name "$project_name" '. + {project_name: $project_name}'
-    done < <(echo "$mr_summaries")
+    echo "$mr_summaries" | jq -c \
+        --argjson projects "$(gitlab_projects | jq 'map({(.id|tostring): .name}) | add')" \
+        '.[] | . + { project_name: $projects[(.project_id|tostring)] }'
 }
 
 mr_menu_contents() {
@@ -1396,9 +1401,15 @@ mr_menu_contents() {
     echo
 
     while IFS=$'\n' read -r menu_item; do
-        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
-        local title;        title=$(echo "$menu_item" | jq -r '.title')
-        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
+        local project_name \
+            title \
+            web_url
+
+        eval "$(echo "$menu_item" | jq -r '
+            "project_name=" + (.project_name | @sh) + ";\n" +
+            "title="        + (.title        | @sh) + ";\n" +
+            "web_url="      + (.web_url      | @sh) + ";\n"
+        ')"
 
         title=$(gitlab_title_undraft "$title")
 
@@ -1439,10 +1450,17 @@ mr_menu_status() {
     echo
 
     while IFS=$'\n' read -r menu_item; do
-        local mr_iid;       mr_iid=$(echo "$menu_item" | jq -r '.iid')
-        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
-        local title;        title=$(echo "$menu_item" | jq -r '.title')
-        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
+        local mr_iid \
+            project_name \
+            title \
+            web_url
+
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_iid="       + (.iid          | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n" +
+            "title="        + (.title        | @sh) + ";\n" +
+            "web_url="      + (.web_url      | @sh) + ";\n"
+        ')"
 
         title=$(gitlab_title_undraft "$title")
         local project_url; project_url=$(gitlab_extract_project_url "$web_url")
@@ -1485,13 +1503,24 @@ mr_menu_update() {
         return "$ERR_GITLAB"
     fi
 
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
+    local mr_iid \
+        mr_url
+
+    eval "$(echo "$mr_summary" | jq -r '
+      "mr_iid=" + (.iid     | @sh) + ";\n" +
+      "mr_url=" + (.web_url | @sh) + ";\n"
+    ')"
 
     # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
-    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
+
+    local mr_description \
+        mr_title
+
+    eval "$(echo "$merge_request" | jq -r '
+      "mr_description=" + (.description | @sh) + ";\n" +
+      "mr_title="       + (.title       | @sh) + ";\n"
+    ')"
 
     local mr_menu_content; mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
     local updated_description; updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
@@ -1534,10 +1563,12 @@ mr_menu_update_all() {
     local i=1 updated_count=0
     for menu_item in "${menu_array[@]}"; do
 
-        mr_iid=$(echo "$menu_item" | jq -r '.iid')
-        mr_url=$(echo "$menu_item" | jq -r '.web_url')
-        mr_title=$(echo "$menu_item" | jq -r '.title')
-        project_name=$(echo "$menu_item" | jq -r '.project_name')
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_iid="       + (.iid          | @sh) + ";\n" +
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
 
         # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
         # Here, we can expect other target projects here.
@@ -1780,12 +1811,9 @@ mr_status() {
     fi
 
     local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
 
     # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
 
     # Print merge request title & status
     echo
@@ -1807,14 +1835,26 @@ mr_update() {
         return "$ERR_GITLAB"
     fi
 
-    local mr_iid; mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
+    local mr_iid \
+        mr_url
+
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid=" + (.iid     | @sh) + ";\n" +
+        "mr_url=" + (.web_url | @sh) + ";\n"
+    ')"
 
     # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
-    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
+
+    local mr_title \
+        mr_description \
+        current_target
+
+    eval "$(echo "$merge_request" | jq -r '
+        "mr_title="       + (.title         | @sh) + ";\n" +
+        "mr_description=" + (.description   | @sh) + ";\n" +
+        "current_target=" + (.target_branch | @sh) + ";\n"
+    ')"
 
     # Init commit lists
 
@@ -1974,15 +2014,30 @@ mr_merge() {
         return "$ERR_GITLAB"
     fi
 
-    local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_title;    mr_title=$(gitlab_extract_title "$mr_summary")
-    local mr_url;      mr_url=$(gitlab_extract_url "$mr_summary")
+    local mr_iid \
+        mr_title \
+        mr_url
+
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="   + (.iid     | @sh) + ";\n" +
+        "mr_title=" + (.title   | @sh) + ";\n" +
+        "mr_url="   + (.web_url | @sh) + ";\n"
+    ')"
+
     local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
 
     # Load existing merge request details
     local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local merge_status;   merge_status=$(gitlab_extract_merge_status "$merge_request")
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
+
+    local merge_status \
+        current_target
+
+    eval "$(echo "$merge_request" | jq -r '
+        "merge_status="   + (if .state == "merged"
+                             then "merged"
+                             else .merge_status end | @sh) + ";\n" +
+        "current_target=" + (.target_branch | @sh)         + ";\n"
+    ')"
 
     # Print merge request status summary
     echo

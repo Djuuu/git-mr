@@ -722,13 +722,14 @@ full_sha() {
     GITLAB_DEFAULT_LABELS="Label A,Label C"
     gitlab_project_request() {
         [[ $1 == "labels" ]] &&
-            echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}]'
+            echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}, {"id":4,"name":"Label C"}]'
     }
 
     run gitlab_default_label_ids
     assert_output "$(cat <<- EOF
 		1
 		3
+		4
 		EOF
     )"
 }
@@ -784,6 +785,15 @@ full_sha() {
 		Unable to get issue title from Jira
 		  issue_code: CD-456
 		CD-456
+		EOF
+    )" # includes stderr
+
+    run mr_title feature/EF-789-no-summary 2>/dev/null
+    assert_output "$(cat <<- EOF
+		Unable to get issue title from Jira
+		  issue_code: EF-789
+		  {"key":"EF-789", "fields":{}}
+		EF-789
 		EOF
     )" # includes stderr
 }
