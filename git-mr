@@ -576,7 +576,7 @@ gitlab_project_url() {
     echo "$project_url"
 }
 
-gitlab_project_request() {
+gitlab_current_project_request() {
     gitlab_check_env
 
     local request_url=$1
@@ -584,6 +584,15 @@ gitlab_project_request() {
     local request_data=${3}
 
     local project_url; project_url=$(gitlab_project_url) || exit $?
+
+    gitlab_project_request "$project_url" "$request_url" "$request_verb" "$request_data"
+}
+
+gitlab_project_request() {
+    local project_url=$1
+    local request_url=$2
+    local request_verb=${3:-"GET"}
+    local request_data=${4}
 
     gitlab_request "projects/$(urlencode "$project_url")/${request_url}" "$request_verb" "$request_data"
 }
@@ -678,7 +687,7 @@ gitlab_merge_request_summary() {
     local source_branch=${1:-$(git_current_branch)}
 
     local result
-    result=$(gitlab_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
+    result=$(gitlab_current_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
 
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
@@ -715,9 +724,10 @@ gitlab_projects() {
 gitlab_merge_request() {
     gitlab_check_env
 
-    local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
+    local mr_iid=$1;        [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
+    local project_url=$2;   [[ -n $project_url ]] || project_url=$(gitlab_project_url) || exit $?
 
-    gitlab_project_request "merge_requests/$mr_iid"
+    gitlab_project_request "$project_url" "merge_requests/$mr_iid"
 }
 
 gitlab_extract_iid() {
@@ -803,7 +813,7 @@ gitlab_merge_request_threads() {
 
         # fetch page
         local notes_page
-        notes_page=$(gitlab_request "projects/$(urlencode "$project_url")/merge_requests/${mr_iid}/discussions?per_page=${per_page}&page=${page}")
+        notes_page=$(gitlab_project_request "$project_url" "merge_requests/${mr_iid}/discussions?per_page=${per_page}&page=${page}")
 
         if [[ $notes_page != "[]" ]]; then
 
@@ -841,7 +851,7 @@ gitlab_merge_request_threads() {
 gitlab_default_label_ids() {
     gitlab_check_env
 
-    local gitlab_labels; gitlab_labels=$(gitlab_project_request "labels")
+    local gitlab_labels; gitlab_labels=$(gitlab_current_project_request "labels")
 
     echo "$GITLAB_DEFAULT_LABELS" | jq -R -r \
         --argjson gitlab_labels "$gitlab_labels" \
@@ -855,7 +865,9 @@ gitlab_merge_request_update() {
     local mr_iid=$1;   [[ -n $mr_iid ]]  || exit_error "$ERR_MR" "No mr_iid provided"
     local mr_data=$2;  [[ -n $mr_data ]] || exit_error "$ERR_MR" "No data provided"
 
-    gitlab_project_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
+    local project_url=$3;   [[ -n $project_url ]] || project_url=$(gitlab_project_url) || exit $?
+
+    gitlab_project_request "$project_url" "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
 
 gitlab_merge_request_merge() {
@@ -863,7 +875,7 @@ gitlab_merge_request_merge() {
 
     local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
 
-    gitlab_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
+    gitlab_current_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
 }
 
 gitlab_title_is_draft() {
@@ -1487,15 +1499,14 @@ mr_menu_status() {
             "web_url="      + (.web_url      | @sh) + ";\n"
         ')"
 
-        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
-            project_name=$(gitlab_extract_project_url_part "$web_url")
-
-        title=$(gitlab_title_undraft "$title")
         local project_url; project_url=$(gitlab_extract_project_url_part "$web_url")
 
+        [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
+
+        title=$(gitlab_title_undraft "$title")
+
         # Load existing merge request details
-        # Do NOT use `gitlab_merge_request`
-        local merge_request; merge_request=$(gitlab_request "projects/$(urlencode "$project_url")/merge_requests/$mr_iid")
+        local merge_request; merge_request=$(gitlab_merge_request "$mr_iid" "$project_url")
 
         echo "* $(colorize "$project_name" "bold"): $(terminal_link "$web_url" "$title")"
         has_links || echo "  ⇒ $web_url"
@@ -1598,16 +1609,12 @@ mr_menu_update_all() {
             "project_name=" + (.project_name | @sh) + ";\n"
         ')"
 
-        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
-            project_name=$(gitlab_extract_project_url_part "$mr_url")
-
-        # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
-        # Here, we can expect other target projects here.
         project_url=$(gitlab_extract_project_url_part "$mr_url")
 
+        [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
+
         # Load existing merge request details
-        # Do NOT use `gitlab_merge_request`
-        merge_request=$(gitlab_request "projects/$(urlencode "$project_url")/merge_requests/$mr_iid")
+        merge_request=$(gitlab_merge_request "$mr_iid" "$project_url")
 
         mr_description=$(gitlab_extract_description "$merge_request")
 
@@ -1624,8 +1631,7 @@ mr_menu_update_all() {
         fi
         if [[ $mr_update_data != "{}" ]]; then
             echo -n "Updating merge request..."
-            # Do NOT use `gitlab_merge_request_update`
-            result=$(gitlab_request "projects/$(urlencode "$project_url")/merge_requests/${mr_iid}" "PUT" "${mr_update_data}")
+            result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data" "$project_url")
             [[ -n $result ]] &&
                 ((updated_count += 1)) &&
                 echo -e "OK\n"
@@ -2109,7 +2115,7 @@ mr_merge() {
         local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
         local mr_data;       mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
 
-        local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
         [[ -n $result ]] && echo -e "OK\n"
 
         [[ -n $result ]] || { echo_error; return "$ERR_GITLAB"; } # interrupt on error

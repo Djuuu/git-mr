@@ -597,7 +597,7 @@ full_sha() {
         echo "gitlab_request('$1' '${2:-"GET"}' '$3')"
     }
 
-    run gitlab_project_request 'test' 'POST' '{"test":1}'
+    run gitlab_current_project_request 'test' 'POST' '{"test":1}'
     assert_success
     assert_output "gitlab_request('projects/my%2Fproject/test' 'POST' '{\"test\":1}')"
 }
@@ -624,7 +624,7 @@ full_sha() {
 
 @test "Determines new merge request URL" {
     GITLAB_DEFAULT_LABELS="Label A,Label C"
-    gitlab_project_request() {
+    gitlab_current_project_request() {
         [[ $1 == "labels" ]] &&
             echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}]'
     }
@@ -646,7 +646,7 @@ full_sha() {
 }
 
 @test "Extracts MR info from merge request summary" {
-    gitlab_project_request() {
+    gitlab_current_project_request() {
         case "$1" in
             "merge_requests?state=opened&view=simple&source_branch=feature/xy-1234-lorem-ipsum")
                 echo '[{
@@ -729,7 +729,7 @@ full_sha() {
 
 @test "Fetches default Gitlab label ids" {
     GITLAB_DEFAULT_LABELS="Label A,Label C"
-    gitlab_project_request() {
+    gitlab_current_project_request() {
         [[ $1 == "labels" ]] &&
             echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}, {"id":4,"name":"Label C"}]'
     }
