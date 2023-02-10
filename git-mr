@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2001,SC2005
-# SC2001: Ignore bash ${variable//search/replace} substitutions suggestions
-# SC2005: Ignore useless echo warnings (colorize and other formatting functions don't output a new line)
 
 ################################################################################
 # Git functions
@@ -270,6 +267,10 @@ colorize() {
     fi
 }
 
+echolor() {
+    colorize "$1\n" "${@:2}"
+}
+
 # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
 terminal_link() {
     local href=$1
@@ -280,6 +281,10 @@ terminal_link() {
     else
         echo -n "$text"
     fi
+}
+
+echolink() {
+    terminal_link "$@"; echo
 }
 
 echo_error() {
@@ -391,7 +396,7 @@ git_mr_readonly() {
     [[ $GIT_MR_READONLY -eq 1 ]] || return 1
 
     [[ -n $1 ]] &&
-        echo "$(colorize "🚫 Read-only 🚫" "gray")" >&2
+        echolor "🚫 Read-only 🚫" "gray" >&2
 
     return 0
 }
@@ -1725,7 +1730,7 @@ mr_menu_print_description() {
     echo "--------------------------------------------------------------------------------"
     echo -n " "
     [[ -n $project_name ]] && echo -n "$(colorize "$project_name" "bold"): "
-    echo "$(terminal_link "$mr_url" "$(gitlab_title_undraft "$mr_title")")"
+    echolink "$mr_url" "$(gitlab_title_undraft "$mr_title")"
     echo "--------------------------------------------------------------------------------"
     echo
 
@@ -2124,7 +2129,7 @@ mr_merge() {
 
     confirm "Do you want to checkout '$current_target' and pull changes?" || { echo; return 0; }
 
-    echo "$(colorize "git checkout $current_target && git pull --rebase" "lightgray")"
+    echolor "git checkout $current_target && git pull --rebase" "lightgray"
     git_mr_readonly ||
         (git checkout "$current_target" && git pull --rebase)
     echo
@@ -2133,7 +2138,7 @@ mr_merge() {
 
     confirm "Do you want to delete local branch '$source_branch'?" || { echo; return 0; }
 
-    echo "$(colorize "git branch -d $source_branch" "lightgray")"
+    echolor "git branch -d $source_branch" "lightgray"
     git_mr_readonly ||
         git branch -d "$source_branch"
     echo
