@@ -290,6 +290,62 @@ EOF
     echo
 }
 
+sample_mr_menu_update() {
+    fake_prompt "git mr menu update"
+
+    mr_description="# [XY-1234 Quisque sed](https://jira.example.net/browse/XY-1234)
+
+## Menu
+
+* Some Project: [Feature/XY-1234 Lorem Ipsum](https://myapp.gitlab.com/some/project/...)
+* **Other Project: [Feature/XY-1234 Quisque sed](https://myapp.gitlab.com/other/project/...)**
+* Third Project: [Feature/XY-1234 Nunc vestibulum](https://myapp.gitlab.com/third/project/...)
+
+--------------------------------------------------------------------------------
+
+
+Quisque sed consectetur adipiscing elit.
+
+Pellentesque eu lectus felis. Phasellus maximus, quam quis accumsan varius,
+enim nunc egestas ante, ut venenatis nunc eros non lorem. Ut molestie elementum
+nisi in sollicitudin.
+
+Nullam tempus ultricies velit ut scelerisque. Curabitur at ex suscipit odio.
+
+## Commits
+
+* **97b0769f XY-1234 Sed id ultrices lorem**
+* **86128e01 XY-1234 Pellentesque habitant morbi**
+  tristique senectus et netus et malesuada fames ac turpis egestas
+* **a1c23d36 XY-1234 Duis vehicula metus sit amet nulla ultrices dictum**
+* **aa341612 XY-1234 Morbi condimentum sapien risus**
+  Sit amet facilisis urna semper quis
+* **40aa1e6a XY-1234 Sed iaculis dui id facilisis venenatis**
+* **f3b2e6c3 XY-1234 Proin vitae lobortis nunc, sed dictum orci**
+  Nullam vitae laoreet erat, et dignissim lectus
+  Nullam ornare, nibh et posuere rhoncus
+  Mauris tellus accumsan purus, in congue sapien nisl eu ante
+* **969d26a6 XY-1234 Curabitur pretium sed justo in vehicula**
+* **2c1422c6 XY-1234 Mauris id nunc odio**
+"
+
+mr_url="https://myapp.gitlab.com/other/project/..."
+mr_title="Feature/XY-1234 Quisque sed"
+project_name="Other Project"
+
+    cat <<EOF
+
+================================================================================
+ $(terminal_link "$search_url" "$issue_code") (merge request 2/3)
+================================================================================
+EOF
+
+    mr_menu_print_description "$mr_description" "$mr_url" "$mr_title" "$project_name"
+
+    echo "$(colorize "Do you want to update the menu in the merge request description?" "lightcyan" "bold") [y/N] "
+    echo
+}
+
 sample_mr_prepare_commit_msg() {
 
     local branch="feature/xy-1234-lorem-ipsum"
@@ -307,15 +363,45 @@ EOF
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-sample_mr
-sample_mr_extended
+if [[ "$#" -gt 0 ]]; then
+    for arg in "$@"; do
+        case "$arg" in
+            mr)
+                sample_mr
+                sample_mr_extended
+                ;;
+            status)
+                sample_mr_status
+                ;;
+            update)
+                sample_mr_update
+                ;;
+            menu)
+                sample_mr_menu
+                sample_mr_menu_status
+                sample_mr_menu_update
+                ;;
+            merge)
+                sample_mr_merge
+                ;;
+            hook)
+                sample_mr_prepare_commit_msg
+                ;;
+        esac
+    done
+else
+    sample_mr
+    sample_mr_extended
 
-sample_mr_status
+    sample_mr_status
 
-sample_mr_update
-sample_mr_merge
+    sample_mr_update
 
-sample_mr_menu
-sample_mr_menu_status
+    sample_mr_menu
+    sample_mr_menu_status
+    sample_mr_menu_update
 
-sample_mr_prepare_commit_msg
+    sample_mr_merge
+
+    sample_mr_prepare_commit_msg
+fi

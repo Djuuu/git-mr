@@ -17,7 +17,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr status`](#git-mr-status)
     + [`git mr update`](#git-mr-update)
     + [`git mr menu`](#git-mr-menu)
-    + [`git mr ip|cr|qa|accept`](#git-mr-ipcrqaaccept)
+    + [`git mr ip|cr|qa|ok`](#git-mr-ipcrqaok)
     + [`git mr undraft`](#git-mr-undraft)
     + [`git mr merge`](#git-mr-merge)
     + [`git mr hook`](#git-mr-hook)
@@ -38,12 +38,12 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>   <i>[BRANCH]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>                 <i>[SEARCH_TERM]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>update [--all]</i>  <i>[SEARCH_TERM]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>status</i>          <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>                     <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>update [--current]</i>  <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>status</i>              <i>[SEARCH_TERM]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa|accept)</b>  <i>[BRANCH]</i>
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>     <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa|ok)</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>        <i>[BRANCH]</i>
 
 <b>git mr</b> <b>hook</b>
 
@@ -71,17 +71,24 @@ Prepares a merge request description, with link to Jira ticket and current branc
   You can also set `GIT_MR_EXTENDED=1` in your environment variables to always use extended commit descriptions.
 * `-y`, `--yes`  
   Bypass confirmation prompts (always answer "yes").
-* `-n`, `--new-section`  
-  Add new section in description for new commits (for `git mr update`)
-* `-f`, `--force`  
-  Force merge even if there are unresolved threads (for `git mr merge`)
-* `-a`, `--all`  
-  Update all merge requests (for `git mr menu update`).
 * `-v`, `--verbose`  
   Verbose output (displays called API URLs).
 * `-h`  
   Show help page.
 
+#### Command-specific options
+
+* `git mr update`
+  * `-n`, `--new-section`  
+    Add new section in description for new commits.
+
+* `git mr menu update`
+  * `--current`  
+    Update only current project/branch merge request.
+
+* `git mr merge`
+  * `-f`, `--force`  
+    Force merge even if there are unresolved threads.
 
 ## Installation
 
@@ -103,7 +110,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 #### git-mr
 
-* Add the `git-mr` directory to your `PATH`<br>
+* Add the `git-mr` directory to your `PATH`  
   in one of your shell startup scripts:
   ```bash
   PATH="${PATH}:/path/to/git-mr"
@@ -111,7 +118,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 _OR_ 
 
-* Define it as a Git alias:<br>
+* Define it as a Git alias:  
   run:
   ```bash
   git config --global alias.mr '!bash /path/to/git-mr/git-mr'
@@ -157,11 +164,10 @@ Other optional configuration variables:
 export GITLAB_DEFAULT_LABELS="Review,My Team"
 
 # Gitlab status labels (comma-separated, without spaces in between)
-export GITLAB_IP_LABELS="WIP"      # Label(s) set on IP step
-export GITLAB_CR_LABELS="Review"   # Label(s) set on CR step
-export GITLAB_QA_LABELS="Testing"  # Label(s) set on QA step
-export GITLAB_OK_LABELS="Accepted" # Label(s) set on Accepted step
-
+export GITLAB_IP_LABELS="WIP"      # Label(s) set on "In Progress" step
+export GITLAB_CR_LABELS="Review"   # Label(s) set on "Code Review" step
+export GITLAB_QA_LABELS="Testing"  # Label(s) set on "Quality Assurance" step
+export GITLAB_OK_LABELS="Accepted" # Label(s) set on "Accepted" step
 # Jira status - transition IDs
 export JIRA_IP_ID="xx" # "In progress" transition ID
 export JIRA_CR_ID="xx" # "Code review" transition ID
@@ -192,9 +198,9 @@ This will print a merge request description, with a link to Jira ticket and curr
   It can also be forced with the `-t|--target` option.
 
 If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
+Otherwise, a link to create a new merge request will be provided. 
 
-Otherwise, a link to create a new merge request will be provided. Default labels and "Delete source branch" status 
-can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH` environment variables.
+Default labels and "Delete source branch" status can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH` environment variables.
 
 ![git mr](doc/git-mr.png)
 
@@ -245,34 +251,37 @@ You can also update the source branch if it is different from the current one.
 ### `git mr menu`
 
 <pre>
-<b>git mr</b> <i>[OPTION...]</i> <b>menu</b>                   <i>[SEARCH_TERM]</i> 
-<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>up|update [--all]</i> <i>[SEARCH_TERM]</i> 
-<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>st|status</i>         <i>[SEARCH_TERM]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b>                       <i>[SEARCH_TERM]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>up|update [--current]</i> <i>[SEARCH_TERM]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>st|status</i>             <i>[SEARCH_TERM]</i> 
 </pre>
 
 Searches for all (non-closed) merge requests with the current issue code in the title, and generates a menu.
 
-* `git mr menu`<br>
-  Prints the markdown menu
+* `git mr menu`  
+  Prints the markdown menu.
 
-* `git mr menu up|update`<br>
-  Updates the menu in the current merge request description (prompts for confirmation)
-* `git mr menu up|update -a|--all`<br>
-  Updates the menu in all related merge requests (prompts for confirmation)
+  ![git mr menu](doc/git-mr-menu.png)
 
-* `git mr menu st|status`<br>
-  Prints the menu and status indicators for every related merge request
+* `git mr menu up|update`  
+  Inserts or updates menu in all related merge request descriptions (prompts for confirmation).
 
-![git mr menu](doc/git-mr-menu.png)
+  ![git mr menu update](doc/git-mr-menu-update.png)
 
-![git mr menu-status](doc/git-mr-menu-status.png)
+* `git mr menu up|update --current`  
+  Inserts or updates menu in current merge request description only (prompts for confirmation).
+
+* `git mr menu st|status`  
+  Prints menu and status indicators for every related merge request.
+
+  ![git mr menu status](doc/git-mr-menu-status.png)
 
 ----------------------------------------------------------------
 
-### `git mr ip|cr|qa|accept`
+### `git mr ip|cr|qa|ok`
 
 <pre>
-<b>git mr</b> <i>[OPTION...]</i> <b>ip|cr|qa|accept</b> <i>[BRANCH]</i>
+<b>git mr</b> <i>[OPTION...]</i> <b>ip|cr|qa|ok</b> <i>[BRANCH]</i>
 </pre>
 
 This will:
@@ -302,7 +311,7 @@ This will:
 * adds Gitlab labels defined in `GITLAB_QA_LABELS`
 * transitions Jira ticket using `JIRA_QA_ID`
 
-#### `git mr accept` _("accepted")_
+#### `git mr ok` _("accepted")_
 * removes Gitlab labels defined in `GITLAB_IP_LABELS`, `GITLAB_CR_LABELS`, and `GITLAB_QA_LABELS`
 * adds Gitlab labels defined in `GITLAB_OK_LABELS`
 * removes Gitlab draft status
