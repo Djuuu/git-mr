@@ -2328,8 +2328,8 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--current]  [SEARCH_TERM]
        ${u}git${r} ${u}mr${r} [OPTION...]  menu status              [SEARCH_TERM]
 
-       ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|accept)  [BRANCH]
-       ${u}git${r} ${u}mr${r} [OPTION...]  undraft            [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|ok)  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  undraft        [BRANCH]
 
        ${u}git${r} ${u}mr${r} hook
 
@@ -2505,10 +2505,10 @@ case $1 in
 
     menu) mr_menu "${@:2}" ;;
 
-    p|ip|IP)     mr_transition "IP" "${@:2}" ;;
-    r|cr|CR)     mr_transition "CR" "${@:2}" ;;
-    q|qa|QA)     mr_transition "QA" "${@:2}" ;;
-    a|ac|accept) mr_transition "OK" "${@:2}" ;;
+    ip|IP) mr_transition "IP" "${@:2}" ;;
+    cr|CR) mr_transition "CR" "${@:2}" ;;
+    qa|QA) mr_transition "QA" "${@:2}" ;;
+    ok|OK) mr_transition "OK" "${@:2}" ;;
 
     undraft) gitlab_undraft "${@:2}" ;;
 

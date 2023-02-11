@@ -11,7 +11,7 @@ _git_mr() {
     # Parse current command words to get context
     for w in "${words[@]}"; do
         case "$w" in
-            open|status|update|merge|menu|ip|cr|qa|accept|undraft|hook|base|code|help) isAnyAction=1 ;;
+            open|status|update|merge|menu|ip|cr|qa|ok|undraft|hook|base|code|help) isAnyAction=1 ;;
         esac
         [[ $w == "menu" ]] && isMenu=1
         if [[ -n "$isMenu" ]]; then
@@ -73,7 +73,7 @@ _git_mr() {
 				ip
 				cr
 				qa
-				accept
+				ok
 				undraft
 				hook
 				base
