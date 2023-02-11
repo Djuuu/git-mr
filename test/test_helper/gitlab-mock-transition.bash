@@ -11,10 +11,6 @@ JIRA_CR_ID="120"
 JIRA_QA_ID="130"
 JIRA_OK_ID="140"
 
-mr_status_block() {
-    return 0
-}
-
 gitlab_request() {
     case "$1" in
         "projects/my%2Fproject/merge_requests?state=opened&view=simple&source_branch=feature/AB-123-test-feature")
@@ -55,4 +51,14 @@ jira_request() {
             return 1
             ;;
     esac
+}
+
+# Irrelevant to test
+mr_print_title () {
+    return 0
+}
+
+# Irrelevant to test
+mr_print_status () {
+    return 0
 }

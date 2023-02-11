@@ -108,7 +108,7 @@ sample_mr_status() {
     local threads='1	unresolved:true	note_id:1'
 
     echo
-    mr_status_block "" "$mr" "" "" "$threads"
+    mr_status_block "$mr" "$mr" "$threads"
 }
 
 sample_mr_update() {
@@ -181,7 +181,7 @@ sample_mr_merge() {
 
     cat << EOF
 
-$(mr_status_block "" "$mr" "" "" "$threads")
+$(mr_status_block "$mr" "$mr" "$threads")
 
 --------------------------------------------------------------------------------
 

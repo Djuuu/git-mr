@@ -20,6 +20,11 @@ setup_file() {
 
     export MD_BR='..' # for easier visualization
 
+    # Custom file descriptors
+    # {var}-style redirects automatically allocating free file descriptors don't seem to work well in bats context
+    export GIT_MR_FD_MR=21
+    export GIT_MR_FD_TH=22
+
     cd "${BATS_TEST_DIRNAME}" || exit
 
     [[ -d data ]] && rm -rf data
@@ -714,7 +719,7 @@ full_sha() {
         [[ $1 == "projects/some%2Fproject/merge_requests/123/discussions?per_page=100&page=1" ]] &&
             echo '[
                 {"id": "n1","notes": [{"id": 11},{"id": 12,"resolvable": false}]},
-                {"id": "n2","notes": [{"id": 21},{"id": 22,"resolvable": true, "resolved": false}]},
+                {"id": "n2","notes": [{"id": 21},{"id": 22,"resolvable": true, "resolved": false},{"id": 23,"resolvable": true, "resolved": false}]},
                 {"id": "n3","notes": [{"id": 31},{"id": 32,"resolvable": true, "resolved": true}]}
             ]'
     }
@@ -865,7 +870,7 @@ full_sha() {
     threads='1	unresolved:false	note_id:1
 2	unresolved:true	note_id:2'
 
-    run mr_status_block "1" "$mr" "" "" "$threads"
+    run mr_status_block "$mr" "$mr" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -888,7 +893,7 @@ full_sha() {
     threads='1	unresolved:false	note_id:1
 2	unresolved:false	note_id:2'
 
-    run mr_status_block "1" "$mr" "" "" "$threads"
+    run mr_status_block "$mr" "$mr" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -909,7 +914,7 @@ full_sha() {
     }'
     threads="\n"
 
-    run mr_status_block "1" "$mr" "" "" "$threads"
+    run mr_status_block "$mr" "$mr" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -924,7 +929,8 @@ full_sha() {
 }
 
 @test "Updates MR description with new commits in new section" {
-    load "test_helper/gitlab-mock-mr.bash"
+    load "test_helper/gitlab-mock-mr-description-simple.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
 
     GIT_MR_EXTENDED=
     GIT_MR_UPDATE_NEW_SECTION=1
@@ -949,10 +955,6 @@ full_sha() {
 
     assert_output "$(cat <<- EOF
 
-		--------------------------------------------------------------------------------
-		 My MR
-		 ⇒ https://gitlab.example.net/some/project/-/merge_requests/1
-		--------------------------------------------------------------------------------
 
 		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
 
@@ -972,8 +974,6 @@ full_sha() {
 		  updated commits: 1
 		      new commits: 2
 
-
-		--------------------------------------------------------------------------------
 		EOF
     )"
 
@@ -981,7 +981,8 @@ full_sha() {
 }
 
 @test "Updates MR description with new commits with extended description" {
-    load "test_helper/gitlab-mock-mr-extended.bash"
+    load "test_helper/gitlab-mock-mr-description-extended.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
 
     GIT_MR_EXTENDED=1
     GIT_MR_UPDATE_NEW_SECTION=
@@ -1007,10 +1008,6 @@ full_sha() {
     empty=""
     assert_output "$(cat <<-EOF
 
-		--------------------------------------------------------------------------------
-		 My MR
-		 ⇒ https://gitlab.example.net/some/project/-/merge_requests/1
-		--------------------------------------------------------------------------------
 
 		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
 
@@ -1032,8 +1029,6 @@ full_sha() {
 		  updated commits: 1
 		      new commits: 2
 
-
-		--------------------------------------------------------------------------------
 		EOF
     )"
 
