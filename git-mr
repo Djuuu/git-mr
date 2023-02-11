@@ -2170,7 +2170,7 @@ mr_menu() {
     gitlab_check_env
 
     local git_mr_menu_mode=show
-    local git_mr_menu_update_all=0
+    local git_mr_menu_update_all=1
 
     # Parse options
     args=()
@@ -2178,8 +2178,8 @@ mr_menu() {
         case "$1" in
         # Consume options
         up|update)   git_mr_menu_mode=update ;;
+        --current)   git_mr_menu_update_all=0 ;;
         st|status)   git_mr_menu_mode=status ;;
-        -a|-A|--all) git_mr_menu_update_all=1 ;;
         # Default: conserve argument
         *) args+=("${1}") ;;
         esac
@@ -2324,9 +2324,9 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  update  [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  merge   [BRANCH]
 
-       ${u}git${r} ${u}mr${r} [OPTION...]  menu                 [SEARCH_TERM]
-       ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--all]  [SEARCH_TERM]
-       ${u}git${r} ${u}mr${r} [OPTION...]  menu status          [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu                     [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--current]  [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu status              [SEARCH_TERM]
 
        ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|accept)  [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  undraft            [BRANCH]
@@ -2346,7 +2346,6 @@ ${b}ARGUMENTS${r}
            Defaults to Jira issue code guessed from branch name.
 
 ${b}OPTIONS${r}
-
        -c, --code   ISSUE_CODE
            Force issue code.
 
@@ -2360,20 +2359,28 @@ ${b}OPTIONS${r}
        -y, --yes
            Bypass confirmation prompts ("yes").
 
-       -n, --new-section
-           Add new section in description for new commits (for \`git mr update\`)
-
-       -f, --force
-           Force merge even if there are unresolved threads (for \`git mr merge\`)
-
-       -a, --all
-           Update all merge requests (for \`git mr menu update\`).
-
        -v, --verbose
            Verbose output (displays called API URLs & other debugging info).
 
        -h
            Show this help.
+
+${b}COMMAND-SPECIFIC OPTIONS${r}
+
+   ${b}git mr update${r}
+
+       -n, --new-section
+           Add new section in description for new commits.
+
+   ${b}git mr menu update${r}
+
+       --current
+           Update only current project/branch merge request.
+
+   ${b}git mr merge${r}
+
+       -f, --force
+           Force merge even if there are unresolved threads.
 
 ${b}CONFIGURATION${r}
 

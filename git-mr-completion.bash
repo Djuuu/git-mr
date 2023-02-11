@@ -4,7 +4,7 @@ _git_mr() {
     local isMenu
     local isMenuStatus
     local isMenuUpdate
-    local isMenuUpdateAll
+    local isMenuUpdateCurrent
     local isMerge
     local isUpdate
 
@@ -18,7 +18,7 @@ _git_mr() {
             [[ "$w" == "update" ]] && isMenuUpdate=1
             [[ "$w" == "status" ]] && isMenuStatus=1
             if [[ -n "$isMenuUpdate" ]]; then
-                [[ "$w" == "--all" ]] && isMenuUpdateAll=1
+                [[ "$w" == "--current" ]] && isMenuUpdateCurrent=1
             fi
         else
             [[ "$w" == "merge" ]] && isMerge=1
@@ -37,8 +37,8 @@ _git_mr() {
     # Menu
     if [[ -n $isMenu ]]; then
         [[ -n $isMenuStatus ]] && return
-        [[ -n $isMenuUpdateAll ]] && return
-        [[ -n $isMenuUpdate ]] && __gitcomp "--all" && return
+        [[ -n $isMenuUpdateCurrent ]] && return
+        [[ -n $isMenuUpdate ]] && __gitcomp "--current" && return
         __gitcomp "status update"
         return
     fi
