@@ -17,7 +17,7 @@ git_base_branch() {
 
     [[ -n $branch ]]                   || exit "$ERR_GIT" # Not on any branch
     [[ $branch != "$default_branch" ]] || exit "$ERR_GIT" # On default branch
-    git show-ref -q --heads "$branch"  || exit "$ERR_GIT" # Branch does not exist
+    git_branch_exists "$branch"        || exit "$ERR_GIT" # Branch does not exist
 
     # Nearest branch in commit history
     local base_branch
@@ -35,7 +35,7 @@ git_base_branch() {
     fi
 
     # First possible merge base
-    if ! git show-ref -q --heads "$base_branch"; then
+    if ! git_branch_exists "$base_branch"; then
         base_branch=$(git show-branch --merge-base "$branch" "$default_branch" | head -n1)
     fi
 
@@ -94,11 +94,14 @@ git_check_branches() {
     [[ $source_branch != "$(git_default_branch)" ]] ||
         exit_error "$ERR_GIT" "On default branch"
 
-    git show-ref -q --heads "$source_branch" ||
+    git_branch_exists "$source_branch" ||
         exit_error "$ERR_GIT" "Branch '$source_branch' does not exist"
 
     [[ -n $target_branch ]] ||
         exit_error "$ERR_GIT" "Unable to determine target branch"
+
+    [[ $target_branch == "$GIT_MR_TARGET" ]] && ! git_branch_exists "$target_branch" &&
+        exit_error "$ERR_GIT" "Branch '$target_branch' does not exist"
 
     return 0
 }
@@ -1881,6 +1884,7 @@ mr_update() {
 
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
+    git_check_branches "$source_branch" "$target_branch"
 
     # Search existing merge request
     local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")

@@ -253,6 +253,15 @@ full_sha() {
     run git_check_branches feature/base ""
     assert_failure "$ERR_GIT"
     assert_output "Unable to determine target branch"
+
+    # Workaround when we don't care about checking target (mr status)
+    run git_check_branches feature/base "-"
+    assert_success
+
+    GIT_MR_TARGET="wrong"
+    run git_check_branches feature/base "wrong"
+    assert_failure "$ERR_GIT"
+    assert_output "Branch 'wrong' does not exist"
 }
 
 @test "Lists current branch commits" {
