@@ -1048,6 +1048,72 @@ full_sha() {
     git reset --hard "$c3sha"
 }
 
+@test "Does not update MR target if target branch does not exist on remote" {
+    load "test_helper/gitlab-mock-mr-description-simple.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
+
+    c1sha=$(short_sha "Feature test - 1")
+    c2sha=$(short_sha "Feature test - 2")
+    c3sha=$(short_sha "Feature test - 3")
+
+    # Create new branch which will be detected as base
+    baseCommit=$(short_sha "Feature base - 3")
+    git branch newbase "$baseCommit"
+
+    # Add new commit
+    git commit --allow-empty -m "Feature test - 4"
+    c4shaNew=$(git rev-parse --short HEAD)
+
+    run mr_update <<< 'y'$'\n''y'
+    assert_output --partial "$(cat <<-EOF
+		--------------------------------------------------------------------------------
+
+		  updated commits: 0
+		      new commits: 1
+
+		Target branch 'newbase' does not exist on remote.
+		EOF
+    )"
+
+    git reset --hard "$c3sha"
+    git branch -d newbase
+}
+
+@test "Updates MR description with warning about misplaced target" {
+    load "test_helper/gitlab-mock-mr-description-simple.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
+
+    c1sha=$(short_sha "Feature test - 1")
+    c2sha=$(short_sha "Feature test - 2")
+    c3sha=$(short_sha "Feature test - 3")
+
+    # simulate commit ref base (when 1st possible merge base is used)
+    baseCommit=$(short_sha "Feature base - 3")
+    git_base_branch() {
+        echo "$baseCommit"
+    }
+
+    # Add new commit
+    git commit --allow-empty -m "Feature test - 4"
+    c4shaNew=$(git rev-parse --short HEAD)
+
+    run mr_update <<< 'y'
+    assert_output --partial "$(cat <<-EOF
+		--------------------------------------------------------------------------------
+
+		  updated commits: 0
+		      new commits: 1
+
+
+		Guessed target '$baseCommit' is a commit reference.
+		(No local base branch found, first possible merge base used.)
+		You might need to rebase your branch.
+		EOF
+    )"
+
+    git reset --hard "$c3sha"
+}
+
 @test "Updates MR description with warning about unknown commits" {
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"

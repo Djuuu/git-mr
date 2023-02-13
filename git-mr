@@ -2049,13 +2049,25 @@ mr_update() {
     ')"
 
     if [[ $target_branch != "$current_target" ]]; then
-        update_prompt=1
-        if confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?"; then
-            if git_remote_branch_exists "$target_branch"; then
-                mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit "$ERR_MR"
-            else
-                echo_error "Target branch '$target_branch' does not exist on remote"
+        if git_branch_exists "$target_branch"; then
+            update_prompt=1
+            if confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?"; then
+                if git_remote_branch_exists "$target_branch"; then
+                    mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit "$ERR_MR"
+                else
+                    echo_error "Target branch '$target_branch' does not exist on remote."
+                    [[ $mr_update_data != '{}' ]] && ! confirm "Update description anyway?" && mr_update_data="{}"
+                fi
             fi
+        elif git cat-file -e "$target_branch" 2>/dev/null; then
+            echo_error
+            echo_error "Guessed target '$target_branch' is a commit reference."
+            echo_error "(No local base branch found, first possible merge base used.)"
+            echo_error "You might need to rebase your branch."
+            [[ $mr_update_data != '{}' ]] && ! confirm "Update description anyway?" && mr_update_data="{}"
+        else
+            echo_error "Target '$target_branch' does not exist."
+            [[ $mr_update_data != '{}' ]] && ! confirm "Update description anyway?" && mr_update_data="{}"
         fi
     fi
 
