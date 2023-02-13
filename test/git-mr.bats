@@ -1048,6 +1048,35 @@ full_sha() {
     git reset --hard "$c3sha"
 }
 
+@test "Updates MR description with warning about unknown commits" {
+    load "test_helper/gitlab-mock-mr-description-simple.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
+
+    c1sha=$(short_sha "Feature test - 1")
+    c2sha=$(short_sha "Feature test - 2")
+    c3sha=$(short_sha "Feature test - 3")
+
+    # Create new branch which will be detected as base
+    baseCommit=$(short_sha "Feature base - 3")
+    git branch newbase "$c1sha"
+
+    run mr_update <<< 'y'
+    assert_output --partial "$(cat <<-EOF
+		--------------------------------------------------------------------------------
+
+		  updated commits: 2
+		      new commits: 0
+
+		  unknown commits: 1
+
+		Current description has 1 more commit(s) than found in branch, given target 'newbase'.
+		You might want to check your target branch or update the description manually.
+		EOF
+    )"
+
+    git branch -d newbase
+}
+
 ################################################################################
 # Merge request labels utility functions
 

@@ -1934,6 +1934,7 @@ mr_update() {
     local sameColor="lightblue"
     local updatedColor="orange"
     local newColor="green"
+    local wrongColor="lightred"
 
     # Iterate over commit lists, compare sha-1 and update description
     for i in ${!current_commits_array[*]}; do
@@ -1963,7 +1964,17 @@ mr_update() {
         fi
     done
 
-    local new_commit_count=${#new_commit_messages_display[@]}
+    local old_commit_count=${#old_commits_array[@]}
+    local current_commit_count=${#current_commits_array[@]}
+    local new_commit_count=${#new_commit_messages_content[@]}
+    local unknown_commit_count=$((old_commit_count - current_commit_count))
+
+    if [[ $unknown_commit_count -gt 0 ]]; then
+        for (( i = current_commit_count; i < old_commit_count; i++ )); do
+            old="${old_commits_array[$i]}"
+            new_description_display=${new_description_display//"$old"/"$(colorize "$old" "$wrongColor")"}
+        done
+    fi
 
     # implode arrays
     local new_commit_messages_display_str; new_commit_messages_display_str=$(printf "%s\n" "${new_commit_messages_display[@]}")
@@ -1991,11 +2002,21 @@ mr_update() {
     echo
     echo "  updated commits: $(colorize "$updated_commit_count" "$updatedColor")"
     echo "      new commits: $(colorize "$new_commit_count"     "$newColor")"
+    if [[ $unknown_commit_count -gt 0 ]]; then
+        echo
+        echo "  unknown commits: $(colorize "$unknown_commit_count" "$wrongColor")"
+    fi
     echo
 
     # Propose update if changes are detected
 
     local mr_update_data='{}' update_prompt
+
+    if [[ $unknown_commit_count -gt 0 ]]; then
+        echo_error "Current description has ${unknown_commit_count} more commit(s) than found in branch, given target '${target_branch}'."
+        echo_error "You might want to check your target branch or update the description manually."
+        echo_error
+    fi
 
     if [[ $((updated_commit_count + new_commit_count)) -gt 0 ]]; then
         update_prompt=1
