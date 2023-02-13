@@ -107,7 +107,7 @@ git_commits() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
-    git log --oneline --reverse --no-decorate "heads/${target_branch}..heads/${source_branch}"
+    git log --oneline --reverse --no-decorate "${target_branch}..${source_branch}"
 }
 
 git_commits_extended() {

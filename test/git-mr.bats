@@ -265,7 +265,6 @@ full_sha() {
 
     # Commits of current branch
     run git_commits
-
     assert_output "$(cat <<- EOF
 		${testSha1} Feature test - 1
 		${testSha2} Feature test - 2
@@ -277,7 +276,6 @@ full_sha() {
 
     # Commits of specified branch
     run git_commits "feature/base"
-
     assert_output "$(cat <<- EOF
 		${baseSha1} Feature base - 1
 		${baseSha2} Feature base - 2
@@ -286,12 +284,18 @@ full_sha() {
     )"
 
     run git_commits "feature/AB-123-test-feature" "epic/big-feature"
-
     assert_output "$(cat <<- EOF
 		${baseSha1} Feature base - 1
 		${baseSha2} Feature base - 2
 		${baseSha3} Feature base - 3
 		${testSha1} Feature test - 1
+		${testSha2} Feature test - 2
+		${testSha3} Feature test - 3
+		EOF
+    )"
+
+    run git_commits "feature/AB-123-test-feature" "${testSha1}"
+    assert_output "$(cat <<- EOF
 		${testSha2} Feature test - 2
 		${testSha3} Feature test - 3
 		EOF
