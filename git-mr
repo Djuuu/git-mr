@@ -255,6 +255,8 @@ colorize() {
         local cyan='\e[36m';   local lightcyan='\e[96m'
         local gray='\e[090m';  local lightgray='\e[37m'
 
+        local midgray='\e[38;5;247m'
+
         local reset='\e[0m'
 
         for style in "${@:2}"; do
@@ -1095,7 +1097,7 @@ mr_print_title() {
 
     echo "--------------------------------------------------------------------------------"
     echo " $(terminal_link "$mr_url" "$(gitlab_title_undraft "$mr_title")")"
-    has_links || echo " ⇒ $mr_url"
+    has_links || echolor " ⇒ $mr_url" "midgray"
     echo "--------------------------------------------------------------------------------"
 }
 
@@ -1234,7 +1236,9 @@ mr_print_status() {
     fi
     echo_spacer "$spacer_chars_r"
     # Target
-    echo -e "${target_display}\n"
+    echo "$target_display"
+
+    echo
 
     # 2nd row ------------------------------------------------------------------
     # Votes
@@ -1519,8 +1523,13 @@ mr_menu_status() {
 
         mr_title=$(gitlab_title_undraft "$mr_title")
 
-        echo "* $(colorize "$project_name" "bold"): $(terminal_link "$mr_url" "$mr_title")"
-        has_links || echo "  ⇒ $mr_url"
+        echo -n "* $(colorize "$project_name" "bold"): "
+        if has_links; then
+            echolink "$mr_url" "$mr_title"
+        else
+            echo "$mr_title"
+            echolor "  ⇒ $mr_url" "midgray"
+        fi
 
         # Read MR & threads
         local merge_request mr_threads

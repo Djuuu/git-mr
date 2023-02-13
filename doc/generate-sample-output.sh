@@ -275,17 +275,17 @@ sample_mr_menu_status() {
 EOF
 
     echo "* $(colorize "Some Project" "bold"): $(terminal_link "https://myapp.gitlab.com/some/project/-/merge_requests/12" "Feature/XY-1234 Lorem Ipsum")"
-    has_links || echo "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/12"
+    has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/12" "midgray"
     mr_print_status "$mr1" "$threads1"
     echo
 
     echo "* $(colorize "Other Project" "bold"): $(terminal_link "https://myapp.gitlab.com/other/project/-/merge_requests/34" "Feature/XY-1234 Quisque sed")"
-    has_links || echo "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/34"
+    has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/34" "midgray"
     mr_print_status "$mr2" "$threads2"
     echo
 
     echo "* $(colorize "Third Project" "bold"): $(terminal_link "https://myapp.gitlab.com/third/project/-/merge_requests/56" "Feature/XY-1234 Nunc vestibulum")"
-    has_links || echo "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/56"
+    has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/56" "midgray"
     mr_print_status "$mr3" "$threads3"
     echo
 }
