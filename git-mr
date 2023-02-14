@@ -1141,9 +1141,9 @@ mr_print_status() {
     local labels_str_len=$((${#labels} + $((labels_count * 2)) + 4)) # 2 spaces + 2 for larger icon
 
     # Votes
-    if [[ $upvotes -gt 1 ]];   then upvotes=$(colorize "$upvotes" "bold" "lightgreen")
-    elif [[ $upvotes -gt 0 ]]; then upvotes=$(colorize "$upvotes" "bold" "lightyellow")
-                               else upvotes=$(colorize "$upvotes" "bold"); fi
+    if [[ $upvotes -ge ${GIT_MR_REQUIRED_UPVOTES:-2} ]]; then upvotes=$(colorize "$upvotes" "bold" "lightgreen")
+    elif [[ $upvotes -gt 0 ]]; then                           upvotes=$(colorize "$upvotes" "bold" "lightyellow")
+    else                                                      upvotes=$(colorize "$upvotes" "bold"); fi
 
     if [[ $downvotes -gt 0 ]];
         then downvotes=$(colorize "$downvotes" "bold" "lightred")
@@ -2498,6 +2498,9 @@ MD_BR=${MD_BR="  "} # Markdown line break
 GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
 GIT_MR_MENU_END=${GIT_MR_MENU_END:-"--------------------------------------------------------------------------------"}
 GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
+
+# Defaults
+GIT_MR_REQUIRED_UPVOTES=2
 
 # Custom file descriptors
 git_mr_fd_mr=${GIT_MR_FD_MR=}
