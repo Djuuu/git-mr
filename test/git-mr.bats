@@ -1404,6 +1404,14 @@ This is an example without menu.
 			EOF
     }
 
+    draft_output() {
+        cat <<- EOF
+
+			Do you want to set draft status? -> yes
+			Setting draft status... OK
+			EOF
+    }
+
     undraft_output() {
         cat <<- EOF
 
@@ -1419,13 +1427,14 @@ This is an example without menu.
 
     # In Progress ------------------------------------------------------------------
 
-    GIT_MR_MOCK_LABELS='"Review","Testing","Accepted","My Team"'
+    git_mr_mock_labels='"Review","Testing","Accepted","My Team"'
 
     GITLAB_IP_LABELS="" # labels can be empty
     run mr_transition "IP"
     assert_output "$(cat <<-EOF
 		${separator}
 		$(labels_output "My Team")
+		$(draft_output)
 		$(jira_output "In Progress")
 		EOF
     )"
@@ -1435,13 +1444,14 @@ This is an example without menu.
     assert_output "$(cat <<- EOF
 		${separator}
 		$(labels_output "My Team,WIP")
+		$(draft_output)
 		$(jira_output "In Progress")
 		EOF
     )"
 
     # Code Review ------------------------------------------------------------------
 
-    GIT_MR_MOCK_LABELS='"WIP","Testing","Accepted","My Team"'
+    git_mr_mock_labels='"WIP","Testing","Accepted","My Team"'
 
     GITLAB_CR_LABELS="" # labels can be empty
     run mr_transition "CR"
@@ -1463,7 +1473,7 @@ This is an example without menu.
 
     # Quality Assurance ------------------------------------------------------------
 
-    GIT_MR_MOCK_LABELS='"WIP","Review","Accepted","My Team"'
+    git_mr_mock_labels='"WIP","Review","Accepted","My Team"'
 
     GITLAB_QA_LABELS="" # labels can be empty
     run mr_transition "QA"
@@ -1485,7 +1495,8 @@ This is an example without menu.
 
     # Accepted ---------------------------------------------------------------------
 
-    GIT_MR_MOCK_LABELS='"WIP","Review","Testing","My Team"'
+    git_mr_mock_labels='"WIP","Review","Testing","My Team"'
+    git_mr_mock_title="Draft: My MR"
 
     GITLAB_OK_LABELS="" # labels can be empty
     run mr_transition "OK"
@@ -1509,7 +1520,7 @@ This is an example without menu.
 
     # No label change --------------------------------------------------------------
 
-    GIT_MR_MOCK_LABELS='"Testing","My Team"' # no label change
+    git_mr_mock_labels='"Testing","My Team"' # no label change
     run mr_transition "QA"
     assert_output "$(cat <<- EOF
 		${separator}

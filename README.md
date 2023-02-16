@@ -299,6 +299,7 @@ This will:
 #### `git mr ip` _("in progress")_
 * removes Gitlab labels defined in `GITLAB_CR_LABELS`, `GITLAB_QA_LABELS` and `GITLAB_OK_LABELS`
 * adds Gitlab labels defined in `GITLAB_IP_LABELS`
+* sets Gitlab draft status
 * transitions Jira ticket using `JIRA_IP_ID`
 
 #### `git mr cr` _("code review")_

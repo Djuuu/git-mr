@@ -11,14 +11,17 @@ JIRA_CR_ID="120"
 JIRA_QA_ID="130"
 JIRA_OK_ID="140"
 
+git_mr_mock_labels='"My Team"'
+git_mr_mock_title="My MR"
+
 gitlab_request() {
     case "$1" in
         "projects/my%2Fproject/merge_requests?state=opened&view=simple&source_branch=feature/AB-123-test-feature")
-            echo '[{"iid":1, "title":"Draft: My MR"}]'
+            echo '[{"iid":1, "title":"'"$git_mr_mock_title"'"}]'
             ;;
 
         "projects/my%2Fproject/merge_requests/1")
-            echo '{"iid":1, "title":"Draft: My MR", "labels":['"$GIT_MR_MOCK_LABELS"']}'
+            echo '{"iid":1, "title":"'"$git_mr_mock_title"'", "labels":['"$git_mr_mock_labels"']}'
             ;;
 
         *)

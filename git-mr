@@ -1394,6 +1394,25 @@ mr_update_labels() {
     fi
 }
 
+mr_gitlab_draft() {
+    local mr_iid=$1
+    local mr_summary=$2
+
+    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
+
+    ! gitlab_title_is_draft "$mr_title" || return 0
+
+    confirm "Do you want to set draft status?" || return 0
+
+    echo -n "Setting draft status... "
+
+    local draft_title; draft_title=$(gitlab_title_to_draft "$mr_title")
+    local mr_data; mr_data=$(jq_build "title" "$draft_title") || exit "$ERR_MR"
+
+    local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+    [[ -n $result ]] && echo -e "OK\n"
+}
+
 mr_gitlab_undraft() {
     local mr_iid=$1
     local mr_summary=$2
@@ -2331,6 +2350,8 @@ mr_transition() {
 
     mr_update_labels "$mr_iid" "$(gitlab_extract_labels "$merge_request")" "$labels_to_remove" "$labels_to_add"
 
+    [[ $transition == "IP" ]] &&
+        mr_gitlab_draft "$mr_iid" "$mr_summary"
     [[ $transition == "OK" ]] &&
         mr_gitlab_undraft "$mr_iid" "$mr_summary"
 
