@@ -965,7 +965,6 @@ full_sha() {
     c5shaNew=$(git rev-parse --short HEAD)
 
     run mr_update <<< 'n'
-
     assert_output "$(cat <<- EOF
 
 
@@ -978,6 +977,32 @@ full_sha() {
 		* **${c3shaNew} Feature test - 3**
 
 		## Update
+
+		* **${c4shaNew} Feature test - 4**..
+		* **${c5shaNew} Feature test - 5**..
+
+		--------------------------------------------------------------------------------
+
+		  updated commits: 1
+		      new commits: 2
+
+		EOF
+    )"
+
+    GIT_MR_UPDATE_NEW_SECTION_NAME="Cleanup & refactor"
+    run mr_update <<< 'n'
+    assert_output "$(cat <<- EOF
+
+
+		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
+
+		## Commits
+
+		* **${c1sha} Feature test - 1**..
+		* **${c2sha} Feature test - 2**..
+		* **${c3shaNew} Feature test - 3**
+
+		## Cleanup & refactor
 
 		* **${c4shaNew} Feature test - 4**..
 		* **${c5shaNew} Feature test - 5**..

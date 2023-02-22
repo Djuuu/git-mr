@@ -112,7 +112,7 @@ sample_mr_status() {
 }
 
 sample_mr_update() {
-    fake_prompt "git mr update -n"
+    fake_prompt "git mr update -n \"QA feedback\""
 
     local mr='{
         "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
@@ -146,7 +146,7 @@ Sed non nulla ac metus congue consectetur et vel magna.
   Hendrerit ex egestas
   egestas sed
 
-## Update
+$(colorize "## QA feedback" "bold")
 
 * **$(colorize "e9642b7" "green") Ut consectetur leo ut leo commodo porttitor**
   Nam tincidunt ligula lectus

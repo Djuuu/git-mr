@@ -79,7 +79,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 #### Command-specific options
 
 * `git mr update`
-  * `-n`, `--new-section`  
+  * `-n`, `--new-section` `[NEW_SECTION_TITLE]`  
     Add new section in description for new commits.
 
 * `git mr menu update`

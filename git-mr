@@ -2007,7 +2007,7 @@ mr_update() {
     if [[ $new_commit_count -gt 0 ]]; then
         if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
             echo
-            echo "## Update"
+            echolor "## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}" "bold"
             echo
         fi
 
@@ -2046,7 +2046,7 @@ mr_update() {
 
             if [[ $new_commit_count -gt 0 ]]; then
                 if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
-                    new_description=$(echo -e "${new_description}\n\n## Update")
+                    new_description=$(echo -e "${new_description}\n\n## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}")
                     newLines="\n"
                 fi
                 [[ $GIT_MR_EXTENDED -eq 1 ]] &&
@@ -2436,7 +2436,7 @@ ${b}COMMAND-SPECIFIC OPTIONS${r}
 
    ${b}git mr update${r}
 
-       -n, --new-section
+       -n, --new-section [NEW_SECTION_TITLE]
            Add new section in description for new commits.
 
    ${b}git mr menu update${r}
@@ -2550,7 +2550,11 @@ while [[ $# -gt 0 ]]; do
 
         -e|-E|--extended)    GIT_MR_EXTENDED=1 ;;
         -y|-Y|--yes)         GIT_MR_YES=1     ;;
-        -n|-N|--new-section) GIT_MR_UPDATE_NEW_SECTION=1 ;;
+        -n|-N|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
+            case "$2" in
+                -c|--code | -t|--target | -e|-E|--extended | -y|-Y|--yes | -f|-F|--force | -v|-V|--verbose | -h) ;;
+                *) GIT_MR_UPDATE_NEW_SECTION_NAME="$2"; shift ;;
+            esac ;;
         -f|-F|--force)       GIT_MR_FORCE=1 ;;
         -v|-V|--verbose)     GIT_MR_VERBOSE=1 ;;
 
