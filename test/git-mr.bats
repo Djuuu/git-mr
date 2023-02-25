@@ -11,6 +11,7 @@ setup_file() {
 
     export GIT_MR_NO_COLORS=1
     export GIT_MR_NO_TERMINAL_LINK=1
+    export GIT_MR_EXTENDED=
 
     export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
     export JIRA_INSTANCE=
@@ -102,6 +103,12 @@ git() {
         -c user.name=Test \
         -c init.templatedir= \
         "$@"
+}
+
+git-push() {
+    [[ $1 == "gitlab" ]] && git remote set-url --push gitlab "../gitlab"
+    git push "$@"
+    [[ $1 == "gitlab" ]] && git remote set-url --push gitlab "git@${GITLAB_DOMAIN}:my/project.git"
 }
 
 git-mr() {
@@ -945,7 +952,6 @@ full_sha() {
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"
 
-    GIT_MR_EXTENDED=
     GIT_MR_UPDATE_NEW_SECTION=1
 
     c1sha=$(short_sha "Feature test - 1")
@@ -960,9 +966,11 @@ full_sha() {
     # Add new commits
     git commit --allow-empty -m "Feature test - 4" -m "With extended message too"
     c4shaNew=$(git rev-parse --short HEAD)
-
     git commit --allow-empty -m "Feature test - 5"
     c5shaNew=$(git rev-parse --short HEAD)
+
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
 
     run mr_update <<< 'n'
     assert_output "$(cat <<- EOF
@@ -1015,7 +1023,9 @@ full_sha() {
 		EOF
     )"
 
+    # Reset repo for next tests
     git reset --hard "$c3sha"
+    git-push gitlab feature/AB-123-test-feature --force
 }
 
 @test "Updates MR description with new commits with extended description" {
@@ -1037,12 +1047,13 @@ full_sha() {
     # Add new commits
     git commit --allow-empty -m "Feature test - 4" -m "With extended message too"
     c4shaNew=$(git rev-parse --short HEAD)
-
     git commit --allow-empty -m "Feature test - 5"
     c5shaNew=$(git rev-parse --short HEAD)
 
-    run mr_update <<< 'n'
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
 
+    run mr_update <<< 'n'
     empty=""
     assert_output "$(cat <<-EOF
 
@@ -1070,6 +1081,69 @@ full_sha() {
 		EOF
     )"
 
+    # Reset repo for next tests
+    git reset --hard "$c3sha"
+    git-push gitlab feature/AB-123-test-feature --force
+}
+
+@test "Warns before updating merge request when remote branch is not up-to-date" {
+    load "test_helper/gitlab-mock-mr-description-simple.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
+
+    c1sha=$(short_sha "Feature test - 1")
+    c2sha=$(short_sha "Feature test - 2")
+    c3sha=$(short_sha "Feature test - 3")
+
+    # Add new commit
+    git commit --allow-empty -m "Feature test - 4"
+    c4shaNew=$(git rev-parse --short HEAD)
+
+    run mr_update <<< 'n'
+    assert_output "$(cat <<- EOF
+
+
+		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
+
+		## Commits
+
+		* **${c1sha} Feature test - 1**..
+		* **${c2sha} Feature test - 2**..
+		* **${c3sha} Feature test - 3**
+		* **${c4shaNew} Feature test - 4**..
+
+		--------------------------------------------------------------------------------
+
+		  updated commits: 0
+		      new commits: 1
+
+		Remote branch on gitlab is not up-to-date with local branch feature/AB-123-test-feature.
+		EOF
+    )"
+
+    run mr_update <<< 'y'
+    assert_output "$(cat <<- EOF
+
+
+		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
+
+		## Commits
+
+		* **${c1sha} Feature test - 1**..
+		* **${c2sha} Feature test - 2**..
+		* **${c3sha} Feature test - 3**
+		* **${c4shaNew} Feature test - 4**..
+
+		--------------------------------------------------------------------------------
+
+		  updated commits: 0
+		      new commits: 1
+
+		Remote branch on gitlab is not up-to-date with local branch feature/AB-123-test-feature.
+		Updating merge request...OK
+		EOF
+    )"
+
+    # Reset repo for next tests
     git reset --hard "$c3sha"
 }
 
@@ -1089,6 +1163,9 @@ full_sha() {
     git commit --allow-empty -m "Feature test - 4"
     c4shaNew=$(git rev-parse --short HEAD)
 
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
+
     run mr_update <<< 'y'$'\n''y'
     assert_output --partial "$(cat <<-EOF
 		--------------------------------------------------------------------------------
@@ -1100,7 +1177,9 @@ full_sha() {
 		EOF
     )"
 
+    # Reset repo for next tests
     git reset --hard "$c3sha"
+    git-push gitlab feature/AB-123-test-feature --force
     git branch -d newbase
 }
 
@@ -1122,6 +1201,9 @@ full_sha() {
     git commit --allow-empty -m "Feature test - 4"
     c4shaNew=$(git rev-parse --short HEAD)
 
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
+
     run mr_update <<< 'y'
     assert_output --partial "$(cat <<-EOF
 		--------------------------------------------------------------------------------
@@ -1136,7 +1218,9 @@ full_sha() {
 		EOF
     )"
 
+    # Reset repo for next tests
     git reset --hard "$c3sha"
+    git-push gitlab feature/AB-123-test-feature --force
 }
 
 @test "Updates MR description with warning about unknown commits" {

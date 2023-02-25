@@ -2039,8 +2039,21 @@ mr_update() {
 
     if [[ $((updated_commit_count + new_commit_count)) -gt 0 ]]; then
         update_prompt=1
-        if confirm "Do you want to update the merge request description?"; then
 
+        local remote; remote=$(gitlab_remote)
+        local remote_branch="${remote}/${source_branch}"
+
+        local should_update_description=0
+        if [[ "$(git rev-parse "$source_branch")" != "$(git rev-parse "$remote_branch")" ]]; then
+            echo_error "Remote branch on ${remote} is not up-to-date with local branch ${source_branch}."
+            if confirm "Update merge request description anyway?"; then
+                should_update_description=1
+            fi
+        elif confirm "Do you want to update the merge request description?"; then
+            should_update_description=1
+        fi
+
+        if [[ $should_update_description -eq 1 ]]; then
             local new_description; new_description=$(echo -e "${new_description_content}")
             local newLines=""
 
@@ -2108,7 +2121,7 @@ mr_update() {
     [[ -n $merge_request ]] ||
         gitlab_read_mr merge_request
     gitlab_read_threads mr_threads
-    
+
     # --------------------------------------------------------------------------------
     mr_print_title "$mr_title" "$mr_url"
     mr_print_status "$merge_request" "$mr_threads"
