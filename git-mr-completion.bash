@@ -49,7 +49,8 @@ _git_mr() {
             [[ -n $isMerge ]] &&
                 __gitcomp_nl_append "--force"
             [[ -n $isUpdate ]] &&
-                __gitcomp_nl_append "--new-section"
+                __gitcomp_nl_append "--new-section" &&
+                __gitcomp_nl_append "--replace-commits"
             return
             ;;
         -*)
@@ -59,7 +60,9 @@ _git_mr() {
                 __gitcomp_nl_append "--force"
             [[ -n $isUpdate ]] &&
                 __gitcomp_nl_append "-n" &&
-                __gitcomp_nl_append "--new-section"
+                __gitcomp_nl_append "--new-section" &&
+                __gitcomp_nl_append "-r" &&
+                __gitcomp_nl_append "--replace-commits"
             return
             ;;
         *)

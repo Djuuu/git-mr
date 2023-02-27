@@ -1272,6 +1272,15 @@ mr_print_status() {
 ################################################################################
 # Merge request description functions
 
+mr_description_first_commit_line() {
+    local mr_description=$1
+
+    local first_commit_line
+    first_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' | head -n1 | cut -d: -f1)
+
+    echo "$first_commit_line"
+}
+
 mr_description_last_commit_line() {
     local mr_description=$1
 
@@ -2018,6 +2027,23 @@ mr_update() {
         old_commits_array=($old_commits)
     IFS=$oIFS
 
+    # Prepare full commit list replacement
+    local last_commit_line
+    if [[ $GIT_MR_REPLACE_COMMITS -eq 1 ]]; then
+        local commits_start_line; commits_start_line=$(mr_description_first_commit_line "$mr_description")
+        local commits_end_line; commits_end_line=$(mr_description_last_commit_line "$mr_description")
+
+        if [[ $commits_start_line -gt 0 && $commits_end_line -gt 0 ]]; then
+            # Remove old commits from description, keeping leading and/or trailing blank lines
+            IFS= read -rd '' mr_description < <(echo "$mr_description" | sed "${commits_start_line},${commits_end_line}d")
+            # Remember line where to insert new commits
+            last_commit_line=$((commits_start_line - 1)); [[ $last_commit_line -ge 1 ]] || last_commit_line=1
+        fi
+
+        # All MR commits will be added as new commits
+        old_commits_array=()
+    fi
+
     local updated_commit_count=0
     local new_commit=
     local new_commit_messages_display=()
@@ -2076,7 +2102,10 @@ mr_update() {
     local new_commit_messages_content_str; new_commit_messages_content_str=$(printf "%s\n" "${new_commit_messages_content[@]}")
 
     if [[ $new_commit_count -gt 0 ]]; then
-        local last_commit_line; last_commit_line=$(mr_description_last_commit_line "$mr_description")
+        # Find last commit line in current description (when not replacing whole commit list)
+        [[ -z $last_commit_line ]] &&
+            last_commit_line=$(mr_description_last_commit_line "$mr_description")
+
         new_description_display=$(mr_description_insert_new_commits "$new_description_display" "$new_commit_messages_display_str" "$last_commit_line" true)
         new_description_content=$(mr_description_insert_new_commits "$new_description_content" "$new_commit_messages_content_str" "$last_commit_line")
     fi
@@ -2509,6 +2538,9 @@ ${b}COMMAND-SPECIFIC OPTIONS${r}
        -n, --new-section [NEW_SECTION_TITLE]
            Add new section in description for new commits.
 
+       -r, --replace-commits
+           Fully replace commit list in description with current commits.
+
    ${b}git mr menu update${r}
 
        --current
@@ -2622,9 +2654,10 @@ while [[ $# -gt 0 ]]; do
         -y|-Y|--yes)         GIT_MR_YES=1     ;;
         -n|-N|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
             case "$2" in
-                -c|--code | -t|--target | -e|-E|--extended | -y|-Y|--yes | -f|-F|--force | -v|-V|--verbose | -h) ;;
+                -c|--code | -t|--target | -e|-E|--extended | -y|-Y|--yes | -r|-R|--replace-commits | -f|-F|--force | -v|-V|--verbose | -h) ;;
                 *) GIT_MR_UPDATE_NEW_SECTION_NAME="$2"; shift ;;
             esac ;;
+        -r|-R|--replace-commits) GIT_MR_REPLACE_COMMITS=1 ;;
         -f|-F|--force)       GIT_MR_FORCE=1 ;;
         -v|-V|--verbose)     GIT_MR_VERBOSE=1 ;;
 

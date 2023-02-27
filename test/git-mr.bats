@@ -948,6 +948,15 @@ full_sha() {
     )"
 }
 
+@test "Identifies first commit line in description" {
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+* **472c4a8cb9 XY-1234 Pellentesque** {4}"
+    run mr_description_first_commit_line "$mr_description"
+    assert_output "3"
+}
+
 @test "Identifies last commit line in description" {
     indent="  "
 
@@ -1435,6 +1444,56 @@ End"
     )"
 
     git branch -d newbase
+}
+
+@test "Replaces whole commit list in MR description" {
+    load "test_helper/gitlab-mock-mr-description-extended.bash"
+    load "test_helper/gitlab-mock-mr-update.bash"
+
+    GIT_MR_EXTENDED=1
+    GIT_MR_REPLACE_COMMITS=1
+
+    c1sha=$(short_sha "Feature test - 1")
+    c2sha=$(short_sha "Feature test - 2")
+    c3sha=$(short_sha "Feature test - 3")
+
+    # Amend first commit
+    git reset --soft "$c1sha"
+    git commit --amend --allow-empty -m "Feature test - new 1" -m "Updated"
+    c1shaNew=$(git rev-parse --short HEAD)
+
+    # Add new commit
+    git commit --allow-empty -m "Feature test - new 2" -m "With extended message too"
+    c2shaNew=$(git rev-parse --short HEAD)
+
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
+
+    run mr_update <<< 'n'
+    empty=""
+    assert_output "$(cat <<-EOF
+
+
+		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
+
+		## Commits
+
+		* **${c1shaNew} Feature test - new 1**..
+		  Updated..
+		* **${c2shaNew} Feature test - new 2**..
+		  With extended message too..
+
+		--------------------------------------------------------------------------------
+
+		  updated commits: 0
+		      new commits: 2
+
+		EOF
+    )"
+
+    # Reset repo for next tests
+    git reset --hard "$c3sha"
+    git-push gitlab feature/AB-123-test-feature --force
 }
 
 ################################################################################

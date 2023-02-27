@@ -81,6 +81,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * `git mr update`
   * `-n`, `--new-section` `[NEW_SECTION_TITLE]`  
     Add new section in description for new commits.
+  * `-r`, `--replace-commits`  
+    Fully replace commit list in description with current commits.
 
 * `git mr menu update`
   * `--current`  
