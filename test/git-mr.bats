@@ -948,6 +948,191 @@ full_sha() {
     )"
 }
 
+@test "Identifies last commit line in description" {
+    indent="  "
+
+    # Standard commit list - Last description line is commit
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+* **472c4a8cb9 XY-1234 Pellentesque** {4}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "4"
+
+    # Standard commit list - Last non-empty description line is commit
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+* **472c4a8cb9 XY-1234 Pellentesque** {4}
+
+"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "4"
+
+    # Standard commit list - With additional global description
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+* **472c4a8cb9 XY-1234 Pellentesque** {4}
+
+
+Some Description {7}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "4"
+
+
+    # Commits with extended description - Last description line is commit extended description
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
+    # (same with non-indented empty lines in extended description)
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
+    # Commits with extended description - Last non-empty description line is commit extended description
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+"
+    # (same with trailing indented line in extended description)
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+${indent}
+
+
+"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "9"
+
+    # (same with non-indented empty lines in extended description)
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
+    # Commits with extended description - With additional global description
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+Some global description. {9}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
+    # (same with additional blank lines before global description)
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+Nulla eget sem semper, scelerisque enim nec, pellentesque nisi. {11}
+${indent}With unrelated indent {12}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
+    # (same with non-indented empty lines in extended description, and indented lines global description)
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+Nulla eget sem semper, scelerisque enim nec, pellentesque nisi. {11}
+* Fusce vitae sem {12}
+${indent}non mi egestas dignissim {13}
+Nunc vitae {14}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+}
+
+@test "Inserts new commits in description" {
+    mr_description="# Title
+## Commits
+* **plop**..
+End"
+    new_commits="new commit"
+    last_commit_line=3
+
+    run mr_description_insert_new_commits "$mr_description" "$new_commits" "$last_commit_line"
+    assert_output "$(cat <<-EOF
+		# Title
+		## Commits
+		* **plop**..
+		* **new commit**..
+		End
+		EOF
+    )"
+
+    mr_description="# Title
+## Commits
+* **plop**"
+    new_commits="new commit"
+    last_commit_line=3
+
+    run mr_description_insert_new_commits "$mr_description" "$new_commits" "$last_commit_line"
+    assert_output "$(cat <<-EOF
+		# Title
+		## Commits
+		* **plop**..
+		* **new commit**..
+		EOF
+    )"
+}
+
 @test "Updates MR description with new commits in new section" {
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"
@@ -982,7 +1167,7 @@ full_sha() {
 
 		* **${c1sha} Feature test - 1**..
 		* **${c2sha} Feature test - 2**..
-		* **${c3shaNew} Feature test - 3**
+		* **${c3shaNew} Feature test - 3**..
 
 		## Update
 
@@ -1008,7 +1193,7 @@ full_sha() {
 
 		* **${c1sha} Feature test - 1**..
 		* **${c2sha} Feature test - 2**..
-		* **${c3shaNew} Feature test - 3**
+		* **${c3shaNew} Feature test - 3**..
 
 		## Cleanup & refactor
 
@@ -1108,7 +1293,7 @@ full_sha() {
 
 		* **${c1sha} Feature test - 1**..
 		* **${c2sha} Feature test - 2**..
-		* **${c3sha} Feature test - 3**
+		* **${c3sha} Feature test - 3**..
 		* **${c4shaNew} Feature test - 4**..
 
 		--------------------------------------------------------------------------------
@@ -1130,7 +1315,7 @@ full_sha() {
 
 		* **${c1sha} Feature test - 1**..
 		* **${c2sha} Feature test - 2**..
-		* **${c3sha} Feature test - 3**
+		* **${c3sha} Feature test - 3**..
 		* **${c4shaNew} Feature test - 4**..
 
 		--------------------------------------------------------------------------------

@@ -1270,6 +1270,82 @@ mr_print_status() {
 
 
 ################################################################################
+# Merge request description functions
+
+mr_description_last_commit_line() {
+    local mr_description=$1
+
+    local last_commit_line
+    last_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' | tail -n1 | cut -d: -f1)
+
+    local description_after_last_commit
+    description_after_last_commit=$(echo "$mr_description" | tail -n "+$((last_commit_line + 1))")
+
+    local next_description_line
+    next_description_line=$(echo "$description_after_last_commit" | grep -vn '^  \|^$' | head -n1 | cut -d: -f1)
+
+    local last_commit_extended_description
+    if [[ -n $next_description_line ]]; then
+        last_commit_extended_description=$(echo "$description_after_last_commit" | head -n $(( next_description_line - 1)))
+    else
+        last_commit_extended_description="$description_after_last_commit"
+    fi
+
+    local last_extended_description_line
+    last_extended_description_line=$(echo "$last_commit_extended_description" | grep -vn '^$' | tail -n1 | cut -d: -f1)
+
+    echo $((last_commit_line + last_extended_description_line))
+}
+
+mr_description_insert_new_commits() {
+    local mr_description=$1
+    local new_commits=$2
+    local last_commit_line=$3
+    local for_terminal=$4
+
+    [[ -n $last_commit_line ]] || last_commit_line=$(mr_description_last_commit_line "$mr_description")
+
+    local description_length; description_length=$(echo "$mr_description" | wc -l)
+
+    # Iterate over description lines
+    local i=1 mr_description_line trailing_br
+    while IFS=$'\n' read -r mr_description_line; do
+
+        # Add trailing markdown newline (that would have been trimmes by Gitlab) to list item on last line.
+        # (As other commit lines, to prepare for an extended description going on the next line.)
+        [[ $i -eq $description_length && $i -eq $last_commit_line ]] &&
+            grep -q '^* ' <<< "$mr_description_line" &&
+            trailing_br="$MD_BR"
+
+        echo "${mr_description_line}${trailing_br}"
+
+        # Insert new commits
+        if [[ $i -eq $last_commit_line ]]; then
+            mr_description_print_new_commits "$new_commits" "$for_terminal"
+        fi
+        ((i += 1))
+    done < <(echo "$mr_description")
+}
+
+mr_description_print_new_commits() {
+    local new_commits=$1
+    local for_terminal=$2
+
+    if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
+        echo
+        if [[ -n $for_terminal ]]; then
+            echolor "## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}" "bold"; else
+            echo "## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}";fi
+        echo
+    fi
+
+    if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
+        markdown_indent_list_items "$new_commits"; else
+        markdown_list              "$new_commits"; fi
+}
+
+
+################################################################################
 # Merge request labels utility functions
 
 replace_labels() {
@@ -1999,23 +2075,17 @@ mr_update() {
     local new_commit_messages_display_str; new_commit_messages_display_str=$(printf "%s\n" "${new_commit_messages_display[@]}")
     local new_commit_messages_content_str; new_commit_messages_content_str=$(printf "%s\n" "${new_commit_messages_content[@]}")
 
+    if [[ $new_commit_count -gt 0 ]]; then
+        local last_commit_line; last_commit_line=$(mr_description_last_commit_line "$mr_description")
+        new_description_display=$(mr_description_insert_new_commits "$new_description_display" "$new_commit_messages_display_str" "$last_commit_line" true)
+        new_description_content=$(mr_description_insert_new_commits "$new_description_content" "$new_commit_messages_content_str" "$last_commit_line")
+    fi
+
     # Print updated merge request description
     echo
     mr_print_title "$mr_title" "$mr_url"
     echo
     echo "$new_description_display"
-    if [[ $new_commit_count -gt 0 ]]; then
-        if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
-            echo
-            echolor "## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}" "bold"
-            echo
-        fi
-
-        if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
-            markdown_indent_list_items "$new_commit_messages_display_str"; else
-            markdown_list              "$new_commit_messages_display_str"; fi
-    fi
-
     echo
     echo "--------------------------------------------------------------------------------"
     echo
@@ -2054,20 +2124,7 @@ mr_update() {
         fi
 
         if [[ $should_update_description -eq 1 ]]; then
-            local new_description; new_description=$(echo -e "${new_description_content}")
-            local newLines=""
-
-            if [[ $new_commit_count -gt 0 ]]; then
-                if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
-                    new_description=$(echo -e "${new_description}\n\n## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}")
-                    newLines="\n"
-                fi
-                [[ $GIT_MR_EXTENDED -eq 1 ]] &&
-                    new_description=$(echo -e "${new_description}\n${newLines}$(markdown_indent_list_items "$new_commit_messages_content_str")") ||
-                    new_description=$(echo -e "${new_description}\n${newLines}$(markdown_list "$new_commit_messages_content_str")")
-            fi
-            new_description=$(echo -e "$new_description")$'\n'
-            mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit "$ERR_MR"
+            mr_update_data=$(jq_build "description" "$new_description_content" "$mr_update_data") || exit "$ERR_MR"
         fi
     fi
 
