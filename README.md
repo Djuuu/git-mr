@@ -54,11 +54,12 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ### Arguments
 
 * `BRANCH`  
-  Force merge request source branch.  
-  Defaults to current branch.
+  Merge request source branch.  
+  (Defaults to current branch.)
+
 * `SEARCH_TERM`  
   Term searched in merge requests titles to build menu.  
-  Defaults to Jira issue code guessed from branch name.
+  (Defaults to Jira issue code guessed from branch name.)
 
 ### Options
 
@@ -174,17 +175,27 @@ export GITLAB_IP_LABELS="WIP"      # Label(s) set on "In Progress" step
 export GITLAB_CR_LABELS="Review"   # Label(s) set on "Code Review" step
 export GITLAB_QA_LABELS="Testing"  # Label(s) set on "Quality Assurance" step
 export GITLAB_OK_LABELS="Accepted" # Label(s) set on "Accepted" step
+
 # Jira status - transition IDs
 export JIRA_IP_ID="xx" # "In progress" transition ID
 export JIRA_CR_ID="xx" # "Code review" transition ID
 export JIRA_QA_ID="xx" # "Quality Assurance" transition ID
 export JIRA_OK_ID="xx" # "Accepted" transition ID
 
+# Always use extended commit messages
+# export GIT_MR_EXTENDED=1
+
+# Required upvote count to turn indicator green in `mr status` (defaults to 2)
+#export GIT_MR_REQUIRED_UPVOTES=2
+
+# Number of description lines shown in `mr menu update` (defaults to 15)
+#export GIT_MR_MENU_UPDATE_CONTEXT_LINES=15
+
 # Check "Delete source branch" by default (defaults to 1)
-export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
+#export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
 
 # Network timeout (in seconds, defaults to 5)
-export GIT_MR_TIMEOUT=5
+#export GIT_MR_TIMEOUT=5
 ```
 
 

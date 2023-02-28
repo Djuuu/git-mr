@@ -2476,6 +2476,7 @@ mr_hook() {
 
 usage() {
     local b; b="$(printf '\e[1m')"
+    local i; i="$(printf '\e[3m')"
     local u; u="$(printf '\e[4m')"
     local r; r="$(printf '\e[0m')"
 
@@ -2504,12 +2505,12 @@ ${b}SYNOPSIS${r}
 
 ${b}ARGUMENTS${r}
        BRANCH
-           Force merge request source branch.
-           Defaults to current branch.
+           Merge request source branch.
+           (Defaults to current branch.)
 
        SEARCH_TERM
            Term searched in merge requests titles to build menu.
-           Defaults to Jira issue code guessed from branch name.
+           (Defaults to Jira issue code guessed from branch name.)
 
 ${b}OPTIONS${r}
        -c, --code   ISSUE_CODE
@@ -2558,7 +2559,9 @@ ${b}COMMAND-SPECIFIC OPTIONS${r}
            Force merge even if there are unresolved threads.
 
 ${b}CONFIGURATION${r}
-
+EOF
+    if [[ $GIT_MR_VERBOSE -eq 1 ]]; then
+        cat <<EOF
        You need to configure the following environment variables:
 
            export JIRA_USER="user.name@mycompany.com"
@@ -2581,10 +2584,10 @@ ${b}CONFIGURATION${r}
            export GITLAB_DEFAULT_LABELS="Review,My Team"
 
            # Gitlab status labels (comma-separated, without spaces in between)
-           export GITLAB_IP_LABELS="WIP"       # Label(s) set on IP step
-           export GITLAB_CR_LABELS="Review"    # Label(s) set on CR step
-           export GITLAB_QA_LABELS="Testing"   # Label(s) set on QA step
-           export GITLAB_OK_LABELS="Validated" # Label(s) set on Accepted step
+           export GITLAB_IP_LABELS="WIP"       # Label(s) set on "In Progress" step
+           export GITLAB_CR_LABELS="Review"    # Label(s) set on "Code Review" step
+           export GITLAB_QA_LABELS="Testing"   # Label(s) set on "Quality Assurance" step
+           export GITLAB_OK_LABELS="Validated" # Label(s) set on "Accepted" step
 
            # Jira status - transition IDs
            export JIRA_IP_ID="xx" # "In Progress" transition ID
@@ -2592,11 +2595,32 @@ ${b}CONFIGURATION${r}
            export JIRA_QA_ID="xx" # "Quality Assurance" transition ID
            export JIRA_OK_ID="xx" # "Accepted" transition ID
 
+           # Always use extended commit messages
+           # export GIT_MR_EXTENDED=1
+
+           # Required upvote count to turn indicator green in \`mr status\` (defaults to 2)
+           #export GIT_MR_REQUIRED_UPVOTES=2
+
+           # Number of description lines shown in \`mr menu update\` (defaults to 15)
+           #export GIT_MR_MENU_UPDATE_CONTEXT_LINES=15
+
            # Check "Delete source branch" by default (defaults to 1)
-           export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
+           #export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
 
            # Network timeout (in seconds, defaults to 5)
-           export GIT_MR_TIMEOUT=5
+           #export GIT_MR_TIMEOUT=5
+
+EOF
+    else
+        cat <<EOF
+       ${i}Use the -v|--verbose option to show configuration options.${r}
+
+EOF
+    fi
+
+    cat <<EOF
+${b}HOMEPAGE${r}
+       https://github.com/Djuuu/git-mr
 
 EOF
 }
@@ -2629,7 +2653,7 @@ GIT_MR_MENU_END=${GIT_MR_MENU_END:-"--------------------------------------------
 GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
 
 # Defaults
-GIT_MR_REQUIRED_UPVOTES=2
+GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-2}
 
 # Custom file descriptors
 git_mr_fd_mr=${GIT_MR_FD_MR=}
@@ -2675,7 +2699,7 @@ while [[ $# -gt 0 ]]; do
         # mr merge
         -f|--force) GIT_MR_FORCE=1 ;;
 
-        -h) usage; exit 0; ;;
+        -h) args=("usage") ;;
 
         *) args+=("${1}") ;;
     esac
