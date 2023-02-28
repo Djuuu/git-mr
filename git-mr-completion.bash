@@ -45,7 +45,7 @@ _git_mr() {
 
     case "$cur" in
         --*)
-            __gitcomp "--code --target --verbose --extended --yes"
+            __gitcomp "--code --target --extended --no-color --no-links --verbose --yes"
             [[ -n $isMerge ]] &&
                 __gitcomp_nl_append "--force"
             [[ -n $isUpdate ]] &&
@@ -54,7 +54,7 @@ _git_mr() {
             return
             ;;
         -*)
-            __gitcomp "-c --code -t --target -v --verbose -e --extended -y --yes"
+            __gitcomp "-c --code -t --target -e --extended --no-color --no-links -v --verbose -y --yes"
             [[ -n $isMerge ]] &&
                 __gitcomp_nl_append "-f" &&
                 __gitcomp_nl_append "--force"

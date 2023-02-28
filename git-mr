@@ -2522,6 +2522,12 @@ ${b}OPTIONS${r}
            Use full commit messages in description ("extended", for \`git mr [open|update]\`).
            You can also set GIT_MR_EXTENDED=1 in your environment variables to always use extended commit descriptions.
 
+       --no-color
+           Disable terminal colors.
+
+       --no-links
+           Disable terminal hyperlinks and show merge request URL in \`mr status\` and \`mr menu status\`.
+
        -y, --yes
            Bypass confirmation prompts ("yes").
 
@@ -2650,16 +2656,24 @@ while [[ $# -gt 0 ]]; do
         -c|--code)   GIT_MR_CODE="$2";   shift ;;
         -t|--target) GIT_MR_TARGET="$2"; shift ;;
 
-        -e|-E|--extended)    GIT_MR_EXTENDED=1 ;;
-        -y|-Y|--yes)         GIT_MR_YES=1     ;;
-        -n|-N|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
+        -e|--extended) GIT_MR_EXTENDED=1 ;;
+
+        --no-color) GIT_MR_NO_COLORS=1 ;;
+        --no-links) GIT_MR_NO_TERMINAL_LINK=1 ;;
+
+        -y|--yes)     GIT_MR_YES=1 ;;
+        -v|--verbose) GIT_MR_VERBOSE=1 ;;
+
+        # mr update
+        -n|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
             case "$2" in
-                -c|--code | -t|--target | -e|-E|--extended | -y|-Y|--yes | -r|-R|--replace-commits | -f|-F|--force | -v|-V|--verbose | -h) ;;
+                -c|--code | -t|--target | -e|--extended | --no-color|--no-links | -y|--yes | -v|--verbose | -r|--replace-commits | -f|--force | -h) ;;
                 *) GIT_MR_UPDATE_NEW_SECTION_NAME="$2"; shift ;;
             esac ;;
-        -r|-R|--replace-commits) GIT_MR_REPLACE_COMMITS=1 ;;
-        -f|-F|--force)       GIT_MR_FORCE=1 ;;
-        -v|-V|--verbose)     GIT_MR_VERBOSE=1 ;;
+        -r|--replace-commits) GIT_MR_REPLACE_COMMITS=1 ;;
+
+        # mr merge
+        -f|--force) GIT_MR_FORCE=1 ;;
 
         -h) usage; exit 0; ;;
 

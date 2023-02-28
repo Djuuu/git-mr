@@ -69,6 +69,10 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * `-e`, `--extended`  
   Use full commit messages in description ("extended", for `git mr [open|update]`).  
   You can also set `GIT_MR_EXTENDED=1` in your environment variables to always use extended commit descriptions.
+* `--no-color`  
+  Disable terminal colors.
+* `--no-links`  
+  Disable terminal hyperlinks and show merge request URL in `mr status` and `mr menu status`.
 * `-y`, `--yes`  
   Bypass confirmation prompts (always answer "yes").
 * `-v`, `--verbose`  
