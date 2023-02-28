@@ -1276,7 +1276,7 @@ mr_description_first_commit_line() {
     local mr_description=$1
 
     local first_commit_line
-    first_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' | head -n1 | cut -d: -f1)
+    first_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' -m 1 | cut -d: -f1)
 
     echo "$first_commit_line"
 }
@@ -1291,7 +1291,7 @@ mr_description_last_commit_line() {
     description_after_last_commit=$(echo "$mr_description" | tail -n "+$((last_commit_line + 1))")
 
     local next_description_line
-    next_description_line=$(echo "$description_after_last_commit" | grep -vn '^  \|^$' | head -n1 | cut -d: -f1)
+    next_description_line=$(echo "$description_after_last_commit" | grep -vn '^  \|^$' -m 1 | cut -d: -f1)
 
     local last_commit_extended_description
     if [[ -n $next_description_line ]]; then
@@ -1778,7 +1778,7 @@ mr_menu_update_all() {
 mr_menu_start_line() {
     local mr_description=$1
 
-    echo "$mr_description" | grep -n "$GIT_MR_MENU_START" | head -n1 | cut -d: -f1
+    echo "$mr_description" | grep -n "$GIT_MR_MENU_START" -m 1 | cut -d: -f1
 }
 
 mr_menu_end_line() {
@@ -1786,7 +1786,7 @@ mr_menu_end_line() {
     local menu_start=${2:-1}
 
     local menu_end
-    menu_end=$(echo "$mr_description" | tail -n +"$((menu_start + 1))" | grep -n -- "$GIT_MR_MENU_END" | cut -d: -f1 | head -n 1)
+    menu_end=$(echo "$mr_description" | tail -n +"$((menu_start + 1))" | grep -n -m 1 -- "$GIT_MR_MENU_END" | cut -d: -f1)
 
     echo $((menu_start + menu_end))
 }
