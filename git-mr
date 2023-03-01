@@ -3,28 +3,40 @@
 ################################################################################
 # Git functions
 
-function git_current_branch
-{
+git_current_branch() {
     # `git branch --show-current` is available starting from Git 2.22
     # fallback to `git rev-parse --abbrev-ref HEAD` if first command fails
-    (git branch --show-current 2>/dev/null) || \
-    git rev-parse --abbrev-ref HEAD
+    (git branch --show-current 2>/dev/null) ||
+        git rev-parse --abbrev-ref HEAD
 }
 
-function git_base_branch
-{
+git_base_branch() {
+    local branch=${1:-$(git_current_branch)}
+
+    local default_branch; default_branch=$(git_default_branch)
+
+    [[ -n $branch ]]                   || exit "$ERR_GIT" # Not on any branch
+    [[ $branch != "$default_branch" ]] || exit "$ERR_GIT" # On default branch
+    git_branch_exists "$branch"        || exit "$ERR_GIT" # Branch does not exist
+
     # Nearest branch in commit history
-    local base_branch; base_branch=$( \
-        git log --decorate --simplify-by-decoration --oneline \
-                --decorate-refs='refs/heads/*' | # select only commits with a local branch
-        head -n2 | tail -n1                    | # select closest decoration before current HEAD
-        sed 's/[a-f0-9]\+ (\([^)]*\)) .*/\1/'  | # filters out everything but decorations
-        sed -e 's/, /\n/g'                     | # splits decorations
-        head -n1)                                # keep only first decoration
+    local base_branch
+    local refs_logs; refs_logs=$(git log --oneline --decorate "${branch}" \
+            --simplify-by-decoration --decorate-refs='refs/heads/*') # select only commits with a local branch
+
+    local ref_count; ref_count="${refs_logs//[!$'\n']/}"; ref_count=$((${#ref_count} + 1))
+    if [[ $ref_count -gt 1 ]]; then
+        base_branch=$( \
+            echo "$refs_logs" |
+            sed '
+                2!d  # keep only 2nd line (closest decoration before current HEAD)
+                s/[a-f0-9]* (\([^),]*\).*/\1/  # keep only first decoration
+            ')
+    fi
 
     # First possible merge base
-    if [ -z "$base_branch" ]; then
-        base_branch=$(git show-branch  --merge-base | head -n1)
+    if ! git_branch_exists "$base_branch"; then
+        base_branch=$(git show-branch --merge-base "$branch" "$default_branch" | head -n1)
     fi
 
     echo_debug "Base branch: $base_branch"
@@ -32,26 +44,107 @@ function git_base_branch
     echo "$base_branch"
 }
 
-function git_commits
-{
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
-
-    git log --oneline --reverse --no-decorate "heads/${base_branch}..heads/${current_branch}"
+git_remote() {
+    git remote | head -n1
 }
 
-function git_commits_extended
-{
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
+git_branch_exists() {
+    local branch=$1
 
-    local format="* **%h %s**%n%n%b"
-
-    git log --reverse --no-decorate --format="${format}" "${base_branch}".."${current_branch}"
+    git show-ref -q --heads "$branch"
 }
 
-function git_titlize_branch
-{
+git_default_branch() {
+    local remote; remote=$(gitlab_remote || git_remote)
+    local default; default=$(git symbolic-ref "refs/remotes/${remote}/HEAD" -- 2>/dev/null)
+
+    if [[ -n $default ]]; then
+        local local_tracking
+        local_tracking=$(git branch -vv | grep "${default#"refs/remotes/"}")
+        local_tracking=${local_tracking:2} # remove first 2 characters ("  " or "* ")
+        local_tracking=${local_tracking%% *} # remove all trailing characters after first space (included)
+        # -> only short local branch name remains
+
+        # local branch tracking default remote with a different name
+        [[ -n $local_tracking ]] && echo "$local_tracking" && return 0
+
+        # short local name of remote default
+        echo "${default#"refs/remotes/${remote}/"}"
+        return 0
+    fi
+
+    git_branch_exists "main"   && echo "main"   && return 0
+    git_branch_exists "master" && echo "master" && return 0
+}
+
+git_remote_branch_exists() {
+    local branch=$1
+    local remote=${2:-$(gitlab_remote)}
+
+    [[ -n "$(git ls-remote --heads "$remote" "$branch")" ]]
+}
+
+git_check_branches() {
+    local source_branch="$1"
+    local target_branch="$2"
+
+    [[ -n $source_branch ]] ||
+        exit_error "$ERR_GIT" "Not on any branch"
+
+    [[ $source_branch != "$(git_default_branch)" ]] ||
+        exit_error "$ERR_GIT" "On default branch"
+
+    git_branch_exists "$source_branch" ||
+        exit_error "$ERR_GIT" "Branch '$source_branch' does not exist"
+
+    [[ -n $target_branch ]] ||
+        exit_error "$ERR_GIT" "Unable to determine target branch"
+
+    [[ $target_branch == "$GIT_MR_TARGET" ]] && ! git_branch_exists "$target_branch" &&
+        exit_error "$ERR_GIT" "Branch '$target_branch' does not exist"
+
+    return 0
+}
+
+git_commits() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+
+    git log --oneline --reverse --no-decorate "${target_branch}..${source_branch}"
+}
+
+git_commits_extended() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+
+    local prefix="* ${MD_BOLD}"
+    local suffix="${MD_BOLD}${MD_BR}"
+
+    local end="---COMMIT-BODY-END---" # useful to remove trailing blank line
+
+    local format="${prefix}%h %s${suffix}%n%b${end}"
+
+    git log --reverse --no-decorate --format="${format}" "${target_branch}".."${source_branch}" |
+        grep -v "^${end}" | # remove trailing blank line
+        sed -r "s/${end}$//g" # remove trailing body end for bodies without trailing blank line
+}
+
+git_commit_extended() {
+    local revision=${1:-HEAD}
+
+    local prefix="* ${MD_BOLD}"
+    local suffix="${MD_BOLD}${MD_BR}"
+
+    local end="---COMMIT-BODY-END---" # useful to remove trailing blank line
+
+    local format="${prefix}%h %s${suffix}%n%b${end}"
+
+    git show -s --format="${format}" "${revision}" |
+        grep -v "^${end}" | # remove trailing blank line
+        sed -r "s/${end}$//g" # remove trailing body end for bodies without trailing blank line
+}
+
+git_titlize_branch() {
     local branch=${1:-$(git_current_branch)}
 
     # Split prefix, issue id & label parts
@@ -63,41 +156,59 @@ function git_titlize_branch
     local label;    label=$(   echo "$branch" | sed -r "s/$branch_split_pattern/\3/") # ex: 'my-branch-name'
 
     # When Jira code pattern is not matched
-    if [ "$prefix" = "$issue_id" ]; then
+    if [[ $prefix == "$issue_id" ]]; then
         # Split prefix & label parts
         branch_split_pattern="^([^\/]*\/?)(.*)$"
         prefix=$(echo "$branch" | sed -r "s/$branch_split_pattern/\1/")
-        label=$( echo "$branch" | sed -r "s/$branch_split_pattern/\2/")
+        label=$(echo "$branch" | sed -r "s/$branch_split_pattern/\2/")
         issue_id=
     else
         issue_id="$issue_id " # add space
     fi
 
     # When Jira code pattern and prefix are not matched
-    if [ -z "$label" ]; then
+    if [[ -z $label ]]; then
         label="$prefix"
         prefix=
     fi
 
     # Formatting
     local title_ref;   title_ref="${prefix^}${issue_id}"
-    local title_label; title_label="$(echo "${label^}" | sed 's/[-_]/ /g')"
+    local title_label; title_label=${label^}
+    title_label=${title_label//-/ }
+    title_label=${title_label//_/ }
 
-    # Draft prefix
-    gitlab_title_to_draft "${title_ref}${title_label}"
+    echo "${title_ref}${title_label}"
 }
 
 
 ################################################################################
 # Misc. utilities
 
-function exit_error
-{
-	local code=$1
-	local msg="$2"
+# sed wrapper (use gsed if available on Mac)
+sed() {
+    if type gsed >/dev/null 2>&1; then
+        gsed "$@"
+    else
+        command sed "$@"
+    fi
+}
 
-	echo_error "$msg"
-	exit "$code"
+# grep wrapper (use ggrep if available on Mac)
+grep() {
+    if type ggrep >/dev/null 2>&1; then
+        ggrep "$@"
+    else
+        command grep "$@"
+    fi
+}
+
+exit_error() {
+    local code=$1
+    local msg="$2"
+
+    echo_error "$msg"
+    exit "$code"
 }
 
 # https://gist.github.com/cdown/1163649#gistcomment-1639097
@@ -110,7 +221,7 @@ urlencode() {
     for (( i = 0; i < length; i++ )); do
         local c="${1:i:1}"
         case $c in
-            [a-zA-Z0-9.~_-]) printf "$c" ;;
+            [a-zA-Z0-9.~_-]) printf "%s" "$c" ;;
             *) printf '%%%02X' "'$c" ;;
         esac
     done
@@ -118,12 +229,25 @@ urlencode() {
     LC_ALL="$oLC_ALL"
 }
 
-function colorize
-{
+has_terminal_colors() {
+    command -v tput > /dev/null 2>&1 &&
+    [[ -n $TERM ]] &&
+    [[ "$(tput -T"$TERM" colors)" -ge 8 ]]
+}
+
+has_colors() {
+    [[ $GIT_MR_NO_COLORS -ne 1 ]] && has_terminal_colors
+}
+
+has_links() {
+    [[ $GIT_MR_NO_TERMINAL_LINK -ne 1 ]] && has_terminal_colors
+}
+
+# shellcheck disable=SC2034 # Ignore unused color variables
+colorize() {
     local input=$1
 
-    if which tput > /dev/null 2>&1 && [ ! -z "$TERM" ] && [ "$(tput -T"$TERM" colors)" -ge 8 ]; then
-
+    if has_colors; then
         local bold='\e[1m'; local nobold='\e[21m'
 
         local red='\e[31m';    local lightred='\e[91m'
@@ -134,6 +258,8 @@ function colorize
         local cyan='\e[36m';   local lightcyan='\e[96m'
         local gray='\e[090m';  local lightgray='\e[37m'
 
+        local midgray='\e[38;5;247m'
+
         local reset='\e[0m'
 
         for style in "${@:2}"; do
@@ -141,133 +267,150 @@ function colorize
         done
         echo -en "$input"
         echo -en "$reset"
-
     else
-        echo "$input"
+        echo -en "$input"
     fi
 }
 
+echolor() {
+    colorize "$1\n" "${@:2}"
+}
+
 # https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
-function terminal_link
-{
+terminal_link() {
     local href=$1
     local text=$2
 
-    printf "\e]8;;${href}\e\\${text}\e]8;;\e\\"
+    if has_links; then
+        printf "\e]8;;%s\e\\%s\e]8;;\e\\" "$href" "$text"
+    else
+        echo -n "$text"
+    fi
 }
 
-function echo_error
-{
+echolink() {
+    terminal_link "$@"; echo
+}
+
+echo_error() {
     colorize "$1\n" "orange" >&2
 }
 
-function echo_debug
-{
-    if [ -z "$GIT_MR_VERBOSE" ]; then return; fi
+echo_debug() {
+    [[ $GIT_MR_VERBOSE -eq 1 ]] || return 0
 
     colorize "$1\n" "gray" >&2
 }
 
-function confirm
-{
+echo_spacer() {
+    local count=$1
+    local char=${2:-" "}
+
+    for ((i=1; i <= count; i++)); do
+        echo -n "$char"
+    done
+}
+
+trim() {
+    # shellcheck disable=SC2064 # expand now to restore initial value on exit
+    trap "$(shopt -p extglob)" RETURN
+    shopt -s extglob
+
+    local str=$1
+    local char=$2
+
+    str=${str##*("$2")} # trim leading characters
+    str=${str%%*("$2")} # trim trailing characters
+
+    echo "$str"
+}
+
+confirm() {
     local question=$1
 
-    if [ "$GIT_MR_YES" = "1" ]; then
-        echo_error "$(colorize "$question" "cyan") -> yes"
-        echo "yes"
-        return
+    if [[ $GIT_MR_YES -eq 1 ]]; then
+        echo "$(colorize "${question}" "cyan") -> yes" >&2
+        return 0
     fi
 
+    local response
     read -r -p "$(colorize "$question" "lightcyan" "bold") [y/N] " response
     case "$response" in
-        [yY][eE][sS]|[yY]) echo "yes" ;;
-        *)                 echo "no" ;;
+        [yY][eE][sS]|[yY]) return 0 ;;
+        *)                 return 1 ;;
     esac
 }
 
-function jq_build
-{
+clear_screen() {
+    command -v tput > /dev/null 2>&1 &&
+    [[ -n $TERM ]] &&
+        tput -x clear
+}
+
+jq_build() {
     local key=${1}
     local value=${2}
     local initial_data=${3:-"{}"}
 
-    is_obj=$(echo "$value" | grep  '^\{.*\}$')
-    is_num=$(echo "$value" | grep  '^[0-9]*$')
+    local is_obj; is_obj=$(echo "$value" | grep '^{.*}$')
+    local is_num; is_num=$(echo "$value" | grep '^[0-9]*$')
 
-    local current_object;
+    local current_object
 
-    if [ ! -z "$is_obj" ] || [ ! -z "$is_num" ]; then
-        current_object="$(jq --null-input --compact-output --argjson value "$value"   "{\"${key}\": \$value}")"
+    if [[ -n $is_obj || -n $is_num ]]; then
+        current_object="$(jq --null-input --compact-output --argjson value "$value" "{\"${key}\": \$value}")"
     else
-        current_object="$(jq --null-input --compact-output --arg     value "$value"   "{\"${key}\": \$value}")"
+        current_object="$(jq --null-input --compact-output --arg     value "$value" "{\"${key}\": \$value}")"
     fi
 
     jq --null-input --compact-output \
-            --argjson initial_data "$initial_data"     \
-            --argjson current_object "$current_object" \
-            '$initial_data + $current_object'
+        --argjson initial_data "$initial_data" \
+        --argjson current_object "$current_object" \
+        '$initial_data + $current_object'
 }
 
-function replace_labels
-{
-    local labels=$1
-    local to_remove=$2
-    local to_add=$3
-
-    echo_debug "replace_labels - original labels  : $labels"
-    echo_debug "replace_labels - labels to remove : $to_remove"
-    echo_debug "replace_labels - labels to add    : $to_add"
-
-    # split
-    labels=$(    echo "$labels"    | tr "," "\n")
-    to_remove=$( echo "$to_remove" | tr "," "\n")
-    to_add=$(    echo "$to_add"    | tr "," "\n")
-
-    # remove
-    [ ! -z "$to_remove" ] && labels=$(echo "$labels" | grep -v "$to_remove")
-    [ ! -z "$to_add" ]    && labels=$(echo "$labels" | grep -v "$to_add")
-
-    # add
-    [ ! -z "$to_add" ] && labels=$(echo -e "${labels}\n${to_add}")
-
-    # implode
-    labels=$(echo "$labels" | tr "\n" "," | sed 's/^,//' | sed 's/,$//')
-
-    echo_debug "replace_labels - result    : $labels"
-
-    echo "$labels"
+# escape regex special characters for literal usage
+regex_escape() {
+    echo "${1}" | sed -e 's/[]\/$*.^[]/\\&/g'
 }
 
-function open_in_browser
-{
+open_in_browser() {
     local url=$1
 
-    if [ -z "$url" ]; then
-        return;
-    fi
+    [[ -n $url ]] || return "$ERR_MR"
 
     local open_command
     if   [[ "$OSTYPE" == "linux-gnu"* ]]; then open_command='xdg-open';
     elif [[ "$OSTYPE" == "darwin"*    ]]; then open_command='open';
+    elif [[ "$OSTYPE" == "msys"*      ]]; then open_command='explorer';
     fi
 
-    if [ ! -z "$open_command" ] && [ -x "$(command -v $open_command)" ]; then
+    if [[ -n $open_command && -x "$(command -v "$open_command")" ]]; then
         $open_command "${url}" > /dev/null 2>&1
-        return;
+        return 0
     fi
 
     echo_error "Unable to open browser"
     echo_error
     echo "${url}"
     echo
+    return "$ERR_MR"
+}
+
+git_mr_readonly() {
+    [[ $GIT_MR_READONLY -eq 1 ]] || return 1
+
+    [[ -n $1 ]] &&
+        echolor "🚫 Read-only 🚫" "gray" >&2
+
+    return 0
 }
 
 
 ################################################################################
 # Markdown formatting
 
-function markdown_title
-{
+markdown_title() {
     local label=$1
     local level=${2:-1}
 
@@ -278,45 +421,51 @@ function markdown_title
     echo " ${label}"
 }
 
-function markdown_link
-{
+markdown_link() {
     local label=$1
     local url=$2
 
-    if [ -z "$url" ]; then
+    if [[ -z $url ]]; then
         echo "[$label]"
-        return
+        return 0
     fi
 
     echo "[$label]($url)"
 }
 
-function markdown_list
-{
+markdown_list() {
     local content=$1
-    local wrap=$2
 
-    local prefix="* ${wrap}"
-    local suffix="${wrap}<br>"
+    local prefix="* ${MD_BOLD}"
+    local suffix="${MD_BOLD}${MD_BR}"
 
-    echo "$content" |
-        sed "s/^/${prefix}/g" |
-        sed "s/$/${suffix}/g"
+    echo "${prefix}${content//$'\n'/${suffix}$'\n'${prefix}}${suffix}"
+}
+
+markdown_indent_list_items() {
+    local content=$1
+
+    local list_prefix_pattern
+    list_prefix_pattern="$(regex_escape "* ${MD_BOLD}")"
+
+    # indent extended description (not starting with list prefix)
+    local indent="  "
+    echo "$content" | sed -E \
+        -e "/^${list_prefix_pattern}/! s/^(.*)$/${indent}\1${MD_BR}/gm" \
+        -e "s/^${indent}${MD_BR}$/${indent}/gm"
 }
 
 
 ################################################################################
 # Jira functions
 
-function jira_check_env
-{
-    [ ! -z "$JIRA_USER" ]     || exit_error 21 "JIRA_USER is not set"
-    [ ! -z "$JIRA_TOKEN" ]    || exit_error 21 "JIRA_TOKEN is not set"
-    [ ! -z "$JIRA_INSTANCE" ] || exit_error 21 "JIRA_INSTANCE is not set"
+jira_check_env() {
+    [[ -n $JIRA_USER ]]     || exit_error "$ERR_MR_ENV" "JIRA_USER is not set"
+    [[ -n $JIRA_TOKEN ]]    || exit_error "$ERR_MR_ENV" "JIRA_TOKEN is not set"
+    [[ -n $JIRA_INSTANCE ]] || exit_error "$ERR_MR_ENV" "JIRA_INSTANCE is not set"
 }
 
-function jira_request
-{
+jira_request() {
     jira_check_env
 
     local request_url=$1
@@ -329,112 +478,131 @@ function jira_request
 
     echo_debug "Jira - ${request_verb} ${request_url} ${request_data}"
 
+    [[ $request_verb != "GET" ]] && git_mr_readonly && return 0
+
     curl -Ss \
         -X "${request_verb}" \
         -H "Authorization: Basic ${auth_token}" \
         -H "Content-Type: application/json" \
         --data "${request_data}" \
         --max-time "${GIT_MR_TIMEOUT:-5}" \
-        "${jira_base_url}/${request_url}" || exit_error 20 "Jira request error"
+        "${jira_base_url}/${request_url}" || exit_error "$ERR_JIRA_API" "Jira request error"
 }
 
-function jira_ticket_data
-{
+jira_ticket_data() {
     jira_check_env
 
-    local issue_code=$1;  [ ! -z "$issue_code" ] || exit_error 0 "issue_code required"
+    local issue_code=$1;  [[ -n $issue_code ]] || exit_error "$ERR_MR" "issue_code required"
 
     jira_request "issue/${issue_code}?fields=summary" || exit $?
 }
 
-function jira_transition
-{
+jira_show_transitions() {
+    local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code "$(git_current_branch)")}}
+
+    echo "Available Jira transitions:"
+    jira_request "issue/${issue_code}/transitions" |
+        jq -r '.transitions[] | [
+            "", .id,
+            "\"" + .name + "\"" + (" " * (23 - (.name | length))),
+            "-> " + (.to | .name + (" " * (23 - (.name | length)))),
+            "[" + .to.statusCategory.name + "]"
+        ] | @tsv' |
+        tr -d '\r'
+}
+
+jira_transition() {
     jira_check_env
 
-    local issue_code=$1;     [ ! -z "$issue_code"    ] || exit_error 0 "issue_code required"
-    local transition_id=$2;  [ ! -z "$transition_id" ] || exit_error 0 "transition_id required"
+    local issue_code=$1;     [[ -n $issue_code    ]] || exit_error "$ERR_MR" "issue_code required"
+    local transition_id=$2;  [[ -n $transition_id ]] || exit_error "$ERR_MR" "transition_id required"
 
-    local transition;   transition=$(jq_build "id" "$transition_id")        || exit $?
-    local request_data; request_data=$(jq_build "transition" "$transition") || exit $?
+    local transition;   transition=$(jq_build "id" "$transition_id")        || exit "$ERR_MR"
+    local request_data; request_data=$(jq_build "transition" "$transition") || exit "$ERR_MR"
 
     jira_request "issue/${issue_code}/transitions" "POST" "$request_data" || exit $?
 }
 
+
 ################################################################################
 # Gitlab functions
 
-function gitlab_check_env
-{
-    [ ! -z "$GITLAB_DOMAIN" ] || exit_error 11 "GITLAB_DOMAIN is not set"
-    [ ! -z "$GITLAB_TOKEN" ]  || exit_error 11 "GITLAB_TOKEN is not set"
+gitlab_check_env() {
+    [[ -n $GITLAB_DOMAIN ]] || exit_error "$ERR_MR_ENV" "GITLAB_DOMAIN is not set"
+    [[ -n $GITLAB_TOKEN ]]  || exit_error "$ERR_MR_ENV" "GITLAB_TOKEN is not set"
 }
 
-function gitlab_project_url
-{
-    gitlab_check_env
+gitlab_remote() {
+    local remote remote_url
 
+    for remote in $(git remote); do
+        remote_url=$(git remote get-url --push "$remote" | grep "${GITLAB_DOMAIN}" || true)
+        [[ -n "$remote_url" ]] && echo "$remote" && return 0
+    done
+
+    return "$ERR_GIT_REPO"
+}
+
+gitlab_project_url() {
+    local remote
     local remote_url
     local project_url
 
-    remote_url=$(git remote get-url --push origin | grep "${GITLAB_DOMAIN}")
+    remote=$(gitlab_remote)
+    [[ -n $remote ]] &&
+        remote_url=$(git remote get-url --push "$remote" | grep "${GITLAB_DOMAIN}")
 
-    if [[ "$remote_url" = git* ]]; then
-      project_url=$(echo $remote_url | sed "s/git\@${GITLAB_DOMAIN}:\(.*\).git/\1/")
+    if [[ "$remote_url" == git* ]]; then
+        project_url=$remote_url
+        project_url=${project_url#"git@${GITLAB_DOMAIN}:"}
+        project_url=${project_url%".git"}
+    elif [[ "$remote_url" == https* ]]; then
+        project_url=$remote_url
+        project_url=${project_url#"https://${GITLAB_DOMAIN}/"}
+        project_url=${project_url%".git"}
     fi
 
-    if [[ "$remote_url" = https* ]]; then
-      project_url=$(echo $remote_url | sed "s/https:\/\/${GITLAB_DOMAIN}\/\(.*\).git/\1/")
-    fi
+    if [[ -z $project_url ]]; then
+        remote=$(git remote | head -n 1)
+        remote_url=$(git remote get-url --push "$remote")
 
-    if [ -z "$project_url" ]; then
-        local remote; remote=$(git remote get-url --push origin)
-        local domain; domain=$(echo "$remote" | sed 's/.*@\(.*\):.*/\1/')
-        read -r -d '' message <<EOF
-Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
-  origin:     $remote
-  current:    GITLAB_DOMAIN="$GITLAB_DOMAIN"
-  Suggestion: GITLAB_DOMAIN="$domain"
-EOF
-        exit_error 12 "$message" # Unable to determine Gitlab project URL
+        local suggested_domain
+        suggested_domain=$(git remote get-url --push "$remote" | sed 's/.*@\(.*\):.*/\1/')
+
+        exit_error "$ERR_GIT_REPO" "$(cat <<- EOF
+			Unable to determine Gitlab project URL, check GITLAB_DOMAIN configuration
+			  ${remote}:     ${remote_url}
+			  current:    GITLAB_DOMAIN="${GITLAB_DOMAIN}"
+			  Suggestion: GITLAB_DOMAIN="${suggested_domain}"
+		EOF
+        )"
     fi
 
     echo "$project_url"
 }
 
-function gitlab_project_request
-{
+gitlab_current_project_request() {
     gitlab_check_env
-
-    local project_url; project_url=$(gitlab_project_url) || exit $?
-    local project_id;  project_id=$(urlencode "$project_url")
-
-    if [ -z "$project_id" ]; then return; fi
 
     local request_url=$1
     local request_verb=${2:-"GET"}
     local request_data=${3}
 
-    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
+    local project_url; project_url=$(gitlab_project_url) || exit $?
 
-    local gitlab_project_url="${gitlab_base_url}/projects/${project_id}"
-
-    echo_debug "GitLab - ${request_verb} ${gitlab_project_url}/${request_url} ${request_data}"
-
-    result=$(curl -Ss \
-        -X "${request_verb}" \
-        -H "Private-Token: ${GITLAB_TOKEN}" \
-        -H "Content-Type: application/json" \
-        --data "${request_data}" \
-        --max-time "${GIT_MR_TIMEOUT:-5}" \
-        "${gitlab_project_url}/${request_url}") || exit_error 10 "Gitlab request error"
-
-    if [ ! -z "$(gitlab_check_error "$result")" ]; then return; fi
-
-    echo "$result"
+    gitlab_project_request "$project_url" "$request_url" "$request_verb" "$request_data"
 }
 
-function gitlab_request
-{
+gitlab_project_request() {
+    local project_url=$1
+    local request_url=$2
+    local request_verb=${3:-"GET"}
+    local request_data=${4}
+
+    gitlab_request "projects/$(urlencode "$project_url")/${request_url}" "$request_verb" "$request_data"
+}
+
+gitlab_request() {
     gitlab_check_env
 
     local request_url=$1
@@ -445,42 +613,53 @@ function gitlab_request
 
     echo_debug "GitLab - ${request_verb} ${gitlab_base_url}/${request_url} ${request_data}"
 
+    [[ $request_verb != "GET" ]] && git_mr_readonly && echo '{}' && return 0
+
+    local result
     result=$(curl -Ss \
         -X "${request_verb}" \
         -H "Private-Token: ${GITLAB_TOKEN}" \
         -H "Content-Type: application/json" \
         --data "${request_data}" \
         --max-time "${GIT_MR_TIMEOUT:-5}" \
-        "${gitlab_base_url}/${request_url}") || exit_error 10 "Gitlab request error"
+        "${gitlab_base_url}/${request_url}") || exit_error "$ERR_GITLAB_API" "Gitlab request error"
 
-    if [ ! -z "$(gitlab_check_error "$result")" ]; then return; fi
+    if [[ $request_verb != "GET" ]]; then
+        [[ -z "$(gitlab_check_error "$result")" ]] || return "$ERR_GITLAB"
+    fi
 
     echo "$result"
 }
 
-function gitlab_check_error
-{
+gitlab_check_error() {
     local result=$1
 
-    local hasErrorMessage; hasErrorMessage=$(echo "$result" | jq 'if type=="object" then (has("error") or has("message")) else false end')
+    local hasErrorMessage
+    hasErrorMessage=$(echo "$result" | jq 'if type=="object" then (has("error") or has("message")) else false end')
 
-    if [ "$hasErrorMessage" = 'true' ]; then
+    if [[ $hasErrorMessage == 'true' ]]; then
         echo_error "\nGitlab error:\n  ${result}"
 
         echo "ko"
     fi
 }
 
-function gitlab_new_merge_request_url
-{
+gitlab_new_merge_request_url() {
     gitlab_check_env
 
-    local project_url;   project_url=$(gitlab_project_url) || exit $?
-
-    if [ -z "$project_url" ]; then return; fi
+    local project_url; project_url=$(gitlab_project_url) || exit $?
 
     local source_branch=${1:-$(git_current_branch)}
-    local target_branch=${2:-$(git_base_branch)}
+    if ! git_remote_branch_exists "$source_branch"; then
+        echo_error "Branch '$source_branch' does not exist on remote"
+        return "$ERR_GITLAB"
+    fi
+
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    if ! git_remote_branch_exists "$target_branch"; then
+        echo_error "Target branch '$target_branch' does not exist on remote"
+        return "$ERR_GITLAB"
+    fi
 
     local gitlab_mr_url="https://${GITLAB_DOMAIN}/${project_url}/-/merge_requests/new"
 
@@ -493,182 +672,169 @@ function gitlab_new_merge_request_url
     done
 
     # other options
-    if [ "${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" -eq 1 ]; then
+    if [[ "${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" -eq 1 ]]; then
         gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[force_remove_source_branch]")=1"
     fi
 
     # title
     local title
     title=$(git_titlize_branch "$source_branch")
+    title=$(gitlab_title_to_draft "$title")
     title=$(urlencode "$title")
     gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[title]")=${title}"
 
     echo "$gitlab_mr_url"
 }
 
-function gitlab_merge_requests_for_branch
-{
+gitlab_merge_request_summary() {
     gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
 
     local result
-    result=$(gitlab_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
+    result=$(gitlab_current_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
 
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
-    echo "$result"
+    echo "$result" | jq '.[0]'
 }
 
-function gitlab_merge_requests_search
-{
+gitlab_merge_requests_search() {
     gitlab_check_env
 
-    local search_term=$1; [ ! -z "$search_term" ] || exit_error 0 "search_term required"
+    local search_term=$1;  [[ -n $search_term ]] || exit_error "$ERR_MR" "search_term required"
 
     local result
     result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
-
-    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id}) | .[]')
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id})')
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result"
 }
 
-function gitlab_projects
-{
+gitlab_projects() {
     local result
 
-    result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=100") || exit $?
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=${GIT_MR_LAST_PROJECTS_LIMIT:-40}") || exit $?
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     result=$(echo "$result" | jq 'map({id: .id, name: .name, path_with_namespace: .path_with_namespace})')
-    if [ -z "$result" ] || [ "$result" = "[]" ]; then
-        return
-    fi
+    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result"
 }
 
-function gitlab_merge_request
-{
+gitlab_merge_request() {
     gitlab_check_env
 
-    local mr_iid=$1
+    local mr_iid=$1;        [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
+    local project_url=$2;   [[ -n $project_url ]] || project_url=$(gitlab_project_url) || exit $?
 
-    if [ -z "$mr_iid" ]; then return; fi
-
-    gitlab_project_request "merge_requests/$mr_iid"
+    gitlab_project_request "$project_url" "merge_requests/$mr_iid"
 }
 
-function gitlab_extract_iid
-{
+gitlab_extract_iid() {
     local mr_summary=$1
-    echo "$mr_summary" | jq -r '.[0].iid'
+    echo "$mr_summary" | jq -r '.iid'
 }
 
-function gitlab_extract_url
-{
+gitlab_extract_url() {
     local mr_summary=$1
-    echo "$mr_summary" | jq -r '.[0].web_url'
+    echo "$mr_summary" | jq -r '.web_url'
 }
 
-function gitlab_extract_title
-{
-    local mr_detail=$1
-    echo "$mr_detail" | jq -r '.title'
+gitlab_extract_title() {
+    local mr_summary=$1
+    echo "$mr_summary" | jq -r '.title'
 }
 
-function gitlab_extract_description
-{
-    local mr_detail=$1
-    echo "$mr_detail" | jq -r '.description'
+gitlab_extract_description() {
+    local mr_summary=$1
+    echo "$mr_summary" | jq -r '.description'
 }
 
-function gitlab_extract_merge_status
-{
+gitlab_extract_merge_status() {
     local mr_detail=$1
 
-    if [ "$(echo "$mr_detail" | jq -r '.state')" = "merged" ]; then
+    if [[ "$(echo "$mr_detail" | jq -r '.state')" == "merged" ]]; then
         echo "merged"
-        return
+        return 0
     fi
 
     echo "$mr_detail" | jq -r '.merge_status'
 }
 
-function gitlab_extract_target_branch
-{
+gitlab_extract_pipeline_status() {
+    local mr_detail=$1
+
+    echo "$mr_detail" | jq -r '.head_pipeline.status'
+}
+
+gitlab_extract_pipeline_url() {
+    local mr_detail=$1
+
+    echo "$mr_detail" | jq -r '.head_pipeline.web_url'
+}
+
+gitlab_extract_target_branch() {
     local mr_detail=$1
     echo "$mr_detail" | jq -r '.target_branch'
 }
 
-function gitlab_extract_labels
-{
+gitlab_extract_labels() {
     local mr_detail=$1
     echo "$mr_detail" | jq -r '.labels | join(",")'
 }
 
-function gitlab_extract_project_url
-{
-    local mr_url=$1
+gitlab_extract_project_url_part() {
+    local url=$1
 
-    project_url=$(echo "$mr_url" |
-        sed "s/https:\/\/$GITLAB_DOMAIN\///" | # remove prefix
-        sed "s/\/-\/merge_requests\/[0-9]*\$//") # remove suffix
+    url=${url#"https://${GITLAB_DOMAIN}/"} # remove prefix
+    url=${url%"/-/merge_requests/"*} # remove suffix
 
-    project_url=$(urlencode "$project_url")
-
-    echo "$project_url"
+    echo "$url"
 }
 
-function gitlab_merge_request_threads
-{
+gitlab_merge_request_threads() {
     gitlab_check_env
 
-    local project_url=$1
-    local mr_iid=$2
+    local mr_url=$1
 
-    if [ -z "$project_url" ]; then return; fi
-    if [ -z "$mr_iid" ]; then return; fi
+    local mr_iid="${mr_url##*/}"
+    local project_url; project_url="$(gitlab_extract_project_url_part "$mr_url")"
+
+    [[ -n $mr_url ]]      || exit_error "$ERR_MR" "No mr_url provided"
+    [[ -n $mr_iid ]]      || exit_error "$ERR_MR" "Unable to determine mr_iid from mr_url"
+    [[ -n $project_url ]] || exit_error "$ERR_MR" "Unable to determine project_url from mr_url"
 
     local thread_summaries
     local per_page=100
     local page=1
     local notes_page_count=${per_page}
 
-    while [ "$notes_page_count" -eq "$per_page" ]; do
+    while [[ $notes_page_count -eq "$per_page" ]]; do
 
         # fetch page
         local notes_page
-        notes_page=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid/discussions?per_page=${per_page}&page=${page}")
+        notes_page=$(gitlab_project_request "$project_url" "merge_requests/${mr_iid}/discussions?per_page=${per_page}&page=${page}")
 
-        if [ "$notes_page" != "[]" ]; then
+        if [[ $notes_page != "[]" ]]; then
 
             local thread_summaries_page
             thread_summaries_page=$(echo "$notes_page" | jq -r '
-                map(
-                    select(any(.notes[]; .resolvable == true)) |
-                    {
-                        id: .id,
-                        unresolved: any(.notes[]; .resolvable == true and .resolved == false),
-                        first_unresolved_note_id: .notes | map(select(.resolvable == true and .resolved == false) | .id) | .[0]
-                    }
-                ) | .[] |
-                .id + "\t" + "unresolved:" + (.unresolved | tostring) + "\t" + "note_id:" + (.first_unresolved_note_id | tostring)')
+                .[] | select(any(.notes[]; .resolvable == true)) | {
+                    id: .id,
+                    resolvables: .notes | map(select(.resolvable == true) | {id: .id, resolved: .resolved})
+                } |
+                .id + "\t" +
+                "unresolved:" + (any(.resolvables[]; .resolved == false) | tostring) + "\t" +
+                "note_id:" + (.resolvables | map(select(.resolved == false)) | first | .id | tostring)
+            ' | tr -d '\r')
 
             # append page
-            if [ -z "$thread_summaries" ]; then
+            if [[ -z $thread_summaries ]]; then
                 thread_summaries="$thread_summaries_page"
             else
                 thread_summaries=$(echo -e "${thread_summaries}\n${thread_summaries_page}")
@@ -676,7 +842,7 @@ function gitlab_merge_request_threads
 
             # increment
             notes_page_count=$(echo "$notes_page" | jq -r 'length')
-            page=$((page+1))
+            page=$((page + 1))
         else
             notes_page_count=0
         fi
@@ -685,141 +851,140 @@ function gitlab_merge_request_threads
     echo "$thread_summaries"
 }
 
-function gitlab_default_label_ids
-{
+gitlab_default_label_ids() {
     gitlab_check_env
 
-    local gitlab_labels; gitlab_labels=$(gitlab_project_request "labels")
+    local gitlab_labels; gitlab_labels=$(gitlab_current_project_request "labels")
 
-    # split in multiple lines
-    gitlab_labels=$(echo "$gitlab_labels" | sed "s/},/},\n/g")
-
-    # extact ids
-    oIFS="$IFS"; IFS=','; read -ra default_labels <<< "$GITLAB_DEFAULT_LABELS"; IFS="$oIFS"; unset oIFS
-    for label in "${default_labels[@]}"; do
-
-        local label_id; label_id=$(echo "$gitlab_labels" | jq -r '.[] | select(.name == "'"$label"'") | .id')
-
-        if [ ! -z "$label_id" ]; then
-            echo "$label_id"
-        fi
-    done
+    echo "$GITLAB_DEFAULT_LABELS" | jq -R -r \
+        --argjson gitlab_labels "$gitlab_labels" \
+        'split(",") | .[] | . as $name | $gitlab_labels | map(select(.name == $name) | .id) | .[]' |
+        tr -d '\r'
 }
 
-function gitlab_merge_request_update
-{
+gitlab_merge_request_update() {
     gitlab_check_env
 
-    local mr_iid=$1;   if [ -z "$mr_iid" ];  then echo_error "No mr_iid provided"; return; fi
-    local mr_data=$2;  if [ -z "$mr_data" ]; then echo_error "No data provided";   return; fi
+    local mr_iid=$1;   [[ -n $mr_iid ]]  || exit_error "$ERR_MR" "No mr_iid provided"
+    local mr_data=$2;  [[ -n $mr_data ]] || exit_error "$ERR_MR" "No data provided"
 
-    gitlab_project_request "merge_requests/${mr_iid}" "PUT" "${mr_data}"
+    local project_url=$3;   [[ -n $project_url ]] || project_url=$(gitlab_project_url) || exit $?
+
+    gitlab_project_request "$project_url" "merge_requests/${mr_iid}" "PUT" "${mr_data}"
 }
 
-function gitlab_merge_request_merge
-{
+gitlab_merge_request_merge() {
     gitlab_check_env
 
-    local mr_iid=$1;  if [ -z "$mr_iid" ]; then echo_error "No mr_iid provided"; return; fi
+    local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
 
-    gitlab_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
+    gitlab_current_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH:-1}" "PUT"
 }
 
-function gitlab_title_is_draft
-{
+gitlab_title_is_draft() {
     local title=$1
     for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
-        if echo "$title" | grep -q "^${prefix}:"; then
-            return 0
-        fi
+        [[ $title =~ ^${prefix}: ]] && return 0
     done
-    return 1;
+    return 1
 }
 
-function gitlab_title_to_draft
-{
+gitlab_title_to_draft() {
     local title=$1
     echo "${GITLAB_DRAFT_PREFIX}: $title"
 }
 
-function gitlab_title_undraft
-{
+gitlab_title_undraft() {
     local title=$1
     for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
-        title=$(echo "$title" | sed "s/^${prefix}:\s*//g")
+        title=${title#"${prefix}: "}
     done
     echo "$title"
 }
 
-function gitlab_undraft
-{
+gitlab_undraft() {
+    git_mr_readonly show
     gitlab_check_env
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=$(git_base_branch)
+    local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
-        return
+        mr_print "$source_branch"
+        return "$ERR_GITLAB"
     fi
 
-    # Load existing merge request details
+    local mr_iid mr_url mr_title
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="   + (.iid     | @sh) + ";\n" +
+        "mr_url="   + (.web_url | @sh) + ";\n" +
+        "mr_title=" + (.title   | @sh) + ";\n"
+    ')"
 
-    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
-
+    # Print merge request status summary
     echo
-    echo "-------------------------------------------------------------------"
-    echo "$mr_title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_status_block "$mr_summary" "" "" "$mr_iid" "$mr_url" "$mr_title"
+    echo "--------------------------------------------------------------------------------"
     echo
 
     if ! gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is not a draft"
         echo_error
-        return
+        return 0
     fi
 
     local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
 
-    if [ "$(confirm "Do you want to resolve draft status?")" = "yes" ]; then
+    if confirm "Do you want to resolve draft status?"; then
         echo -n "Resolving draft status... "
 
-        mr_data=$(jq_build "title" "$undraft_title") || exit $?
-        local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+        local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
 
-        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+        [[ -n $result ]] && echo -e "OK\n"
     fi
-
-    echo
 }
 
+# Async functions
+
+gitlab_load_mr() {
+    exec {git_mr_fd_mr}< <(gitlab_merge_request "$@")
+}
+
+gitlab_load_threads() {
+    exec {git_mr_fd_th}< <(gitlab_merge_request_threads "$@")
+}
+
+gitlab_read_mr() {
+    local var_name=$1
+    IFS= read -r -d '' -u "$git_mr_fd_mr" "$var_name"
+    exec {git_mr_fd_mr}<&-
+}
+
+gitlab_read_threads() {
+    local var_name=$1
+    IFS= read -r -d '' -u "$git_mr_fd_th" "$var_name"
+    exec {git_mr_fd_th}<&-
+}
 
 ################################################################################
 # Merge request utility functions
 
-function guess_issue_code
-{
-    [ ! -z "$JIRA_CODE_PATTERN" ] || exit_error 0 "JIRA_CODE_PATTERN not set - unable to guess issue code"
+guess_issue_code() {
+    [[ -z $git_mr_unguessable_issue_code ]] || return
+    [[ -n $JIRA_CODE_PATTERN ]] || { echo_error "JIRA_CODE_PATTERN not set - unable to guess issue code"; return "$ERR_MR_ENV"; }
 
-    local current_branch; current_branch=$(git_current_branch)
+    local branch=${1:-$(git_current_branch)}
 
-    local issue_code; issue_code=$(echo "${current_branch}" |
+    local issue_code; issue_code=$(echo "${branch}" |
         grep -Eo "$JIRA_CODE_PATTERN" |
         tail -n1)
 
-    if [ -z "$issue_code" ]; then
+    if [[ -z $issue_code ]]; then
         echo_error "Unable to guess issue code"
-        return
+        return 1
     fi
 
     echo_debug "Issue code: $issue_code"
@@ -827,132 +992,454 @@ function guess_issue_code
     echo "$issue_code"
 }
 
-function mr_title
-{
-    local current_branch=${1:-$(git_current_branch)}
+mr_title() {
+    local source_branch=${1:-$(git_current_branch)}
+    local issue_code=${2:-${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}}
 
-    if [ -z "$ISSUE_CODE" ]; then
-        echo "$current_branch"
-        return
+    if [[ -z $issue_code ]]; then
+        git_titlize_branch "$source_branch"
+        return 0
     fi
 
-    local issue_content; issue_content=$(jira_ticket_data "$ISSUE_CODE")
+    local issue_content; issue_content=$(jira_ticket_data "$issue_code")
 
-    local issue_key;     issue_key=$(echo "$issue_content" | jq -r '.key // empty' )
-    local issue_title;   issue_title=$(echo "$issue_content" | jq -r '.fields.summary // empty')
+    local issue_key issue_title
+    eval "$(echo "$issue_content" | jq -r '
+        "issue_key="   + (.key            // empty | @sh) + ";\n" +
+        "issue_title=" + (.fields.summary // empty | @sh) + ";\n"
+    ')"
 
-    if [ -z "$issue_key" ]; then
-        issue_key=${ISSUE_CODE^^}
-    fi
+    [[ -z $issue_key ]] &&
+        issue_key=${issue_code^^}
 
-    if [ -z "$issue_title" ]; then
+    if [[ -z $issue_title ]]; then
         echo_error "Unable to get issue title from Jira"
-        echo_error "  ISSUE_CODE: $ISSUE_CODE"
-        if [ ! -z "$issue_content" ]; then
+        echo_error "  issue_code: $issue_code"
+        [[ -n $issue_content ]] &&
             echo_error "  $issue_content"
-        fi
 
         echo "$issue_key"
-        return
+        return 0
     fi
 
-    issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
+    local issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
 
     markdown_link "${issue_key} ${issue_title}" "$issue_url"
 }
 
-function mr_description
-{
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
+mr_commit_list() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
-    local title; title=$(mr_title "$current_branch") || exit $?
-
-    local commits
-    local description
-    if [ "$GIT_MR_EXTENDED" = "1" ]; then
-        commits=$(git_commits_extended "$current_branch" "$base_branch")
-        # indent extended description (not starting with '* **')
-        description=$(echo "$commits" | sed -E 's/^([^*].*|\*[^ ].*|\* [^*].*|\* \*[^*].*)$/  \1/gm')
+    if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
+        markdown_indent_list_items "$(git_commits_extended "$source_branch" "$target_branch")"
     else
-        commits=$(git_commits "$current_branch" "$base_branch")
-        description=$(markdown_list "$commits" "**")
+        markdown_list "$(git_commits "$source_branch" "$target_branch")"
     fi
+}
 
-    cat << EOF
+mr_description() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    local issue_code=${3:-${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}}
+
+    local title; title=$(mr_title "$source_branch" "$issue_code")
+
+    mr_print_description "$title" "$(mr_commit_list "$source_branch" "$target_branch")"
+}
+
+mr_print_description() {
+    local title=$1
+    local commit_list=$2
+
+    cat <<EOF
 $(markdown_title "$title")
 
 
 ## Commits
 
-$description
+${commit_list}
 
 EOF
 }
 
-function mr_actions
-{
-    local current_branch=${1:-$(git_current_branch)}
-    local base_branch=${2:-$(git_base_branch)}
-    local mr_summary=${3}
-    local mr_detail=${4}
+mr_status_block() {
+    local mr_summary=$1
+    local merge_request=$2
+    local mr_threads=$3
 
-    if [ -z "$mr_summary" ]; then
-        mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    fi
+    local mr_iid=$4
+    local mr_url=$5
+    local mr_title=$6
 
-    local mr_iid; mr_iid=$(gitlab_extract_iid "${mr_summary}")
-    local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
+    local parse=()
+    [[ -z $merge_request && -z $mr_iid ]] && parse+=('"mr_iid=" + (.iid | @sh) + ";\n" +')
+    [[ -z $mr_url ]]                      && parse+=('"mr_url=" + (.web_url | @sh) + ";\n" +')
+    [[ -z $mr_title ]]                    && parse+=('"mr_title=" + (.title | @sh) + ";\n" +')
+    [[ ${#parse[@]} -gt 0 ]] && {
+        parse+=('""')
+        eval "$(echo "$mr_summary" | jq -r "${parse[*]}")"
+    }
 
-    if [ ! -z "${mr_url}" ]; then
-        cat << EOF
-Merge request:
+    # Load merge request & threads in parallel
+    [[ -n $merge_request ]] || gitlab_load_mr "$mr_iid"
+    [[ -n $mr_threads  ]]   || gitlab_load_threads "$mr_url"
 
-  ${mr_url}
-EOF
-        mr_print_status "${mr_iid}" "$mr_detail"
-        return
-    fi
+    mr_print_title "$mr_title" "$mr_url"
 
-    local new_mr_url
-    new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
+    # Read MR & threads
+    [[ -n $merge_request ]] || gitlab_read_mr merge_request
+    [[ -n $mr_threads  ]]   || gitlab_read_threads mr_threads
 
-    cat << EOF
-To create a new merge request:
-
-  ${new_mr_url}
-
-EOF
+    mr_print_status "$merge_request" "$mr_threads"
 }
 
-function is_status_label
-{
+mr_print_title() {
+    local mr_title=$1
+    local mr_url=$2
+
+    echo "--------------------------------------------------------------------------------"
+    echo " $(terminal_link "$mr_url" "$(gitlab_title_undraft "$mr_title")")"
+    has_links || echolor " ⇒ $mr_url" "midgray"
+    echo "--------------------------------------------------------------------------------"
+}
+
+mr_print_status() {
+    local merge_request=$1
+    local threads=$2
+
+    [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
+
+    local mr_url \
+        title \
+        labels \
+        labels_count \
+        upvotes \
+        downvotes \
+        merge_status \
+        pipeline_status \
+        pipeline_url \
+        current_target
+
+    eval "$(echo "$merge_request" | jq -r '
+        "mr_url="          + (.web_url               | @sh) + ";\n" +
+        "title="           + (.title                 | @sh) + ";\n" +
+        "labels="          + (.labels | join(",")    | @sh) + ";\n" +
+        "labels_count="    + (.labels | length       | @sh) + ";\n" +
+        "upvotes="         + (.upvotes               | @sh) + ";\n" +
+        "downvotes="       + (.downvotes             | @sh) + ";\n" +
+        "merge_status="    + (if .state == "merged"
+                              then "merged"
+                              else .merge_status end | @sh) + ";\n" +
+        "pipeline_status=" + (.head_pipeline.status  | @sh) + ";\n" +
+        "pipeline_url="    + (.head_pipeline.web_url | @sh) + ";\n" +
+        "current_target="  + (.target_branch         | @sh) + ";\n"
+    ')"
+
+    # Labels
+    local labels_display; labels_display=$(mr_format_labels "$labels")
+    local labels_str_len=$((${#labels} + $((labels_count * 2)) + 4)) # 2 spaces + 2 for larger icon
+
+    # Votes
+    if [[ $upvotes -ge ${GIT_MR_REQUIRED_UPVOTES:-2} ]]; then upvotes=$(colorize "$upvotes" "bold" "lightgreen")
+    elif [[ $upvotes -gt 0 ]]; then                           upvotes=$(colorize "$upvotes" "bold" "lightyellow")
+    else                                                      upvotes=$(colorize "$upvotes" "bold"); fi
+
+    if [[ $downvotes -gt 0 ]];
+        then downvotes=$(colorize "$downvotes" "bold" "lightred")
+        else downvotes=$(colorize "$downvotes" "bold"); fi
+
+    # Threads
+    local thread_count;   thread_count="$(echo "$threads" | grep -c 'unresolved:' || true)"
+    local resolved_count; resolved_count="$(echo "$threads" | grep -c 'unresolved:false' || true)"
+
+    local thread_count_display
+        thread_count_display=$(colorize "$thread_count" "bold")
+
+    local resolved_count_display; if [[ $resolved_count -lt "$thread_count" ]];
+        then resolved_count_display=$(colorize "$resolved_count" "bold" "lightred")
+        else resolved_count_display=$(colorize "$resolved_count" "bold" "lightgreen"); fi
+
+    local threads_display="${resolved_count_display}/${thread_count_display}"
+
+    if [[ $resolved_count -lt "$thread_count" ]]; then
+        local first_unresolved_thread; first_unresolved_thread=$(echo "$threads" | grep -m 1 'unresolved:true')
+        local first_unresolved_note_id; first_unresolved_note_id="${first_unresolved_thread##*:}"
+
+        local note_url="${mr_url}#note_${first_unresolved_note_id}"
+        threads_display=$(terminal_link "$note_url" "$threads_display")
+    fi
+
+    # Merge status
+    local merge_status_icon; if [[ $merge_status == "merged" || $merge_status == "can_be_merged" ]];
+        then merge_status_icon="$(colorize "\U00002714" "lightgreen" "bold")"; # heavy check mark
+        else merge_status_icon="$(colorize "\U0000274C" "lightred" "bold")"; fi # cross mark
+
+    # Pipeline status
+    local pipeline_icon
+    case "$pipeline_status" in
+        created|waiting_for_resource|preparing|pending|running)
+                          pipeline_icon="$(colorize "⏱" "lightgray")" ;;
+        success)          pipeline_icon="$(colorize "✔" "lightgreen" "bold")" ;;
+        failed)           pipeline_icon="$(colorize "❌" "lightred" "bold")" ;;
+        canceled|skipped) pipeline_icon="$(colorize "➖" "lightgray")" ;;
+        manual)           pipeline_icon="$(colorize "🔧" "lightgray")" ;;
+        scheduled)        pipeline_icon="$(colorize "⏰" "lightgray")" ;;
+        null)             pipeline_icon= ;;
+        *)                pipeline_icon="$(colorize "?" "lightgray")" ;;
+    esac
+    local ci_str=
+    [[ -n $pipeline_icon ]] &&
+        ci_str="CI: $pipeline_icon"
+
+    # Merge target
+    local target_display
+    target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
+    target_display="${target_display}$(colorize "$current_target" "lightpurple")"
+    target_display="${target_display}$(colorize ")" "gray")"
+
+    local target_str_len=$((${#current_target} + 4))
+
+    # Draft status
+    local draft_str=
+    local draft_str_len=0
+    if gitlab_title_is_draft "$title"; then
+        draft_str="🚧 Draft"
+        draft_str_len=12 # 7 chars + 4 spaces + 1 for larger icon
+    fi
+
+    # Spacers for CI & target branch indicators
+    # Spacers for draft & target branch indicators
+    local display_width=76 # not counting 3 leading spaces
+    local spacer_chars=$((display_width - labels_str_len - target_str_len - draft_str_len))
+    local spacer_chars_l=0
+    local spacer_chars_r=0
+
+    if [[ $spacer_chars -gt 0 ]]; then
+        spacer_chars_l=$((43 - labels_str_len)) # 42: roughly at the same level as CI indicator
+        spacer_chars_r=$((spacer_chars - spacer_chars_l))
+        if [[ $spacer_chars_r -lt 0 ]]; then
+            spacer_chars_l=$((spacer_chars_l + spacer_chars_r))
+            spacer_chars_r=0
+        fi
+    fi
+
+    # Display
+    echo
+
+    # 1st row ------------------------------------------------------------------
+    # Labels
+    echo -en "   \U0001F3F7  ${labels_display}"
+    echo_spacer "$spacer_chars_l"
+    # Draft status
+    if [[ -n $draft_str ]]; then
+        echo -en "  $(colorize "$draft_str" "orange")  "
+    else
+        echo_spacer $((2 - spacer_chars_l - spacer_chars_r))
+    fi
+    echo_spacer "$spacer_chars_r"
+    # Target
+    echo "$target_display"
+
+    echo
+
+    # 2nd row ------------------------------------------------------------------
+    # Votes
+    echo -en "   \U0001F44D  ${upvotes}"
+    echo -en "   \U0001F44E  ${downvotes}"
+    # Threads
+    if [[ $thread_count -gt 0 ]]; then
+        echo -n "     Resolved threads: ${threads_display}"
+    else
+        echo -n "                          "
+    fi
+    # Pipeline
+    if [[ -n $ci_str ]]; then
+        echo -en "      $(terminal_link "$pipeline_url" "$ci_str")  "
+    else
+        echo -n "             "
+    fi
+    # Merge status
+    if [[ $merge_status != "merged" ]]; then
+        echo -en "     Can be merged: ${merge_status_icon}"
+    else
+        echo -en "            $(colorize "Merged" "lightgreen")"
+    fi
+    echo -e "\n"
+}
+
+
+################################################################################
+# Merge request description functions
+
+mr_description_first_commit_line() {
+    local mr_description=$1
+
+    local first_commit_line
+    first_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' -m 1 | cut -d: -f1)
+
+    echo "$first_commit_line"
+}
+
+mr_description_last_commit_line() {
+    local mr_description=$1
+
+    local last_commit_line
+    last_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' | tail -n1 | cut -d: -f1)
+
+    local description_after_last_commit
+    description_after_last_commit=$(echo "$mr_description" | tail -n "+$((last_commit_line + 1))")
+
+    local next_description_line
+    next_description_line=$(echo "$description_after_last_commit" | grep -vn '^  \|^$' -m 1 | cut -d: -f1)
+
+    local last_commit_extended_description
+    if [[ -n $next_description_line ]]; then
+        last_commit_extended_description=$(echo "$description_after_last_commit" | head -n $(( next_description_line - 1)))
+    else
+        last_commit_extended_description="$description_after_last_commit"
+    fi
+
+    local last_extended_description_line
+    last_extended_description_line=$(echo "$last_commit_extended_description" | grep -vn '^$' | tail -n1 | cut -d: -f1)
+
+    echo $((last_commit_line + last_extended_description_line))
+}
+
+mr_description_insert_new_commits() {
+    local mr_description=$1
+    local new_commits=$2
+    local last_commit_line=$3
+    local for_terminal=$4
+
+    [[ -n $last_commit_line ]] || last_commit_line=$(mr_description_last_commit_line "$mr_description")
+
+    local description_length; description_length=$(echo "$mr_description" | wc -l)
+
+    # Iterate over description lines
+    local i=1 mr_description_line trailing_br
+    while IFS=$'\n' read -r mr_description_line; do
+
+        # Add trailing markdown newline (that would have been trimmes by Gitlab) to list item on last line.
+        # (As other commit lines, to prepare for an extended description going on the next line.)
+        [[ $i -eq $description_length && $i -eq $last_commit_line ]] &&
+            grep -q '^* ' <<< "$mr_description_line" &&
+            trailing_br="$MD_BR"
+
+        echo "${mr_description_line}${trailing_br}"
+
+        # Insert new commits
+        if [[ $i -eq $last_commit_line ]]; then
+            mr_description_print_new_commits "$new_commits" "$for_terminal"
+        fi
+        ((i += 1))
+    done < <(echo "$mr_description")
+}
+
+mr_description_print_new_commits() {
+    local new_commits=$1
+    local for_terminal=$2
+
+    if [[ $GIT_MR_UPDATE_NEW_SECTION -eq 1 ]]; then
+        echo
+        if [[ -n $for_terminal ]]; then
+            echolor "## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}" "bold"; else
+            echo "## ${GIT_MR_UPDATE_NEW_SECTION_NAME:-"Update"}";fi
+        echo
+    fi
+
+    if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
+        markdown_indent_list_items "$new_commits"; else
+        markdown_list              "$new_commits"; fi
+}
+
+
+################################################################################
+# Merge request labels utility functions
+
+replace_labels() {
+    local labels=$1
+    local to_remove=$2
+    local to_add=$3
+
+    # split
+    labels=${labels//,/$'\n'}
+    to_remove=${to_remove//,/$'\n'}
+    to_add=${to_add//,/$'\n'}
+
+    # remove
+    labels=$(echo "$labels" | grep -vx "$to_remove"$'\n'"$to_add")
+
+    # add
+    [[ -n $to_add ]] && labels="${labels},${to_add}"
+
+    # implode
+    labels=${labels//$'\n'/,}
+
+    # trim commas
+    labels=${labels%,}
+    labels=${labels#,}
+
+    echo "$labels"
+}
+
+labels_differ() {
+    local old_labels=$1
+    local new_labels=$2
+
+    [[ $old_labels == "$new_labels" ]] && return 1
+
+    # split to lines,  sort and de-duplicate,              remove potential empty line,    join back to comma-separated string
+    old_labels=$(echo "${old_labels//,/$'\n'}" | sort -u); old_labels=${old_labels#$'\n'}; old_labels=${old_labels//$'\n'/,}
+    new_labels=$(echo "${new_labels//,/$'\n'}" | sort -u); new_labels=${new_labels#$'\n'}; new_labels=${new_labels//$'\n'/,}
+
+    [[ $old_labels != "$new_labels" ]]
+}
+
+is_status_label() {
     local label=$1
+    local status_labels=",${2-"${GITLAB_IP_LABELS},${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}"},"
 
-    local system_labels; system_labels=$(echo "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" |
-        sed 's/,,/,/g' |
-        sed 's/^,//' | sed 's/,$//' |
-        tr "," "\n")
-
-    local match;   match="$( echo "$label"         | grep "$system_labels")" || return
-    local reverse; reverse=$(echo "$system_labels" | grep "$match")          || return
-    # reverse-match is important, we don't want "Jean-Pierre BACRI Team" to match "CR" label
-
-    echo "$match"
+    echo "$status_labels" | grep -q ",$label,"
 }
 
-function mr_format_labels
-{
+is_status_ip_label() {
+    is_status_label "$1" "$GITLAB_IP_LABELS"
+}
+
+is_status_cr_label() {
+    is_status_label "$1" "$GITLAB_CR_LABELS"
+}
+
+is_status_qa_label() {
+    is_status_label "$1" "$GITLAB_QA_LABELS"
+}
+
+is_status_ok_label() {
+    is_status_label "$1" "$GITLAB_OK_LABELS"
+}
+
+mr_format_labels() {
     local labels=$1
 
-    IFS=',' read -r -a labels_array <<< "$labels"
+    local labels_array; IFS=',' read -ra labels_array <<<"$labels"
 
     local status_labels=()
     local other_labels=()
 
     for label in "${labels_array[@]}"; do
-        if [ ! -z "$(is_status_label "$label")" ]; then
-            status_labels+=($(colorize "[$label]" "lightpurple" "bold"))
+        if is_status_ip_label "$label"; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_IP_LABEL_COLOR:-orange})")
+        elif is_status_cr_label "$label"; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_CR_LABEL_COLOR:-lightblue bold})")
+        elif is_status_qa_label "$label"; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_QA_LABEL_COLOR:-lightpurple bold})")
+        elif is_status_ok_label "$label"; then
+            # shellcheck disable=SC2086 # Allow splitting of terminal color
+            status_labels+=("$(colorize "[$label]" ${GIT_MR_STATUS_OK_LABEL_COLOR:-lightgreen})")
         else
             other_labels+=("[$label]")
         fi
@@ -961,218 +1448,509 @@ function mr_format_labels
     local status_labels_str; status_labels_str="$(printf "%s " "${status_labels[@]}")"
     local other_labels_str;  other_labels_str="$(printf "%s " "${other_labels[@]}")"
 
-    echo "${status_labels_str}${other_labels_str}" |
-        sed 's/^\s*//' | sed 's/\s*$//' # remove leading and trailing spaces
+    # shellcheck disable=SC2086 # trim whitespace
+    echo ${status_labels_str}${other_labels_str}
 }
 
-function mr_print_status
-{
+
+################################################################################
+# Merge request transition utility functions
+
+mr_update_labels() {
     local mr_iid=$1
+    local labels=$2
+    local to_remove=$3
+    local to_add=$4
 
-    [ ! -z "$mr_iid" ] || exit_error 0 "mr_iid not provided"
-
-    local merge_request; merge_request=${2:-$(gitlab_merge_request "$mr_iid")}
-    local mr_url;        mr_url=$(echo "$merge_request" | jq -r '.web_url')
-    local project_url;   project_url=$(gitlab_extract_project_url "$mr_url")
-
-    # Labels
-    local labels; labels=$(gitlab_extract_labels "$merge_request")
-    local labels_display; labels_display=$(mr_format_labels "$labels")
-
-    local labels_count; labels_count=$(echo $labels | sed 's/[^,]//g' | wc -m)
-    local labels_str_len=$(( ${#labels} + $(($labels_count*2)) + 3 ))
-
-    # Votes
-
-    local upvotes;   upvotes=$(echo "$merge_request" | jq -r '.upvotes' )
-    local downvotes; downvotes=$(echo "$merge_request" | jq -r '.downvotes' )
-
-    if [ "$upvotes" -gt 1 ];   then upvotes=$(colorize "$upvotes" "bold" "lightgreen")
-    elif [ "$upvotes" -gt 0 ]; then upvotes=$(colorize "$upvotes" "bold" "lightyellow")
-                               else upvotes=$(colorize "$upvotes" "bold"); fi
-
-    if [ "$downvotes" -gt 0 ];
-        then downvotes=$(colorize "$downvotes" "bold" "lightred")
-        else downvotes=$(colorize "$downvotes" "bold"); fi
-
-    # Threads
-    local threads;        threads=$(gitlab_merge_request_threads "$project_url" "$mr_iid")
-    local thread_count;   thread_count=$(echo "$threads" | grep -c 'unresolved:')
-    local resolved_count; resolved_count=$(echo "$threads" | grep -c 'unresolved:false')
-
-    local thread_count_display;
-        thread_count_display=$(colorize "$thread_count" "bold")
-
-    local resolved_count_display; if [ "$resolved_count" -lt "$thread_count" ];
-        then resolved_count_display=$(colorize "$resolved_count" "bold" "lightred")
-        else resolved_count_display=$(colorize "$resolved_count" "bold" "lightgreen"); fi
-
-    local threads_display="${resolved_count_display}/${thread_count_display}"
-
-    if [ "$resolved_count" -lt "$thread_count" ]; then
-        local first_unresolved_note_id
-        first_unresolved_note_id=$(echo "$threads" | grep 'unresolved:true' | cut -f 3 | cut -d ':' -f 2 )
-        local note_url="${mr_url}#note_${first_unresolved_note_id}"
-        threads_display=$(terminal_link "$note_url" "$threads_display")
-    fi
-
-    # Title
-    local title; title=$(gitlab_extract_title "$merge_request")
-
-    # Merge status
-    local merge_status; merge_status=$(gitlab_extract_merge_status "$merge_request")
-    local merge_status_icon; if [ "$merge_status" = "merged" ] || [ "$merge_status" = "can_be_merged" ];
-        then merge_status_icon="$(colorize "\U00002714" "lightgreen" "bold")"; # heavy check mark
-        else merge_status_icon="$(colorize "\U0000274C" "lightred" "bold")"; fi # cross mark
-
-    # Merge target
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
-
-    local target_display;
-    target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
-    target_display="${target_display}$(colorize "$current_target" "lightpurple" )"
-    target_display="${target_display}$(colorize ")" "gray")"
-
-    local target_str_len=$(( ${#current_target} + 4 ))
-
-    # Spacer for right alignment of target branch
-    local display_width=73
-    local labels_target_spacer=" "
-    local left_chars=$(( $display_width - $labels_str_len - $target_str_len ))
-    if [ "$left_chars" -gt 0 ]; then
-        labels_target_spacer=$(eval $(echo printf '" %0.s"' {1..${left_chars}}))
-    fi
-
-    # Display
-    echo
-    echo -en  "   \U0001F3F7  ${labels_display}"
-    echo -en "$labels_target_spacer"
-    echo -e  "${target_display}\n"
-    echo -en "   \U0001F44D  ${upvotes}"
-    echo -en "   \U0001F44E  ${downvotes}"
-    if [ "$thread_count" -gt 0 ]; then
-        echo -n "     Resolved threads: ${threads_display}"
-    else
-      echo -n "                          "
-    fi
-    if gitlab_title_is_draft "$title"; then
-        echo -en "     Draft: $(colorize "yes" "orange")"
-    else
-        echo -en "               "
-    fi
-    if [ "$merge_status" != "merged" ]; then
-        echo -en "     Can be merged: ${merge_status_icon}"
-    else
-        echo -en "            $(colorize "Merged" "lightgreen")"
-    fi
-    echo -e "\n"
-}
-
-function mr_update_labels
-{
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=$(git_base_branch)
-
-    # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
-        echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
-        return
-    fi
-
-    # Load existing merge request details
-
-    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid") || exit $?
-    local mr_title;      mr_title=$(gitlab_extract_title "$merge_request")
-    local labels;        labels=$(gitlab_extract_labels "$merge_request")
-
-    # Print merge request status summary
-    echo
-    echo "-------------------------------------------------------------------"
-    echo "$mr_title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
-    echo
-
-    # strip leading & trailing label commas
-    local to_remove; to_remove=$(echo -e "$1" | sed 's/^,*//' | sed 's/,*$//')
-    local to_add;    to_add=$(echo -e "$2" | sed 's/^,*//' | sed 's/,*$//')
-
-    if [ -z "$to_remove" ] && [ -z "$to_add" ]; then
-        echo_error "No label to add or remove"; return
+    if [[ -z $to_remove && -z $to_add ]]; then
+        echo_error "No label to add or remove"
+        return 0
     fi
 
     local new_labels; new_labels=$(replace_labels "$labels" "$to_remove" "$to_add")
-    if [ "$(confirm "Do you want to update the merge request labels to \"$new_labels\"?")" = "yes" ]; then
+    if labels_differ "$labels" "$new_labels" &&
+       confirm "Do you want to update the merge request labels to \"$new_labels\"?"; then
         echo -n "Updating merge request labels... "
 
-        mr_data=$(jq_build "labels" "$new_labels") || exit $?
-        local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+        local mr_data; mr_data=$(jq_build "labels" "$new_labels") || exit "$ERR_MR"
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
 
-        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
+        [[ -n $result ]] && echo -e "OK\n"
     fi
+}
+
+mr_gitlab_draft() {
+    local mr_iid=$1
+    local mr_summary=$2
+
+    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
+
+    ! gitlab_title_is_draft "$mr_title" || return 0
+
+    confirm "Do you want to set draft status?" || return 0
+
+    echo -n "Setting draft status... "
+
+    local draft_title; draft_title=$(gitlab_title_to_draft "$mr_title")
+    local mr_data; mr_data=$(jq_build "title" "$draft_title") || exit "$ERR_MR"
+
+    local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+    [[ -n $result ]] && echo -e "OK\n"
+}
+
+mr_gitlab_undraft() {
+    local mr_iid=$1
+    local mr_summary=$2
+
+    local mr_title; mr_title=$(gitlab_extract_title "$mr_summary")
+
+    gitlab_title_is_draft "$mr_title" || return 0
+
+    confirm "Do you want to resolve draft status?" || return 0
+
+    echo -n "Resolving draft status... "
+
+    local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
+    local mr_data; mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
+
+    local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+    [[ -n $result ]] && echo -e "OK\n"
+}
+
+mr_jira_transition() {
+    local issue_code=$1
+    local jira_target_status=$2
+    local jira_transition_id_var=$3
+
+    local jira_transition_id=${!jira_transition_id_var}
+
+    [[ -n $issue_code ]] || return 0
+
+    confirm "Do you want to update the Jira ticket status to \"${jira_target_status}\"?" || return 0
+
+    if [[ -z $jira_transition_id ]]; then
+        echo_error "Set ${jira_transition_id_var} to be able to update Jira status."
+        jira_show_transitions "$issue_code"
+        return 0
+    fi
+
+    echo -n "Updating Jira ticket status... "
+    jira_transition "$issue_code" "$jira_transition_id" && echo -e "OK\n"
+}
+
+
+################################################################################
+# Merge request menu utility functions
+
+mr_menu_merge_requests() {
+    local issue_code=${1:-${GIT_MR_CODE:-$(guess_issue_code)}}
+
+    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$issue_code") || exit $?
+    [[ -n $mr_summaries ]] || return "$ERR_GITLAB"
+
+    # Enrich merge request summaries with project names
+    echo "$mr_summaries" | jq -c \
+        --argjson projects "$(gitlab_projects | jq 'map({(.id|tostring): .name}) | add')" \
+        '.[] | . + { project_name: $projects[(.project_id|tostring)] }'
+}
+
+mr_menu_contents() {
+    local menu_items=$1
+    local current_mr_url=$2
+
+    echo "$GIT_MR_MENU_START"
+    echo
+
+    while IFS=$'\n' read -r menu_item; do
+        local mr_url mr_title project_name
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
+
+        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
+            project_name=$(gitlab_extract_project_url_part "$mr_url")
+
+        mr_title=$(gitlab_title_undraft "$mr_title")
+
+        local item_label; item_label="${project_name}: $(markdown_link "$mr_title" "$mr_url")"
+
+        local wrap=''
+        [[ $current_mr_url == "$mr_url" ]] &&
+            wrap='**' # Markdown bold
+
+        echo "* ${wrap}${item_label}${wrap}"
+    done < <(echo "$menu_items")
+
+    echo
+    echo "$GIT_MR_MENU_END"
+}
+
+mr_menu_print_title() {
+    local issue_code=$1
+    local menu_items=$2
+    local current_index=$3
+
+    local search_url; search_url="https://${GITLAB_DOMAIN}/dashboard/merge_requests?scope=all&state=all&search=$(urlencode "$issue_code")&in=title&sort=created_asc"
+    local mr_count; mr_count=$(echo "$menu_items" | wc -l | tr -d ' ')
+
+    echo "================================================================================"
+    [[ -z $current_index ]] &&
+        echo " $(terminal_link "$search_url" "$issue_code") (${mr_count} merge request$([[ $mr_count -gt 1 ]] && echo 's'))" ||
+        echo " $(terminal_link "$search_url" "$issue_code") (merge request ${current_index}/${mr_count})"
+    echo "================================================================================"
+}
+
+mr_menu_status() {
+    local issue_code=$1
+    local menu_items=$2
+
+    echo
+    mr_menu_print_title "$issue_code" "$menu_items"
+    echo
+
+    while IFS= read -r menu_item; do
+
+        local mr_iid mr_url mr_title project_name
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_iid="       + (.iid          | @sh) + ";\n" +
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
+
+        local project_url; project_url=$(gitlab_extract_project_url_part "$mr_url")
+
+        [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
+
+        # Load merge request & threads in parallel
+        gitlab_load_mr "$mr_iid" "$project_url"
+        gitlab_load_threads "$mr_url"
+
+        mr_title=$(gitlab_title_undraft "$mr_title")
+
+        echo -n "* $(colorize "$project_name" "bold"): "
+        if has_links; then
+            echolink "$mr_url" "$mr_title"
+        else
+            echo "$mr_title"
+            echolor "  ⇒ $mr_url" "midgray"
+        fi
+
+        # Read MR & threads
+        local merge_request mr_threads
+        gitlab_read_mr merge_request
+        gitlab_read_threads mr_threads
+
+        mr_print_status "$merge_request" "$mr_threads"
+        echo
+
+    done <<<"$menu_items"
+}
+
+mr_menu_show() {
+    local issue_code=$1
+    local menu_items=$2
+
+    echo
+    mr_menu_print_title "$issue_code" "$menu_items"
+    echo
+
+    mr_menu_contents "$menu_items"
+}
+
+mr_menu_update() {
+    git_mr_readonly show
+
+    local menu_items=$1
+
+    local current_branch; current_branch=$(git_current_branch)
+
+    # Search existing merge request
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$current_branch")
+    if [[ -z $mr_summary ]]; then
+        echo_error "Merge request not found"
+        echo
+        mr_menu_contents "$menu_items"
+        return "$ERR_GITLAB"
+    fi
+
+    local mr_iid mr_url
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid=" + (.iid     | @sh) + ";\n" +
+        "mr_url=" + (.web_url | @sh) + ";\n"
+    ')"
+
+    # Load existing merge request details
+    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
+
+    local mr_title mr_description
+    eval "$(echo "$merge_request" | jq -r '
+        "mr_title="       + (.title       | @sh) + ";\n" +
+        "mr_description=" + (.description | @sh) + ";\n"
+    ')"
+
+    local mr_menu_content; mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
+    local updated_description; updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+
+    mr_menu_print_description "$updated_description" "$mr_url" "$mr_title"
+
+    local mr_update_data='{}'
+    if confirm "Do you want to update the menu in the merge request description?"; then
+        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit "$ERR_MR"
+    fi
+    if [[ $mr_update_data != "{}" ]]; then
+        echo -n "Updating merge request..."
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
+        [[ -n $result ]] && echo -e "OK\n"
+    fi
+}
+
+mr_menu_update_all() {
+    git_mr_readonly show
+
+    local issue_code=$1
+    local menu_items=$2
+
+    local mr_iid \
+        mr_url \
+        mr_title \
+        project_name \
+        project_url \
+        merge_request \
+        mr_description \
+        mr_menu_content \
+        updated_description \
+        mr_update_data \
+        result
+
+    # Use array instead of looping over variable content with `read` to leave standard input open for `confirm`
+    local menu_array
+    readarray menu_array < <(echo "$menu_items")
+
+    local i=1 updated_count=0
+    for menu_item in "${menu_array[@]}"; do
+
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_iid="       + (.iid          | @sh) + ";\n" +
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
+
+        project_url=$(gitlab_extract_project_url_part "$mr_url")
+
+        [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
+
+        # Load existing merge request details
+        merge_request=$(gitlab_merge_request "$mr_iid" "$project_url")
+
+        mr_description=$(gitlab_extract_description "$merge_request")
+
+        mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+
+        clear_screen
+        mr_menu_print_title "$issue_code" "$menu_items" "$i"
+        mr_menu_print_description "$updated_description" "$mr_url" "$mr_title" "$project_name"
+
+        mr_update_data='{}'
+        if confirm "Do you want to update the menu in the merge request description?"; then
+            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit "$ERR_MR"
+        fi
+        if [[ $mr_update_data != "{}" ]]; then
+            echo -n "Updating merge request..."
+            result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data" "$project_url")
+            [[ -n $result ]] &&
+                ((updated_count += 1)) &&
+                echo -e "OK\n"
+        else
+            echo
+        fi
+        ((i += 1))
+    done
+
+    [[ $updated_count -gt 0 ]] &&
+        echo "${updated_count} merge request$([[ $updated_count -gt 1 ]] && echo 's') updated"
+}
+
+mr_menu_start_line() {
+    local mr_description=$1
+
+    echo "$mr_description" | grep -n "$GIT_MR_MENU_START" -m 1 | cut -d: -f1
+}
+
+mr_menu_end_line() {
+    local mr_description=$1
+    local menu_start=${2:-1}
+
+    local menu_end
+    menu_end=$(echo "$mr_description" | tail -n +"$((menu_start + 1))" | grep -n -m 1 -- "$GIT_MR_MENU_END" | cut -d: -f1)
+
+    echo $((menu_start + menu_end))
+}
+
+mr_menu_replace_description() {
+    local mr_description=$1
+    local menu_content=$2
+
+    local menu_start; menu_start=$(mr_menu_start_line "$mr_description")
+    local menu_end; menu_end=$(mr_menu_end_line "$mr_description" "$menu_start")
+
+    local has_menu=0
+    [[ -n $menu_start && -n $menu_end ]] &&
+    [[ $menu_start -gt 0 && $menu_end -gt "$menu_start" ]] &&
+        has_menu=1
+
+    # Iterate over description lines and insert/replace menu
+    local i=1 mr_description_line
+    while IFS=$'\n' read -r mr_description_line; do
+        if [[ $has_menu -eq 1 ]]; then
+            if [[ $i -lt "$menu_start" || $i -gt "$menu_end" ]]; then
+                # output non-menu line
+                echo "$mr_description_line"
+            else
+                # replace menu once
+                if [[ $i -eq "$menu_end" ]]; then
+                    echo_debug "Replacing menu"
+                    echo "$menu_content"
+                fi
+            fi
+        else
+            # output non-menu line
+            echo "$mr_description_line"
+            # insert menu once
+            if [[ $i -eq "2" ]]; then
+                echo_debug "Inserting menu"
+                echo "$menu_content"
+                echo
+            fi
+        fi
+        ((i += 1))
+    done < <(echo "$mr_description")
+}
+
+mr_menu_colorize() {
+    local mr_description=$1
+    local current_mr_url=$2
+    local menu_start=$3
+    local menu_end=$4
+
+    # Iterate over description lines and colorize menu lines
+    local i=1 mr_description_line
+    while IFS=$'\n' read -r mr_description_line; do
+        if [[ $i -lt "$menu_start" || $i -gt "$menu_end" ]]; then
+            # output non-menu line
+            echo -e "$(colorize "$mr_description_line" "lightgray")"
+        else
+            # colorize menu line
+            [[ $mr_description_line =~ $current_mr_url ]] &&
+                echo -e "$(colorize "$mr_description_line" "bold" "lightyellow")" ||
+                echo -e "$(colorize "$mr_description_line" "lightyellow")"
+        fi
+        ((i += 1))
+    done < <(echo "$mr_description")
+}
+
+mr_menu_print_description() {
+    local mr_description=$1
+    local mr_url=$2
+    local mr_title=$3
+    local project_name=$4
+
+    local menu_start; menu_start=$(mr_menu_start_line "$mr_description")
+    local menu_end; menu_end=$(mr_menu_end_line "$mr_description" "$menu_start")
+
+    echo
+    echo "--------------------------------------------------------------------------------"
+    echo -n " "
+    [[ -n $project_name ]] && echo -n "$(colorize "$project_name" "bold"): "
+    echolink "$mr_url" "$(gitlab_title_undraft "$mr_title")"
+    echo "--------------------------------------------------------------------------------"
+    echo
+
+    mr_menu_colorize "$mr_description" "$mr_url" "$menu_start" "$menu_end" |
+        head -n$((menu_end + GIT_MR_MENU_UPDATE_CONTEXT_LINES)) # truncate description after menu
+
+    local desc_len; desc_len=$(echo "$mr_description" | wc -l)
+    if [[ $((desc_len - menu_end)) -gt $GIT_MR_MENU_UPDATE_CONTEXT_LINES ]]; then
+        echo
+        echo "[...]"
+    fi
+
+    echo
+    echo "--------------------------------------------------------------------------------"
 }
 
 
 ################################################################################
 # Merge request top-level functions
 
-function mr_print
-{
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+mr_print() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    git_check_branches "$source_branch" "$target_branch"
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch=${2:-$(git_base_branch)}
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
+    [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
-    cat << EOF
-
---------------------------------------------------------------------------------
-$(mr_description "$current_branch" "$base_branch")
+    cat <<EOF
 
 --------------------------------------------------------------------------------
+$(mr_description "$source_branch" "$target_branch" "$issue_code")
 
 EOF
 
-    mr_actions "$current_branch" "$base_branch"
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -n $mr_summary ]]; then
+        # Print merge request status summary
+        mr_status_block "$mr_summary"
+    else
+        echo "--------------------------------------------------------------------------------"
+        echo
+
+        local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
+        [[ -n $new_mr_url ]] || return
+
+        cat <<EOF
+To create a new merge request:
+
+  ${new_mr_url}
+
+EOF
+    fi
 }
 
-function mr_open
-{
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${2:-$(git_base_branch)}
+mr_open() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+    git_check_branches "$source_branch" "$target_branch"
 
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch")
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "${mr_summary}")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
+    [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
-    if [ ! -z "${mr_url}" ]; then
-        mr_print_status "${mr_iid}"
-        open_in_browser "${mr_url}"
-        return
-    fi
+    local description; description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    local description; description=$(mr_description "$current_branch" "$base_branch")
-
-    cat << EOF
+    cat <<EOF
 
 --------------------------------------------------------------------------------
-${description}
-
---------------------------------------------------------------------------------
+$description
 
 EOF
 
-    local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "${current_branch}" "${base_branch}")
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -n $mr_summary ]]; then
+        open_in_browser "$(gitlab_extract_url "$mr_summary")"
 
-    if [ ! -z "${new_mr_url}" ]; then
+        # Print merge request status summary
+        mr_status_block "$mr_summary"
+    else
+        echo "--------------------------------------------------------------------------------"
+        echo
+
+        local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
+        [[ -n $new_mr_url ]] || return
 
         # add description
         new_mr_url="${new_mr_url}&$(urlencode "merge_request[description]")=$(urlencode "$description")"
@@ -1181,83 +1959,93 @@ EOF
         echo_debug "Opening:"
         echo_debug "$new_mr_url"
 
-        open_in_browser "${new_mr_url}"
+        open_in_browser "$new_mr_url"
     fi
 }
 
-function mr_status
-{
+mr_status() {
     gitlab_check_env
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    git_check_branches "$source_branch" "-"
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
-        return
+        mr_print "$source_branch"
+        return "$ERR_GITLAB"
     fi
-
-    # Load existing merge request details
-
-    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
 
     # Print merge request title & status
     echo
-    echo "-------------------------------------------------------------------"
-    echo "$mr_title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
+    mr_status_block "$mr_summary"
 }
 
-function mr_update
-{
+mr_update() {
+    git_mr_readonly show
     gitlab_check_env
 
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
+    git_check_branches "$source_branch" "$target_branch"
 
     # Search existing merge request
-
-    local mr_summary; mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local mr_iid;     mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;     mr_url=$(gitlab_extract_url "$mr_summary")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
-        return
+        mr_print "$source_branch" "$target_branch"
+        return "$ERR_GITLAB"
     fi
 
-    # Load existing merge request details
+    local mr_iid mr_url mr_title mr_description
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="         + (.iid         | @sh) + ";\n" +
+        "mr_url="         + (.web_url     | @sh) + ";\n" +
+        "mr_title="       + (.title       | @sh) + ";\n" +
+        "mr_description=" + (.description | @sh) + ";\n"
+    ')"
 
-    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local mr_title;       mr_title=$(gitlab_extract_title "$merge_request")
-    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
+    # Load merge request & threads in parallel
+    gitlab_load_mr "$mr_iid"
+    gitlab_load_threads "$mr_url"
 
     # Init commit lists
 
-    local commit_messages; commit_messages=$(git_commits "$current_branch" "$base_branch")
+    local commit_messages; commit_messages=$(git_commits "$source_branch" "$target_branch")
 
     local current_commits; current_commits=$(echo "$commit_messages" | cut -d ' ' -f1)
     local old_commits;     old_commits=$(echo "$mr_description" |
         grep -Po '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' |
         sed -r 's/^[^0-9a-fA-F]*([0-9a-fA-F]{7,})\s/\1/g')
 
-    local current_commits_array; current_commits_array=($(echo "$current_commits" | tr "\n" " "))
-    local old_commits_array;     old_commits_array=($(echo "$old_commits" | tr "\n" " "))
+    local old_commits_array current_commits_array oIFS
+    oIFS=$IFS; IFS=$'\n'
+        # shellcheck disable=SC2206
+        current_commits_array=($current_commits)
+        # shellcheck disable=SC2206
+        old_commits_array=($old_commits)
+    IFS=$oIFS
+
+    # Prepare full commit list replacement
+    local last_commit_line
+    if [[ $GIT_MR_REPLACE_COMMITS -eq 1 ]]; then
+        local commits_start_line; commits_start_line=$(mr_description_first_commit_line "$mr_description")
+        local commits_end_line; commits_end_line=$(mr_description_last_commit_line "$mr_description")
+
+        if [[ $commits_start_line -gt 0 && $commits_end_line -gt 0 ]]; then
+            # Remove old commits from description, keeping leading and/or trailing blank lines
+            IFS= read -rd '' mr_description < <(echo "$mr_description" | sed "${commits_start_line},${commits_end_line}d")
+            # Remember line where to insert new commits
+            last_commit_line=$((commits_start_line - 1)); [[ $last_commit_line -ge 1 ]] || last_commit_line=1
+        fi
+
+        # All MR commits will be added as new commits
+        old_commits_array=()
+    fi
 
     local updated_commit_count=0
+    local new_commit=
     local new_commit_messages_display=()
     local new_commit_messages_content=()
 
@@ -1267,6 +2055,7 @@ function mr_update
     local sameColor="lightblue"
     local updatedColor="orange"
     local newColor="green"
+    local wrongColor="lightred"
 
     # Iterate over commit lists, compare sha-1 and update description
     for i in ${!current_commits_array[*]}; do
@@ -1274,697 +2063,643 @@ function mr_update
         local curr=${current_commits_array[$i]}
         local old=${old_commits_array[$i]}
 
-        if [ ! -z "$old" ]; then
-            if [ "$old" = "$curr" ]; then
+        if [[ -n $old ]]; then
+            if [[ $old == "$curr" ]]; then
                 # same sha-1 - only decorate
-                new_description_display=$(echo "$new_description_display" | sed "s/$old/$(colorize "$curr" "$sameColor")/")
-                new_description_content=$(echo "$new_description_content" | sed "s/$old/$curr/" )
+                new_description_display=${new_description_display//"$old"/"$(colorize "$curr" "$sameColor")"}
+                new_description_content=${new_description_content//"$old"/"$curr"}
             else
                 # different sha-1 - replace & decorate
-                new_description_display=$(echo "$new_description_display" | sed "s/$old/$(colorize "$curr" "$updatedColor")/")
-                new_description_content=$(echo "$new_description_content" | sed "s/$old/$curr/" )
-                updated_commit_count=$((updated_commit_count+1))
+                new_description_display=${new_description_display//"$old"/"$(colorize "$curr" "$updatedColor")"}
+                new_description_content=${new_description_content//"$old"/"$curr"}
+                updated_commit_count=$((updated_commit_count + 1))
             fi
         else
-            # new commits
-            new_commit_messages_display+=("$(echo "$commit_messages" | grep "$curr" | sed "s/$curr/$(colorize "$curr" "$newColor")/")")
-            new_commit_messages_content+=("$(echo "$commit_messages" | grep "$curr")")
+            # new commit
+            [[ $GIT_MR_EXTENDED -eq 1 ]] &&
+                new_commit="$(git_commit_extended "$curr")" ||
+                new_commit="$(echo "$commit_messages" | grep "$curr")"
+
+            new_commit_messages_display+=("${new_commit//"$curr"/$(colorize "$curr" "$newColor")}")
+            new_commit_messages_content+=("$new_commit")
         fi
     done
 
-    local new_commit_count=${#new_commit_messages_display[@]}
+    local old_commit_count=${#old_commits_array[@]}
+    local current_commit_count=${#current_commits_array[@]}
+    local new_commit_count=${#new_commit_messages_content[@]}
+    local unknown_commit_count=$((old_commit_count - current_commit_count))
+
+    if [[ $unknown_commit_count -gt 0 ]]; then
+        for (( i = current_commit_count; i < old_commit_count; i++ )); do
+            old="${old_commits_array[$i]}"
+            new_description_display=${new_description_display//"$old"/"$(colorize "$old" "$wrongColor")"}
+        done
+    fi
 
     # implode arrays
     local new_commit_messages_display_str; new_commit_messages_display_str=$(printf "%s\n" "${new_commit_messages_display[@]}")
     local new_commit_messages_content_str; new_commit_messages_content_str=$(printf "%s\n" "${new_commit_messages_content[@]}")
 
+    if [[ $new_commit_count -gt 0 ]]; then
+        # Find last commit line in current description (when not replacing whole commit list)
+        [[ -z $last_commit_line ]] &&
+            last_commit_line=$(mr_description_last_commit_line "$mr_description")
+
+        new_description_display=$(mr_description_insert_new_commits "$new_description_display" "$new_commit_messages_display_str" "$last_commit_line" true)
+        new_description_content=$(mr_description_insert_new_commits "$new_description_content" "$new_commit_messages_content_str" "$last_commit_line")
+    fi
+
     # Print updated merge request description
     echo
-    echo "-------------------------------------------------------------------"
-    echo "$mr_title"
-    echo "-------------------------------------------------------------------"
+    mr_print_title "$mr_title" "$mr_url"
+    echo
     echo "$new_description_display"
     echo
-    echo
-    if [ "$new_commit_count" -gt 0 ]; then
-        echo "## Update"
-        echo
-        echo "$(markdown_list "$new_commit_messages_display_str" "**")"
-        echo
-    fi
     echo "--------------------------------------------------------------------------------"
     echo
     echo "  updated commits: $(colorize "$updated_commit_count" "$updatedColor")"
     echo "      new commits: $(colorize "$new_commit_count"     "$newColor")"
+    if [[ $unknown_commit_count -gt 0 ]]; then
+        echo
+        echo "  unknown commits: $(colorize "$unknown_commit_count" "$wrongColor")"
+    fi
     echo
 
     # Propose update if changes are detected
 
-    if [ ! -x "$(command -v jq)" ]; then
-        echo_error "Please install jq to be able to update merge request"
+    local mr_update_data='{}' update_prompt
 
-    else
-        local mr_update_data='{}'
+    if [[ $unknown_commit_count -gt 0 ]]; then
+        echo_error "Current description has ${unknown_commit_count} more commit(s) than found in branch, given target '${target_branch}'."
+        echo_error "You might want to check your target branch or update the description manually."
+        echo_error
+    fi
 
-        if [ $((updated_commit_count + new_commit_count)) -gt 0 ] \
-        && [ "$(confirm "Do you want to update the merge request description?")" = "yes" ]; then
+    if [[ $((updated_commit_count + new_commit_count)) -gt 0 ]]; then
+        update_prompt=1
 
-            local new_description
-            new_description=$(echo -e "${new_description_content}")
+        local remote; remote=$(gitlab_remote)
+        local remote_branch="${remote}/${source_branch}"
 
-            if [ "$new_commit_count" -gt 0 ]; then
-                new_description=$(echo -e "${new_description}\n\n## Update")
-                new_description=$(echo -e "${new_description}\n\n$(markdown_list "$new_commit_messages_content_str" "**")")
+        local should_update_description=0
+        if [[ "$(git rev-parse "$source_branch")" != "$(git rev-parse "$remote_branch")" ]]; then
+            echo_error "Remote branch on ${remote} is not up-to-date with local branch ${source_branch}."
+            if confirm "Update merge request description anyway?"; then
+                should_update_description=1
             fi
-            new_description=$(echo -e "${new_description}")$'\n'
-
-            mr_update_data=$(jq_build "description" "$new_description" "$mr_update_data") || exit $?
+        elif confirm "Do you want to update the merge request description?"; then
+            should_update_description=1
         fi
 
-        if [ "$base_branch" != "$current_target" ] \
-        && [ "$(confirm "Do you want to update the merge request target branch from '$current_target' to '$base_branch'?")" = "yes" ]; then
-            mr_update_data=$(jq_build "target_branch" "$base_branch" "$mr_update_data") || exit $?
-        fi
-
-        if [ "$mr_update_data" != "{}" ]; then
-
-            echo -n "Updating merge request..."
-
-            local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
-
-            if [ ! -z "$result" ]; then echo -e "OK\n"; fi
-
-            # reload merge request details
-            merge_request=$(gitlab_merge_request "$mr_iid")
+        if [[ $should_update_description -eq 1 ]]; then
+            mr_update_data=$(jq_build "description" "$new_description_content" "$mr_update_data") || exit "$ERR_MR"
         fi
     fi
+
+    # Read existing merge request details
+    local merge_request
+    gitlab_read_mr merge_request
+
+    local current_target
+    eval "$(echo "$merge_request" | jq -r '
+        "current_target=" + (.target_branch | @sh) + ";\n"
+    ')"
+
+    if [[ $target_branch != "$current_target" ]]; then
+        if git_branch_exists "$target_branch"; then
+            update_prompt=1
+            if confirm "Do you want to update the merge request target branch from '$current_target' to '$target_branch'?"; then
+                if git_remote_branch_exists "$target_branch"; then
+                    mr_update_data=$(jq_build "target_branch" "$target_branch" "$mr_update_data") || exit "$ERR_MR"
+                else
+                    echo_error "Target branch '$target_branch' does not exist on remote."
+                    [[ $mr_update_data != '{}' ]] && ! confirm "Update description anyway?" && mr_update_data="{}"
+                fi
+            fi
+        elif git cat-file -e "$target_branch" 2>/dev/null; then
+            echo_error
+            echo_error "Guessed target '$target_branch' is a commit reference."
+            echo_error "(No local base branch found, first possible merge base used.)"
+            echo_error "You might need to rebase your branch."
+            [[ $mr_update_data != '{}' ]] && ! confirm "Update description anyway?" && mr_update_data="{}"
+        else
+            echo_error "Target '$target_branch' does not exist."
+            [[ $mr_update_data != '{}' ]] && ! confirm "Update description anyway?" && mr_update_data="{}"
+        fi
+    fi
+
+    if [[ $mr_update_data != "{}" ]]; then
+        echo -n "Updating merge request..."
+
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data")
+        [[ -n $result ]] && echo -e "OK\n"
+
+        # reload merge request details
+        merge_request=
+        gitlab_load_mr "$mr_iid"
+    else
+        [[ -n $update_prompt ]] && echo
+    fi
+
+    # Read MR & threads
+    local mr_threads
+    [[ -n $merge_request ]] ||
+        gitlab_read_mr merge_request
+    gitlab_read_threads mr_threads
+
+    # --------------------------------------------------------------------------------
+    mr_print_title "$mr_title" "$mr_url"
+    mr_print_status "$merge_request" "$mr_threads"
+}
+
+mr_merge() {
+    git_mr_readonly show
+    gitlab_check_env
+
+    local source_branch=${1:-$(git_current_branch)}
+
+    # Search existing merge request
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -z $mr_summary ]]; then
+        echo_error "Merge request not found"
+        mr_print "$source_branch"
+        return "$ERR_GITLAB"
+    fi
+
+    local mr_iid mr_url mr_title
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="   + (.iid     | @sh) + ";\n" +
+        "mr_url="   + (.web_url | @sh) + ";\n" +
+        "mr_title=" + (.title   | @sh) + ";\n"
+    ')"
+
+    # Load merge request & threads in parallel
+    gitlab_load_mr "$mr_iid"
+    gitlab_load_threads "$mr_url"
+
+    # Merge request status summary - title
+    echo
+    mr_print_title "$mr_title" "$mr_url"
+
+    # Read MR & threads
+    local merge_request mr_threads
+    gitlab_read_mr merge_request
+    gitlab_read_threads mr_threads
+
+    # Merge request status summary - status
+    mr_print_status "$merge_request" "$mr_threads"
 
     echo "--------------------------------------------------------------------------------"
     echo
 
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
-}
+    # Parse merge status
+    local merge_status current_target
+    eval "$(echo "$merge_request" | jq -r '
+        "merge_status="   + (if .state == "merged"
+                             then "merged"
+                             else .merge_status end | @sh) + ";\n" +
+        "current_target=" + (.target_branch | @sh)         + ";\n"
+    ')"
 
-function mr_merge
-{
-    gitlab_check_env
-
-    local gitlab_base_url="https://${GITLAB_DOMAIN}/api/v4"
-
-    local current_branch; current_branch=$(git_current_branch)
-    local base_branch;    base_branch=${1:-$(git_base_branch)}
-
-    # Search existing merge request
-
-    local mr_summary;  mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local mr_iid;      mr_iid=$(gitlab_extract_iid "$mr_summary")
-    local mr_url;      mr_url=$(gitlab_extract_url "$mr_summary")
-    local project_url; project_url=$(gitlab_extract_project_url "$mr_url")
-
-    if [ -z "${mr_iid}" ] || [ -z "${mr_url}" ]; then
-        echo_error "Merge request not found"
-        mr_print "$(guess_issue_code)" "${base_branch}"
-        return
-    fi
-
-    # Load existing merge request details
-
-    local merge_request;  merge_request=$(gitlab_merge_request "$mr_iid")
-    local title;          title=$(gitlab_extract_title "$merge_request")
-    local merge_status;   merge_status=$(gitlab_extract_merge_status "$merge_request")
-    local current_target; current_target=$(gitlab_extract_target_branch "$merge_request")
-
-    echo
-    echo "-------------------------------------------------------------------"
-    echo "$title"
-    echo "-------------------------------------------------------------------"
-    echo
-    mr_actions "$current_branch" "$base_branch" "$mr_summary" "$merge_request"
-
-    # test merge status
-    if [ "$merge_status" = "merged" ]; then
+    # Test merge status
+    if [[ $merge_status == "merged" ]]; then
         echo_error "Merge request is already merged."
         echo_error
-        return
+        return 0
     fi
-    if [ "$merge_status" != "can_be_merged" ]; then
+    if [[ $merge_status != "can_be_merged" ]]; then
         echo_error "Merge request can not be merged. You probably need to rebase the branch and resolve conflicts."
         echo_error
-        return
+        return "$ERR_GITLAB"
     fi
 
     # test open threads
-    local unresolved_thread_count;
-    unresolved_thread_count=$(gitlab_merge_request_threads "$project_url" "$mr_iid" | grep -c 'unresolved:true')
-
-    if [ "$unresolved_thread_count" -gt 0 ]; then
-        echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging."
-        echo_error
-        return
+    local unresolved_thread_count; unresolved_thread_count=$(echo "$mr_threads" | grep -c 'unresolved:true')
+    if [[ $unresolved_thread_count -gt 0 ]]; then
+        if [[ $GIT_MR_FORCE -eq 1 ]]; then
+            echo_error "There are $unresolved_thread_count unresolved threads. Merging anyway."
+            echo_error
+        else
+            echo_error "There are $unresolved_thread_count unresolved threads. Please resolve them before merging or use the --force option."
+            echo_error
+            return "$ERR_USER"
+        fi
     fi
 
-    if gitlab_title_is_draft "$title"; then
+    if gitlab_title_is_draft "$mr_title"; then
         echo_error "Merge request is a draft (work in progress)"
-
-        if [ "$(confirm "Do you want to resolve draft status?")" != "yes" ]; then echo_error; return; fi
+        confirm "Do you want to resolve draft status?" || { echo_error; return 0; }
 
         echo -n "Resolving draft status... "
-        local undraft_title; undraft_title=$(gitlab_title_undraft "$title")
-        local mr_data;        mr_data=$(jq_build "title" "$undraft_title") || exit $?
+        local undraft_title; undraft_title=$(gitlab_title_undraft "$mr_title")
+        local mr_data;       mr_data=$(jq_build "title" "$undraft_title") || exit "$ERR_MR"
 
-        local result; result=$(gitlab_merge_request_update "${mr_iid}" "${mr_data}")
+        local result; result=$(gitlab_merge_request_update "$mr_iid" "$mr_data")
+        [[ -n $result ]] && echo -e "OK\n"
 
-        if [ ! -z "$result" ]; then echo -e "OK\n";
-        else echo_error; return; fi
+        [[ -n $result ]] || { echo_error; return "$ERR_GITLAB"; } # interrupt on error
     fi
 
     # Merge
 
-    if [ "$(confirm "Do you want to merge '$current_branch' into '$current_target'?")" != "yes" ]; then echo; return; fi
+    confirm "Do you want to merge '$source_branch' into '$current_target'?" || { echo; return 0; }
 
-    echo -n "Merging '$current_branch'... "
+    echo -n "Merging '$source_branch'... "
     local result; result=$(gitlab_merge_request_merge "${mr_iid}")
-    if [ -z "$result" ]; then echo; return;
-    else echo -e "OK\n"; fi
+    [[ -n $result ]] && echo -e "OK\n"
+
+    [[ -n $result ]] || { echo_error; return "$ERR_GITLAB"; } # interrupt on error
 
     # checkout target branch
 
-    if [ "$(confirm "Do you want to checkout '$current_target' and pull changes?")" != "yes" ]; then echo; return; fi
+    confirm "Do you want to checkout '$current_target' and pull changes?" || { echo; return 0; }
 
-    echo "git checkout $current_target && git pull --rebase"
-    git checkout "$current_target" && git pull --rebase
+    echolor "git checkout $current_target && git pull --rebase" "lightgray"
+    git_mr_readonly ||
+        (git checkout "$current_target" && git pull --rebase)
     echo
 
     # delete local branch
 
-    if [ "$(confirm "Do you want to delete local branch '$current_branch'")" != "yes" ]; then echo; return; fi
+    confirm "Do you want to delete local branch '$source_branch'?" || { echo; return 0; }
 
-    echo "git branch -d $current_branch"
-    git branch -d "$current_branch"
+    echolor "git branch -d $source_branch" "lightgray"
+    git_mr_readonly ||
+        git branch -d "$source_branch"
     echo
 }
 
-function mr_menu
-{
+mr_menu() {
     gitlab_check_env
 
     local git_mr_menu_mode=show
-    local git_mr_menu_update_all=0
+    local git_mr_menu_update_all=1
 
     # Parse options
     args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            # Consume options
-            up|update)   git_mr_menu_mode=update ;;
-            st|status)   git_mr_menu_mode=status ;;
-            -a|-A|--all) git_mr_menu_update_all=1 ;;
-            # Default: conserve argument
-            *) args+=("${1}") ;;
+        # Consume options
+        up|update)   git_mr_menu_mode=update ;;
+        --current)   git_mr_menu_update_all=0 ;;
+        st|status)   git_mr_menu_mode=status ;;
+        # Default: conserve argument
+        *) args+=("${1}") ;;
         esac
         shift
     done
     set -- "${args[@]}"
 
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+    local source_branch; source_branch=$(git_current_branch)
+    local issue_code=${GIT_MR_CODE:-${1:-$(guess_issue_code "$source_branch")}}
+
+    [[ -n $issue_code ]] || exit_error "$ERR_USER" "Issue code or search term required for menu."
 
     # All non-closed merge requests for issue code
-    local menu_items; menu_items=$(mr_menu_merge_requests "$ISSUE_CODE")
+    local menu_items; menu_items=$(mr_menu_merge_requests "$issue_code")
 
-    if [ -z "$menu_items" ]; then
-        echo_error "No merge requests found for '$ISSUE_CODE'."
-        return
+    if [[ -z $menu_items ]]; then
+        echo_error "No merge requests found for '$issue_code'."
+        return "$ERR_GITLAB"
     fi
 
     case "$git_mr_menu_mode" in
-        show) mr_menu_show "$ISSUE_CODE" "$menu_items" ;;
-        update)
-            if [ "$git_mr_menu_update_all" = "1" ]; then
-                mr_menu_update_all "$ISSUE_CODE" "$menu_items"
-            else
-                mr_menu_update "$ISSUE_CODE" "$menu_items"
-            fi
-            ;;
-        status) mr_menu_status "$ISSUE_CODE" "$menu_items" ;;
+        show) mr_menu_show "$issue_code" "$menu_items" ;;
+        update) if [[ $git_mr_menu_update_all -eq 1 ]]
+            then mr_menu_update_all "$issue_code" "$menu_items"
+            else mr_menu_update     "$menu_items"; fi ;;
+        status) mr_menu_status "$issue_code" "$menu_items" ;;
+        *) return "$ERR_MR" ;;
     esac
 }
 
-function mr_menu_merge_requests
-{
-    ISSUE_CODE=${1:-$(guess_issue_code)}
+mr_transition() {
+    git_mr_readonly show
 
-    local mr_summaries; mr_summaries=$(gitlab_merge_requests_search "$ISSUE_CODE") || exit $?
-    if [ -z "$mr_summaries" ]; then
-        return
-    fi
+    local transition=${1}
+    local source_branch=${2:-$(git_current_branch)}
 
-    # Load project names into bash associative array
-    declare -A project_arr
-    while IFS="=" read -r id name
-    do
-        project_arr[$id]="$name"
-    done < <(gitlab_projects | jq -r 'map((.id | tostring)+"="+.name) | .[]')
+    local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
 
-    # Enrich merge request summaries with project names
-    while IFS=$'\n' read -r mr_summary
-    do
-        local project_id; project_id=$(echo "$mr_summary" | jq -r '.project_id')
-        local project_name; project_name=${project_arr[$project_id]}
-
-        echo "$mr_summary" | jq -c --arg project_name "$project_name" '. + {project_name: $project_name}'
-
-    done < <(echo "$mr_summaries")
-}
-
-function mr_menu_contents
-{
-    local issue_code=$1
-    local menu_items=$2
-    local current_mr_url=$3;
-
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    echo "$git_mr_menu_start"
-    echo
-
-    while IFS=$'\n' read -r menu_item; do
-        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
-        local title;        title=$(echo "$menu_item" | jq -r '.title')
-        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
-
-        title=$(gitlab_title_undraft "$title")
-
-        local item_label
-        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
-
-        local wrap=''
-        if [ "$current_mr_url" == "$web_url" ]; then
-            wrap='**' # Markdown bold
-        fi
-
-        echo "* ${wrap}${item_label}${wrap}"
-
-    done < <(echo "$menu_items")
-
-    echo
-    echo "$git_mr_menu_end"
-}
-
-function mr_menu_status
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    echo "$git_mr_menu_start"
-    echo
-
-    while IFS=$'\n' read -r menu_item; do
-        local mr_iid;       mr_iid=$(echo "$menu_item" | jq -r '.iid')
-        local project_name; project_name=$(echo "$menu_item" | jq -r '.project_name')
-        local title;        title=$(echo "$menu_item" | jq -r '.title')
-        local web_url;      web_url=$(echo "$menu_item" | jq -r '.web_url')
-
-        title=$(gitlab_title_undraft "$title")
-
-        local item_label
-        item_label=$(echo "${project_name}: $(markdown_link "${title}" "$web_url")")
-
-        echo "* ${item_label}"
-
-        local project_url; project_url=$(gitlab_extract_project_url "$web_url")
-
-        # Load existing merge request details
-        # Do NOT use `gitlab_merge_request`
-        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
-
-        mr_print_status "${mr_iid}" "$merge_request"
-
-    done < <(echo "$menu_items")
-
-    echo
-    echo "$git_mr_menu_end"
-}
-
-function mr_menu_show
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    echo
-    mr_menu_contents "$issue_code" "$menu_items"
-}
-
-function mr_menu_update
-{
-    local issue_code=$1
-    local menu_items=$2
-
-    # Look for existing merge request
-    local current_branch
-    current_branch=$(git_current_branch)
-
-    local current_mr_summary; current_mr_summary=$(gitlab_merge_requests_for_branch "$current_branch") || exit $?
-    local current_mr_iid;     current_mr_iid=$(gitlab_extract_iid "$current_mr_summary")
-    local current_mr_url;     current_mr_url=$(gitlab_extract_url "$current_mr_summary")
-
-    if [ -z "${current_mr_iid}" ] || [ -z "${current_mr_url}" ]; then
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
-        echo
-        mr_menu_contents "$issue_code" "$menu_items"
-        return
+        mr_print "$source_branch"
+        return "$ERR_GITLAB"
     fi
 
-    # Load existing merge request details
-    local merge_request;  merge_request=$(gitlab_merge_request "$current_mr_iid")
-    local mr_description; mr_description=$(gitlab_extract_description "$merge_request")
+    local mr_iid mr_url mr_title
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="   + (.iid     | @sh) + ";\n" +
+        "mr_url="   + (.web_url | @sh) + ";\n" +
+        "mr_title=" + (.title   | @sh) + ";\n"
+    ')"
 
-    local mr_menu_content;
-    mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$current_mr_url")
+    # Load merge request & threads in parallel
+    gitlab_load_mr "$mr_iid"
+    gitlab_load_threads "$mr_url"
 
-    local updated_description;
-    updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+    local name labels_to_add labels_to_remove jira_transition_var
+    case "$transition" in
+        IP)
+            name="In Progress"
+            labels_to_add="${GITLAB_IP_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_CR_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}" ",")
+            jira_transition_var="JIRA_IP_ID"
+            ;;
+        CR)
+            name="Code Review"
+            labels_to_add="${GITLAB_CR_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_IP_LABELS},${GITLAB_QA_LABELS},${GITLAB_OK_LABELS}" ",")
+            jira_transition_var="JIRA_CR_ID"
+            ;;
+        QA)
+            name="Quality Assurance"
+            labels_to_add="${GITLAB_QA_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_OK_LABELS}" ",")
+            jira_transition_var="JIRA_QA_ID"
+            ;;
+        OK)
+            name="Accepted"
+            labels_to_add="${GITLAB_OK_LABELS}"
+            labels_to_remove=$(trim "${GITLAB_IP_LABELS},${GITLAB_CR_LABELS},${GITLAB_QA_LABELS}" ",")
+            jira_transition_var="JIRA_OK_ID"
+            ;;
+        *)
+            echo_error "Invalid transition"
+            return "$ERR_JIRA"
+            ;;
+    esac
 
+    # Merge request status summary - title
     echo
-    echo "$updated_description"
-    echo
-    echo '--------------------------------------------------------------------------------'
+    mr_print_title "$mr_title" "$mr_url"
 
-    local mr_update_data='{}'
-    if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
-        mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
-    fi
-    if [ "$mr_update_data" != "{}" ]; then
-        echo -n "Updating merge request..."
-        local result
-        result=$(gitlab_merge_request_update "$current_mr_iid" "$mr_update_data")
-        if [ ! -z "$result" ]; then echo -e "OK\n"; fi
-    fi
-}
+    # Read MR & threads
+    local merge_request mr_threads
+    gitlab_read_mr merge_request
+    gitlab_read_threads mr_threads
 
-function mr_menu_update_all
-{
-    local issue_code=$1
-    local menu_items=$2
+    # Merge request status summary - status
+    mr_print_status "$merge_request" "$mr_threads"
 
-    local mr_iid
-    local mr_url
-    local project_url
-    local merge_request
-    local mr_description
-    local mr_menu_content
-    local updated_description
-    local mr_update_data
-    local result
-
-    # Use array instead of looping over variable content with `read` to leave standard input open for `confirm`
-    readarray menu_array < <(echo "$menu_items")
-
-    for menu_item in "${menu_array[@]}"; do
-
-        mr_iid=$(echo "$menu_item" | jq -r '.iid')
-        mr_url=$(echo "$menu_item" | jq -r '.web_url')
-
-        # Beware, `gitlab_merge_request` and `gitlab_merge_request_update` use 'gitlab_project_request', which is project-specific
-        # Here, we can expect other target projects here.
-        project_url=$(gitlab_extract_project_url "$mr_url")
-
-        # Load existing merge request details
-        # Do NOT use `gitlab_merge_request`
-        merge_request=$(gitlab_request "projects/${project_url}/merge_requests/$mr_iid")
-
-        mr_description=$(gitlab_extract_description "$merge_request")
-
-        mr_menu_content=$(mr_menu_contents "$issue_code" "$menu_items" "$mr_url")
-        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
-
-        echo
-        echo "$updated_description"
-        echo
-        echo '--------------------------------------------------------------------------------'
-        echo
-        echo "Merge request:"
-        echo
-        echo "  ${mr_url}"
-        echo
-
-        mr_update_data='{}'
-
-        if [ "$(confirm "Do you want to update the menu in the merge request description?")" = "yes" ]; then
-            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit $?
-        fi
-
-        if [ "$mr_update_data" != "{}" ]; then
-            echo -n "Updating merge request..."
-            # Do NOT use `gitlab_merge_request_update`
-            result=$(gitlab_request "projects/${project_url}/merge_requests/${mr_iid}" "PUT" "${mr_update_data}")
-            if [ ! -z "$result" ]; then echo -e "OK\n"; fi
-        fi
-    done
-
-    echo '--------------------------------------------------------------------------------'
+    echo "--------------------------------------------------------------------------------"
     echo
 
-    mr_menu_contents "$issue_code" "$menu_items"
+    mr_update_labels "$mr_iid" "$(gitlab_extract_labels "$merge_request")" "$labels_to_remove" "$labels_to_add"
+
+    [[ $transition == "IP" ]] &&
+        mr_gitlab_draft "$mr_iid" "$mr_summary"
+    [[ $transition == "OK" ]] &&
+        mr_gitlab_undraft "$mr_iid" "$mr_summary"
+
+    mr_jira_transition "$issue_code" "$name" "$jira_transition_var"
 }
 
-function mr_menu_replace_description
-{
-    local mr_description=$1
-    local menu_content=$2
+mr_hook() {
+    git_mr_readonly show
 
-    local git_mr_menu_start=${GIT_MR_MENU_START:-## Menu}
-    local git_mr_menu_end=${GIT_MR_MENU_END:---------------------------------------------------------------------------------}
-
-    menu_start=$(echo "$mr_description" | grep -n "$git_mr_menu_start" | cut -f1 -d:)
-    menu_end=$(echo "$mr_description" | grep -n -- "$git_mr_menu_end" | cut -f1 -d: | head -n 1)
-
-    has_menu=0
-    if [ -n "$menu_start" ] && [ -n "$menu_end" ] && [ "$menu_start" -gt "0" ] && [ "$menu_end" -gt "$menu_start" ]; then
-        has_menu=1
-    fi
-
-    # Iterate over description lines and insert/replace menu
-    i=1
-    while IFS=$'\n' read -r mr_description_line
-    do
-        if [ "$has_menu" = "1" ]; then
-            if [ "$i" -lt "$menu_start" ] || [ "$i" -gt "$menu_end" ]; then
-                # output non-menu line
-                echo "$mr_description_line"
-            else
-                # replace menu once
-                if [ "$i" -eq "$menu_end" ]; then
-                    echo_debug "Replacing menu"
-                    echo "$menu_content"
-                fi
-            fi
-        else
-            # output non-menu line
-            echo "$mr_description_line"
-            # insert menu once
-            if [ "$i" -eq "2" ]; then
-                echo_debug "Inserting menu"
-                echo "$menu_content"
-                echo
-            fi
-        fi
-
-        ((i+=1))
-
-    done < <(echo "$mr_description")
-}
-
-function mr_ip
-{
-    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
-
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS},${GITLAB_CR_LABELS}" ""
-
-    if [ ! -z "$ISSUE_CODE" ] \
-    && [ ! -z "$JIRA_IP_ID" ] \
-    && [ "$(confirm "Do you want to update the Jira ticket status to \"In Progress\"?")" = "yes" ]; then
-        echo -n "Updating Jira ticket status... "
-
-        jira_transition "$ISSUE_CODE" "$JIRA_IP_ID" && echo -e "OK\n"
-    fi
-    if [ -z "$JIRA_IP_ID" ]; then echo_error "Set JIRA_IP_ID to be able to update Jira status\n"; fi
-}
-
-function mr_cr
-{
-    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
-
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_QA_LABELS}" "${GITLAB_CR_LABELS}"
-
-    if [ ! -z "$ISSUE_CODE" ] \
-    && [ ! -z "$JIRA_CR_ID" ] \
-    && [ "$(confirm "Do you want to update the Jira ticket status to \"Code Review\"?")" = "yes" ]; then
-        echo -n "Updating Jira ticket status... "
-
-        jira_transition "$ISSUE_CODE" "$JIRA_CR_ID" && echo -e "OK\n"
-    fi
-    if [ -z "$JIRA_CR_ID" ]; then echo_error "Set JIRA_CR_ID to be able to update Jira status\n"; fi
-}
-
-function mr_qa
-{
-    [ ! -z "$GITLAB_CR_LABELS" ] || echo_error "GITLAB_CR_LABELS is not set"
-    [ ! -z "$GITLAB_QA_LABELS" ] || echo_error "GITLAB_QA_LABELS is not set"
-    [ ! -z "$GITLAB_OK_LABELS" ] || echo_error "GITLAB_OK_LABELS is not set"
-
-    ISSUE_CODE=${1:-$(guess_issue_code)}
-
-    mr_update_labels "${GITLAB_OK_LABELS},${GITLAB_CR_LABELS}" "${GITLAB_QA_LABELS}"
-
-    if [ ! -z "$ISSUE_CODE" ] \
-    && [ ! -z "$JIRA_QA_ID" ] \
-    && [ "$(confirm "Do you want to update the Jira ticket status to \"Quality Assurance\"?")" = "yes" ]; then
-        echo -n "Updating Jira ticket status... "
-
-        jira_transition "$ISSUE_CODE" "$JIRA_QA_ID" && echo -e "OK\n"
-    fi
-    if [ -z "$JIRA_QA_ID" ]; then echo_error "Set JIRA_QA_ID to be able to update Jira status\n"; fi
-}
-
-function mr_hook
-{
-    local git_dir; git_dir=$(git rev-parse --show-toplevel)
+    local git_dir; git_dir=$(git rev-parse --git-dir)
     local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
 
-    find "${git_mr_dir}/hooks" -type f -print0 | while read -d $'\0' hook; do
-        local hook_name; hook_name="$(basename $hook)"
+    [[ -d "${git_dir}/hooks" ]] || mkdir "${git_dir}/hooks"
+
+    local hook
+    while read -r -d $'\0' hook; do
+        local hook_name; hook_name="$(basename "$hook")"
         echo "Linking hook: ${hook_name}"
-        ln -sf "$hook" "${git_dir}/.git/hooks/${hook_name}"
-    done
+        git_mr_readonly ||
+            ln -sf "$hook" "${git_dir}/hooks/${hook_name}"
+    done < <(find "${git_mr_dir}/hooks" -type f -print0)
 }
 
-function usage
-{
-    cat << EOF
+usage() {
+    local b; b="$(printf '\e[1m')"
+    local i; i="$(printf '\e[3m')"
+    local u; u="$(printf '\e[4m')"
+    local r; r="$(printf '\e[0m')"
 
-SYNOPSIS
+    cat <<EOF
+${b}NAME${r}
+       ${u}git-mr${r} - Manage a Gitlab merge request description, with link to Jira ticket and current branch commit list
 
-    mr [OPTIONS]        [ISSUE_CODE] [BASE_BRANCH]
-    mr [OPTIONS] open   [ISSUE_CODE] [BASE_BRANCH]
-    mr [OPTIONS] update [BASE_BRANCH]
-    mr [OPTIONS] merge
+${b}SYNOPSIS${r}
+       ${u}git${r} ${u}mr${r} [OPTION...]          [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  open    [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  status  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  update  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  merge   [BRANCH]
 
-    mr [OPTIONS] menu   [update [--all] | status] [ISSUE_CODE]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu                     [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--current]  [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu status              [SEARCH_TERM]
 
-    mr [OPTIONS] undraft
+       ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|ok)  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  undraft        [BRANCH]
 
-    mr [OPTIONS] ip     [ISSUE_CODE]
-    mr [OPTIONS] cr     [ISSUE_CODE]
-    mr [OPTIONS] qa     [ISSUE_CODE]
+       ${u}git${r} ${u}mr${r} hook
 
-    mr [OPTIONS] hook
+       ${u}git${r} ${u}mr${r} base
+       ${u}git${r} ${u}mr${r} code
 
-    mr base
-    mr code
+${b}ARGUMENTS${r}
+       BRANCH
+           Merge request source branch.
+           (Defaults to current branch.)
 
-OPTIONS
+       SEARCH_TERM
+           Term searched in merge requests titles to build menu.
+           (Defaults to Jira issue code guessed from branch name.)
 
-    -v  Verbose output (displays called API URLs)
-    -y  Bypass confirmation prompts ("yes")
-    -e  Use full commit messages in description ("extended", for \`git mr update\`)
-    -a | --all Update all merge requests (\`git mr menu update\`)
+${b}OPTIONS${r}
+       -c, --code   ISSUE_CODE
+           Force issue code.
 
-INSTALLATION
+       -t, --target TARGET_BRANCH
+           Force target branch.
 
-    Add the git-mr directory to your PATH
+       -e, --extended
+           Use full commit messages in description ("extended", for \`git mr [open|update]\`).
+           You can also set GIT_MR_EXTENDED=1 in your environment variables to always use extended commit descriptions.
 
-        PATH="\${PATH}:/path/to/git-mr"
+       --no-color
+           Disable terminal colors.
 
-    OR
+       --no-links
+           Disable terminal hyperlinks and show merge request URL in \`mr status\` and \`mr menu status\`.
 
-    Define it as a git alias:
+       -y, --yes
+           Bypass confirmation prompts ("yes").
 
-        git config --global alias.mr '!bash /path/to/git-mr/git-mr'
+       -v, --verbose
+           Verbose output (displays called API URLs & other debugging info).
 
-        or edit your ~/.gitconfig directly:
+       -h
+           Show this help.
 
-            [alias]
-                mr = "!bash /path/to/git-mr/git-mr"
+${b}COMMAND-SPECIFIC OPTIONS${r}
 
-    Ensure jq is installed to be able to update or merge.
+   ${b}git mr update${r}
 
-CONFIGURATION
+       -n, --new-section [NEW_SECTION_TITLE]
+           Add new section in description for new commits.
 
-    You need to configure the following environment variables:
+       -r, --replace-commits
+           Fully replace commit list in description with current commits.
 
-        export JIRA_USER="user.name@mycompany.com"
-        export JIRA_INSTANCE="mycompany.atlassian.net"
-        export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
-        export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
+   ${b}git mr menu update${r}
 
-        export GITLAB_DOMAIN="myapp.gitlab.com"
-        export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
+       --current
+           Update only current project/branch merge request.
 
-    To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
-    (Account Settings -> Security -> API Token -> Create and manage API tokens)
+   ${b}git mr merge${r}
 
-    To create a Gitlab API Token, go to: https://myapp.gitlab.com/profile/personal_access_tokens<br>
-    (Settings -> Access Tokens)
+       -f, --force
+           Force merge even if there are unresolved threads.
 
-    Optional configuration variables:
+${b}CONFIGURATION${r}
+EOF
+    if [[ $GIT_MR_VERBOSE -eq 1 ]]; then
+        cat <<EOF
+       You need to configure the following environment variables:
 
-        # Default labels for new merge requests
-        export GITLAB_DEFAULT_LABELS="Review,My Team"
+           export JIRA_USER="user.name@mycompany.com"
+           export JIRA_INSTANCE="mycompany.atlassian.net"
+           export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
+           export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
 
-        # Check "Delete source branch" by default (defaults to 1)
-        export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
+           export GITLAB_DOMAIN="myapp.gitlab.com"
+           export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 
-        # Network timeout (in seconds, defaults to 5)
-        export GIT_MR_TIMEOUT=5
+       To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
+       (Account Settings -> Security -> API Token -> Create and manage API tokens)
 
-        # Gitlab status labels (comma-separated, without spaces in between)
-        export GITLAB_OK_LABELS="Validated,Accepted" # Labels removed on IP, CR or QA steps
-        export GITLAB_CR_LABELS="Review"             # Labels set on CR step
-        export GITLAB_QA_LABELS="Testing"            # Labels set on QA step
+       To create a Gitlab API Token, go to: https://myapp.gitlab.com/-/profile/personal_access_tokens?name=Git-MR+Access+token&scopes=api
+       (Settings -> Access Tokens)
 
-        # Jira status IDs
-        export JIRA_IP_ID="xx" # "In Progress" status ID
-        export JIRA_CR_ID="xx" # "Code Review" status ID
-        export JIRA_QA_ID="xx" # "Quality Assurance" status ID
+       Optional configuration variables:
+
+           # Default labels for new merge requests
+           export GITLAB_DEFAULT_LABELS="Review,My Team"
+
+           # Gitlab status labels (comma-separated, without spaces in between)
+           export GITLAB_IP_LABELS="WIP"       # Label(s) set on "In Progress" step
+           export GITLAB_CR_LABELS="Review"    # Label(s) set on "Code Review" step
+           export GITLAB_QA_LABELS="Testing"   # Label(s) set on "Quality Assurance" step
+           export GITLAB_OK_LABELS="Validated" # Label(s) set on "Accepted" step
+
+           # Jira status - transition IDs
+           export JIRA_IP_ID="xx" # "In Progress" transition ID
+           export JIRA_CR_ID="xx" # "Code Review" transition ID
+           export JIRA_QA_ID="xx" # "Quality Assurance" transition ID
+           export JIRA_OK_ID="xx" # "Accepted" transition ID
+
+           # Always use extended commit messages
+           # export GIT_MR_EXTENDED=1
+
+           # Required upvote count to turn indicator green in \`mr status\` (defaults to 2)
+           #export GIT_MR_REQUIRED_UPVOTES=2
+
+           # Number of description lines shown in \`mr menu update\` (defaults to 15)
+           #export GIT_MR_MENU_UPDATE_CONTEXT_LINES=15
+
+           # Check "Delete source branch" by default (defaults to 1)
+           #export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
+
+           # Network timeout (in seconds, defaults to 5)
+           #export GIT_MR_TIMEOUT=5
+
+EOF
+    else
+        cat <<EOF
+       ${i}Use the -v|--verbose option to show configuration options.${r}
+
+EOF
+    fi
+
+    cat <<EOF
+${b}HOMEPAGE${r}
+       https://github.com/Djuuu/git-mr
 
 EOF
 }
 
 
 ################################################################################
-# Run
+# Error codes
 
-# Init
+#ERR=1             # General error
+ERR_USER=9         # User error
+ERR_GIT=10         # Git error
+ERR_GIT_REPO=11    # Git repository error
+ERR_GITLAB=20      # Gitlab error
+ERR_GITLAB_API=21  # Gitlab request error
+ERR_JIRA=30        # Jira error
+ERR_JIRA_API=31    # Jira request error
+ERR_MR=90          # Git-MR error
+ERR_MR_DEPS=91     # Dependency issue
+ERR_MR_ENV=92      # Environment configuration issue
 
-git rev-parse > /dev/null 2>&1 || exit_error 1 "Not a git repository"
 
-if [ ! -x "$(command -v jq)" ]; then
-    exit_error 2 "Git-MR requires jq [https://stedolan.github.io/jq/]"
-fi
-
+################################################################################
 # Hardcoded constants
 GITLAB_DRAFT_PREFIX="Draft"
 GITLAB_DRAFT_PREFIXES=("WIP" "Draft")
+MD_BOLD=${MD_BOLD="**"} # Markdown bold
+MD_BR=${MD_BR="  "} # Markdown line break
+GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
+GIT_MR_MENU_END=${GIT_MR_MENU_END:-"--------------------------------------------------------------------------------"}
+GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
+
+# Defaults
+GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-2}
+
+# Custom file descriptors
+git_mr_fd_mr=${GIT_MR_FD_MR=}
+git_mr_fd_th=${GIT_MR_FD_TH=}
+
+################################################################################
+# Run
+
+# Exit if not running script directly (ex: when sourcing)
+[[ "$(basename "$0")" == 'git-mr' ]] || return 0;
+
+# Init
+
+git rev-parse > /dev/null 2>&1    || exit_error "$ERR_GIT_REPO" "Not a git repository"
+
+[[ -x "$(command -v jq)" ]]       || exit_error "$ERR_MR_DEPS" "Git-MR requires jq [https://stedolan.github.io/jq/]"
+[[ "${BASH_VERSINFO:-0}" -ge 4 ]] || exit_error "$ERR_MR_DEPS" "Your bash version is too old: $BASH_VERSION"
+
 
 # Parse options
 args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -v|-V) GIT_MR_VERBOSE=1 ;;
-        -y|-Y) GIT_MR_YES=1     ;;
-        -e|-E) GIT_MR_EXTENDED=1 ;;
+        -c|--code)   GIT_MR_CODE="$2";   shift ;;
+        -t|--target) GIT_MR_TARGET="$2"; shift ;;
+
+        -e|--extended) GIT_MR_EXTENDED=1 ;;
+
+        --no-color) GIT_MR_NO_COLORS=1 ;;
+        --no-links) GIT_MR_NO_TERMINAL_LINK=1 ;;
+
+        -y|--yes)     GIT_MR_YES=1 ;;
+        -v|--verbose) GIT_MR_VERBOSE=1 ;;
+
+        # mr update
+        -n|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
+            case "$2" in
+                -c|--code | -t|--target | -e|--extended | --no-color|--no-links | -y|--yes | -v|--verbose | -r|--replace-commits | -f|--force | -h) ;;
+                *) GIT_MR_UPDATE_NEW_SECTION_NAME="$2"; shift ;;
+            esac ;;
+        -r|--replace-commits) GIT_MR_REPLACE_COMMITS=1 ;;
+
+        # mr merge
+        -f|--force) GIT_MR_FORCE=1 ;;
+
+        -h) args=("usage") ;;
 
         *) args+=("${1}") ;;
     esac
@@ -1985,13 +2720,14 @@ case $1 in
 
     menu) mr_menu "${@:2}" ;;
 
-    undraft)  gitlab_undraft ;;
+    ip|IP) mr_transition "IP" "${@:2}" ;;
+    cr|CR) mr_transition "CR" "${@:2}" ;;
+    qa|QA) mr_transition "QA" "${@:2}" ;;
+    ok|OK) mr_transition "OK" "${@:2}" ;;
 
-    p|ip|IP) mr_ip "${@:2}" ;;
-    r|cr|CR) mr_cr "${@:2}" ;;
-    q|qa|QA) mr_qa "${@:2}" ;;
+    undraft) gitlab_undraft "${@:2}" ;;
 
-    hook) mr_hook "${@:2}" ;;
+    hook) mr_hook ;;
 
     # Plumbing
     base) git_base_branch ;;
@@ -2000,18 +2736,3 @@ case $1 in
     *) mr_print "$@" ;;
 
 esac
-
-
-################################################################################
-# Error code reference:
-#
-#   1   Not a git repository
-#   2   jq is not installed
-#
-#  10   Gitlab request error
-#  11   GITLAB_DOMAIN|GITLAB_TOKEN is not set
-#  12   Unable to determine Gitlab project URL
-#
-#  20   Jira request error
-#  21   JIRA_USER|JIRA_TOKEN|JIRA_INSTANCE is not set
-#
