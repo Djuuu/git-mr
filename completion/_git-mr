@@ -1,0 +1,150 @@
+#compdef git-mr
+
+# zsh completion wrapper for git-mr
+#
+# Add this line to your .zshrc (before the call to compinit):
+#
+#   fpath=("~/path/to/git-mr/completion" $fpath)
+#
+# or copy this file inside any directory in your fpath.
+#
+
+__git-mr_commands() {
+    local -a commands=(
+        'open:open merge request in browser'
+        'status:show merge request status summary'
+        'update:update merge request commit references in description'
+        'menu:show menu of merge requests with same issue code'
+
+        'ip:transition merge request to "In Progress" status'
+        'cr:transition merge request to "Code Review" status'
+        'qa:transition merge request to "Quality Assurance" status'
+        'ok:transition merge request to "Accepted" status'
+
+        'undraft:remove merge request "draft" status'
+        'merge:merge merge request'
+
+        'base:show guessed base branch'
+        'code:show guessed issue code'
+        'hook:add prepare-commit-msg Git hook to repository'
+        'help:show help page'
+    )
+    _describe -V -t mr-commands 'mr commands' commands
+}
+
+__git-mr_menu_commands() {
+    local -a commands=(
+        'status:show menu merge requests status summary'
+        'update:update menu in related merge request descriptions'
+    )
+    _describe -V -t mr-menu-commands 'mr menu commands' commands
+}
+
+__git-mr_branch_names() {
+    if ! declare -f __git_branch_names &> /dev/null; then
+        compadd "${(f)$(git branch --format='%(refname:short)')}"
+        return $?
+    fi
+
+    __git_branch_names
+}
+
+_git-mr() {
+    local context state state_descr line curcontext="$curcontext"
+    typeset -A opt_args
+
+    # Parse current command words to get action context
+    local mr_action="default" w
+    for w in "${words[@]}"; do
+        case $w in
+            help|usage)  mr_action="help" ;;
+            op|open)     mr_action="open" ;;
+            st|status)   [[ $mr_action == "menu" ]] && mr_action="menu-status" || mr_action="status" ;;
+            up|update)   [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
+            mg|merge)    mr_action="merge" ;;
+            menu)        mr_action="menu" ;;
+            ip|cr|qa|ok) mr_action="transition" ;;
+            IP|CR|QA|OK) mr_action="transition" ;;
+            undraft)     mr_action="transition" ;;
+            hook)        mr_action="plumbing" ;;
+            base)        mr_action="plumbing" ;;
+            code)        mr_action="plumbing" ;;
+        esac
+    done
+
+    [[ $mr_action == "plumbing" ]] && return 0 # No more argument or option
+
+    # Build options depending on action context
+    local -a opts
+    case $mr_action in default|open) opts+=(
+        '(-c --code)'{-c,--code}'[force issue code]:issue code:->issue_code'
+    );; esac
+    case $mr_action in default|open|update) opts+=(
+        '(-t --target)'{-t,--target}'[force target branch]:merge request target branch:->target_branch'
+        '(-e --extended)'{-e,--extended}'[use full commit messages in description]'
+    );; esac
+    case $mr_action in default|open|status|menu-status) opts+=(
+        '(--no-color)'--no-color'[disable terminal colors]'
+        '(--no-links)'--no-links'[disable terminal hyperlinks]'
+    );; esac
+    case $mr_action in default|update|menu-update|transition|merge) opts+=(
+         '(-y --yes)'{-y,--yes}'[bypass confirmation prompts ("yes")]'
+    );; esac
+    opts+=(
+        '(-v --verbose)'{-v,--verbose}'[verbose output (displays called API URLs & other debugging info)]'
+    )
+
+    case $mr_action in default) opts+=(
+        '(-)'-h'[print help message]'
+    );; esac
+
+    case $mr_action in update) opts+=(
+        '(-n --new-section -r --replace-commits)'{-n,--new-section}'[add new section in description for new commits]::new section title:->new_section_title'
+        '(-n --new-section -r --replace-commits)'{-r,--replace-commits}'[fully replace commit list in description with current commits]'
+    );; esac
+    case $mr_action in menu-update) opts+=(
+        '(--current)'--current'[update only current project/branch merge request]'
+    );; esac
+    case $mr_action in merge) opts+=(
+        '(-f --force)'{-f,--force}'[force merge even if there are unresolved threads]'
+    );; esac
+
+    # Build arguments depending on action context
+    local -a args=('::git-mr command:->command')
+    case $mr_action in
+        help) ;;
+        menu*) args+=('::git-mr menu command:->menu_command' '::search term:->search_term') ;;
+        *)     args+=('::source branch:->source_branch') ;;
+    esac
+
+    # Main git-mr argument & option definition
+    _arguments -C $opts $args && return
+
+    # Argument & option values
+    case $state in
+        source_branch) __git-mr_branch_names && ret=0 ;;
+        search_term) ret=0 ;;
+
+        issue_code) ret=0 ;;
+        target_branch) __git-mr_branch_names && ret=0 ;;
+
+        # "command" | "command source_branch"
+        command*)
+            __git-mr_commands && ret=0
+            [[ -n ${words[CURRENT]} && $ret -gt 0 ]] &&
+                __git-mr_branch_names && ret=0 # Complete branch only when trying word failing command completion
+            ;;
+
+        # "menu_command" | "menu_command search_term"
+        menu_command*) __git-mr_menu_commands && ret=0 ;;
+
+        new_section_title) ret=0 ;;
+        new_section_title*) # "new_section_title"| "new_section_title source_branch"
+            __git-mr_branch_names && ret=0
+            ;;
+    esac
+
+    return $ret
+}
+
+_git-mr "$@"
