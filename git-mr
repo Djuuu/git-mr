@@ -380,9 +380,11 @@ open_in_browser() {
     [[ -n $url ]] || return "$ERR_MR"
 
     local open_command
-    if   [[ "$OSTYPE" == "linux-gnu"* ]]; then open_command='xdg-open';
-    elif [[ "$OSTYPE" == "darwin"*    ]]; then open_command='open';
-    elif [[ "$OSTYPE" == "msys"*      ]]; then open_command='explorer';
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if grep -qi microsoft /proc/version; then open_command='explorer.exe'; # WSL
+        else                                      open_command='xdg-open'; fi
+    elif [[ "$OSTYPE" == "darwin"* ]]; then open_command='open';
+    elif [[ "$OSTYPE" == "msys"*   ]]; then open_command='explorer';
     fi
 
     if [[ -n $open_command && -x "$(command -v "$open_command")" ]]; then
