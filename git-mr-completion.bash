@@ -1,106 +1,171 @@
 # See https://github.com/git/git/blob/master/contrib/completion/git-completion.bash
-_git_mr() {
-    local isAnyAction
-    local isMenu
-    local isMenuStatus
-    local isMenuUpdate
-    local isMenuUpdateCurrent
-    local isMerge
-    local isUpdate
 
-    # Parse current command words to get context
+# bash completion support for git-mr
+#
+# Source this file in one of your shell startup scripts (e.g. .bashrc):
+#
+#   . "/path/to/git-mr/git-mr-completion.bash"
+#
+# Git completion is required.
+#
+
+__git-mr_commands() {
+    __gitcomp_nl_append "$(
+        cat <<-'ACTIONS'
+		open
+		status
+		update
+		menu
+		ip
+		cr
+		qa
+		ok
+		undraft
+		merge
+		base
+		code
+		hook
+		help
+		ACTIONS
+    )"
+}
+
+__git-mr_menu_commands() {
+    __gitcomp_nl_append "$(
+        cat <<-'ACTIONS'
+		status
+		update
+		ACTIONS
+    )"
+}
+
+__git-mr_branch_names() {
+    __git_complete_refs --mode="heads"
+}
+
+_git_mr() {
+    # Disable default bash completion (current directory file names, etc.)
+    compopt +o bashdefault +o default 2>/dev/null
+
+    # Parse current command words to get action context
+    local mr_action="default" w
     for w in "${words[@]}"; do
-        case "$w" in
-            open|status|update|merge|menu|ip|cr|qa|ok|undraft|hook|base|code|help) isAnyAction=1 ;;
+        case $w in
+            help | usage) mr_action="help" ;;
+            open) mr_action="open" ;;
+            status) [[ $mr_action == "menu" ]] && mr_action="menu-status" || mr_action="status" ;;
+            update) [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
+            merge) mr_action="merge" ;;
+            menu) mr_action="menu" ;;
+            ip | cr | qa | ok) mr_action="transition" ;;
+            IP | CR | QA | OK) mr_action="transition" ;;
+            undraft) mr_action="transition" ;;
+            hook) mr_action="plumbing" ;;
+            base) mr_action="plumbing" ;;
+            code) mr_action="plumbing" ;;
         esac
-        [[ $w == "menu" ]] && isMenu=1
-        if [[ -n "$isMenu" ]]; then
-            [[ "$w" == "update" ]] && isMenuUpdate=1
-            [[ "$w" == "status" ]] && isMenuStatus=1
-            if [[ -n "$isMenuUpdate" ]]; then
-                [[ "$w" == "--current" ]] && isMenuUpdateCurrent=1
-            fi
-        else
-            [[ "$w" == "merge" ]] && isMerge=1
-            [[ "$w" == "update" ]] && isUpdate=1
+
+        if [[ $w != "$cur" ]]; then
+            case $w in
+                op) mr_action="open" ;;
+                st) [[ $mr_action == "menu" ]] && mr_action="menu-status" || mr_action="status" ;;
+                up) [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
+                mg) mr_action="merge" ;;
+            esac
         fi
     done
 
-    case "$prev" in
-        # Options with values
-        -t|--target) __git_complete_refs --mode="heads"; return ;;
-        -c|--code)   COMPREPLY=();                       return ;;
-        # Actions without additional argument or option
-        hook|base|code) COMPREPLY=(); return ;;
-    esac
+    [[ $mr_action == "plumbing" ]] && return 0 # No more argument or option
 
-    # Menu
-    if [[ -n $isMenu ]]; then
-        [[ -n $isMenuStatus ]] && return
-        [[ -n $isMenuUpdateCurrent ]] && return
-        [[ -n $isMenuUpdate ]] && __gitcomp "--current" && return
-        __gitcomp "status update"
+    # Build options depending on action context
+    if [[ $cur = -* ]]; then
+        case $mr_action in default | open)
+            __gitcomp_nl_append '-c'; __gitcomp_nl_append '--code'
+        ;; esac
+        case $mr_action in default | open | update)
+            __gitcomp_nl_append '-t'; __gitcomp_nl_append '--target'
+            __gitcomp_nl_append '-e'; __gitcomp_nl_append '--extended'
+        ;; esac
+        case $mr_action in default | open | status | menu-status)
+            __gitcomp_nl_append '--no-color'
+            __gitcomp_nl_append '--no-links'
+        ;; esac
+        case $mr_action in default | update | menu-update | transition | merge)
+            __gitcomp_nl_append '-y'; __gitcomp_nl_append '--yes'
+        ;; esac
+        __gitcomp_nl_append '-v'; __gitcomp_nl_append '--verbose'
+
+        case $mr_action in default)
+            __gitcomp_nl_append '-h'
+        ;; esac
+
+        case $mr_action in update)
+            __gitcomp_nl_append '-n'; __gitcomp_nl_append '--new-section'
+            __gitcomp_nl_append '-r'; __gitcomp_nl_append '--replace-commits'
+        ;; esac
+        case $mr_action in menu-update)
+            __gitcomp_nl_append '--current'
+        ;; esac
+        case $mr_action in merge)
+            __gitcomp_nl_append '-f'; __gitcomp_nl_append '--force'
+        ;; esac
         return
     fi
 
-    case "$cur" in
-        --*)
-            __gitcomp "--code --target --extended --no-color --no-links --verbose --yes"
-            [[ -n $isMerge ]] &&
-                __gitcomp_nl_append "--force"
-            [[ -n $isUpdate ]] &&
-                __gitcomp_nl_append "--new-section" &&
-                __gitcomp_nl_append "--replace-commits"
-            return
+    if [[ $cur != -* ]]; then
+        case $mr_action in
+            default) __git-mr_commands ;;
+            menu) __git-mr_menu_commands ;;
+        esac
+    fi
+
+    # Options with values
+    case "$prev" in
+        -c | --code) return ;; # required argument
+        -t | --target) __git-mr_branch_names; return ;;
+    esac
+
+    case $mr_action in
+        default)
+            [[ -n $cur ]] && case $cur in
+                o|op|ope|open |\
+                s|st|sta|stat|statu|status |\
+                u|up|upd|upda|updat|update |\
+                m|me|men|menu |\
+                i|ip|c|cr|q|qa|ok |\
+                un|und|undr|undra|undraf|undraft |\
+                mer|merg|merge |\
+                b|ba|bas|base |\
+                co|cod|code |\
+                h|ho|hoo|hook |\
+                he|hel|help) ;;
+                *) __git-mr_branch_names ;;
+            esac
             ;;
-        -*)
-            __gitcomp "-c --code -t --target -e --extended --no-color --no-links -v --verbose -y --yes"
-            [[ -n $isMerge ]] &&
-                __gitcomp_nl_append "-f" &&
-                __gitcomp_nl_append "--force"
-            [[ -n $isUpdate ]] &&
-                __gitcomp_nl_append "-n" &&
-                __gitcomp_nl_append "--new-section" &&
-                __gitcomp_nl_append "-r" &&
-                __gitcomp_nl_append "--replace-commits"
-            return
-            ;;
-        *)
-            __git_complete_refs --mode="heads"
-            [[ -z $isAnyAction ]] && __gitcomp_nl_append "$(cat <<-'ACTIONS'
-				open
-				status
-				update
-				merge
-				menu
-				ip
-				cr
-				qa
-				ok
-				undraft
-				hook
-				base
-				code
-				help
-				ACTIONS
-)"
-            return
-            ;;
+        help | menu*) return ;; # no argument
+        *) __git-mr_branch_names ;;
     esac
 }
 
-
-# Load git completion if not loaded yet and available at usual path
-if ! declare -f __git_complete > /dev/null  && [ -f /usr/share/bash-completion/completions/git ]; then
-    . /usr/share/bash-completion/completions/git
+# Prevent classic sourcing on zsh
+if [[ -n ${ZSH_VERSION-} && -z ${GIT_SOURCING_ZSH_COMPLETION-} ]]; then
+    echo "zsh: add 'git-mr/completion' to your fpath instead of sourcing git-mr-completion.bash" 1>&2
+    return
 fi
 
-if declare -f __git_complete > /dev/null; then
-    # Add completion for direct script usage
-    __git_complete "git-mr" _git_mr
-
-    # Add completion for aliases
-    for a in $(alias -p | grep "git[- ]mr" | cut -d' ' -f2 | cut -d= -f1); do
-        __git_complete "$a" _git_mr
-    done
+# Load git completion if not loaded yet and available at usual paths
+if ! declare -f __git_complete &>/dev/null; then
+    if [[ -f "${HOME}/.local/share/bash-completion/completions/git" ]]; then
+           . "${HOME}/.local/share/bash-completion/completions/git"
+    elif [[ -f "/usr/share/bash-completion/completions/git" ]]; then
+             . "/usr/share/bash-completion/completions/git"
+    fi
 fi
+
+# Add completion for direct script usage
+__git_complete "git-mr" _git_mr
+
+# Add completion for aliases
+for a in $(alias -p | grep "git[- ]mr" | cut -d' ' -f2 | cut -d= -f1); do
+    __git_complete "$a" _git_mr
+done

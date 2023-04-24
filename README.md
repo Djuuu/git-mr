@@ -138,11 +138,23 @@ _OR_
 
 #### Completion
 
-Completion is available in `git-mr-completion.bash`. Source it in one of your shell startup scripts:
-```bash
-. "/path/to/git-mr/git-mr-completion.bash"
-```
+Completion functions for Bash and Zsh are available:
 
+* **Bash**  
+  Source `git-mr-completion.bash` in one of your shell startup scripts (`.bashrc` / `.bash_profile`):
+  ```bash
+  . "/path/to/git-mr/git-mr-completion.bash"
+  ```
+
+* **Zsh**   
+  Add the `completion` directory to your `fpath` (in your `.zshrc`, before any call to `compinit` or `oh-my-zsh.sh`)
+  ```zsh
+  fpath=("~/path/to/git-mr/completion" $fpath)
+  ```
+  You may have to force a rebuild of `zcompdump` by running:
+  ```zsh
+  rm -f ~/.zcompdump; compinit
+  ```
 
 ### Configuration
 
