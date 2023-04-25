@@ -379,16 +379,19 @@ open_in_browser() {
 
     [[ -n $url ]] || return "$ERR_MR"
 
-    local open_command
+    local open_command open_args
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        if grep -qi microsoft /proc/version; then open_command='explorer.exe'; # WSL
+        if grep -qi microsoft /proc/version; then
+            # https://github.com/microsoft/WSL/issues/3832#issuecomment-1173571126
+            open_command='rundll32.exe'
+            open_args="url.dll,FileProtocolHandler"
         else                                      open_command='xdg-open'; fi
     elif [[ "$OSTYPE" == "darwin"* ]]; then open_command='open';
     elif [[ "$OSTYPE" == "msys"*   ]]; then open_command='explorer';
     fi
 
     if [[ -n $open_command && -x "$(command -v "$open_command")" ]]; then
-        $open_command "${url}" > /dev/null 2>&1
+        "$open_command" "$open_args" "${url}" > /dev/null 2>&1
         return 0
     fi
 
