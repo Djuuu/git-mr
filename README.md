@@ -74,6 +74,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
   Disable terminal colors.
 * `--no-links`  
   Disable terminal hyperlinks and show merge request URL in `mr status` and `mr menu status`.
+* `--no-commit`  
+  Do not display the list of commit in the Merge Request description.
 * `-y`, `--yes`  
   Bypass confirmation prompts (always answer "yes").
 * `-v`, `--verbose`  
