@@ -1065,6 +1065,7 @@ mr_print_description() {
         cat <<EOF
 $(markdown_title "$title")
 
+
 ## Commits
 
 ${commit_list}

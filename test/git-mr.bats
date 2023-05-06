@@ -11,6 +11,7 @@ setup_file() {
 
     export GIT_MR_NO_COLORS=1
     export GIT_MR_NO_TERMINAL_LINK=1
+    export GIT_MR_NO_COMMITS=
     export GIT_MR_EXTENDED=
 
     export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
@@ -845,6 +846,17 @@ full_sha() {
     c2sha=$(short_sha "Feature test - 2")
     c3sha=$(short_sha "Feature test - 3")
 
+    GIT_MR_NO_COMMITS=1
+    GIT_MR_EXTENDED=
+    run mr_description
+
+    assert_output "$(cat <<- EOF
+		# [AB-123 This is an issue](https://mycompany.example.net/browse/AB-123)
+
+		EOF
+    )"
+
+    GIT_MR_NO_COMMITS=
     GIT_MR_EXTENDED=
     run mr_description
 
