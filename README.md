@@ -217,6 +217,10 @@ git config --global mr.jira-ok-id "xx"
 # git config --global mr.git-mr-timeout 5
 ```
 
+**Tip:**  
+If you need distinct configuration "sets" but don't want to repeat the same values over and over 
+in multiple projects, you might want to use [Git config includes](https://git-scm.com/docs/git-config#_includes).
+
 #### Environment variables reference
 
 ```bash
