@@ -1,0 +1,36 @@
+
+[user]
+    email = test@example.com
+    name = Test
+
+[init]
+    defaultBranch = main
+    templatedir =
+
+[mr]
+    jira-instance = "mycompany.example.net"
+    jira-user     = "me@jira"
+    jira-token    = "jira-test-token"
+
+    gitlab-domain = "gitlab.example.net"
+    gitlab-token  = "gitlab-test-token"
+
+    jira-code-pattern = "[A-Z]{2,3}-[0-9]+"
+
+    jira-ip-id = "110"
+    jira-cr-id = "120"
+    jira-qa-id = "130"
+    jira-ok-id = "140"
+
+    gitlab-ip-labels = "WIP"
+    gitlab-cr-labels = "Review"
+    gitlab-qa-labels = "Testing"
+    gitlab-ok-labels = "Accepted"
+
+    gitlab-default-labels = "WIP"
+
+    git-mr-extended =
+
+    git-mr-required-upvotes = 2
+    gitlab-remove-source-branch-on-merge = 1
+    git-mr-timeout = 1
