@@ -199,6 +199,10 @@ full_sha() {
     git switch main
     run git-mr base
     assert_failure "$ERR_GIT"
+
+    # with argument
+    run git-mr base feature/AB-123-test-feature
+    assert_output "feature/base"
 }
 
 @test "Determines remote name" {
@@ -814,7 +818,7 @@ full_sha() {
     run git-mr code
     assert_output "Unable to guess issue code"
 
-    run guess_issue_code feature/AB-123-CD-456-test-feature
+    run git-mr code feature/AB-123-CD-456-test-feature
     assert_output "CD-456" # debatable
 }
 

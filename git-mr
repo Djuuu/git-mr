@@ -2518,10 +2518,10 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|ok)  [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  undraft        [BRANCH]
 
-       ${u}git${r} ${u}mr${r} hook
+       ${u}git${r} ${u}mr${r}  base  [BRANCH]
+       ${u}git${r} ${u}mr${r}  code  [BRANCH]
 
-       ${u}git${r} ${u}mr${r} base
-       ${u}git${r} ${u}mr${r} code
+       ${u}git${r} ${u}mr${r}  hook
 
 ${b}ARGUMENTS${r}
        BRANCH
@@ -2778,8 +2778,8 @@ case $1 in
     hook) mr_hook ;;
 
     # Plumbing
-    base) git_base_branch ;;
-    code) guess_issue_code ;;
+    base) git_base_branch "$2" ;;
+    code) guess_issue_code "$2" ;;
 
     *) mr_print "$@" ;;
 
