@@ -1,4 +1,3 @@
-JIRA_INSTANCE="mycompany.example.net"
 
 jira_ticket_data() {
     case $1 in

@@ -160,16 +160,108 @@ Completion functions for Bash and Zsh are available:
 
 ### Configuration
 
-You need to configure the following environment variables:
+Git-mr can either be configured through [git-config](https://git-scm.com/docs/git-config) or environment variables.
+
+When using Git configuration, project-specific overrides can be set by omitting the `--global` option:
 ```bash
-export JIRA_USER="user.name@mycompany.com"
+# Global configuration stored in your ~/.gitconfig
+git config --global mr.global-option "global-value"
+
+# Local configuration stored in current project's .git/config
+git config mr.local-option "local-value"
+```
+
+Environment variables take precedence over Git configuration.
+
+#### Git configuration reference
+
+```bash
+# Required configuration -------------------------------------------------------
+
+git config --global mr.jira-instance "mycompany.atlassian.net"
+git config --global mr.jira-user     "user.name@mycompany.com"
+git config --global mr.jira-token    "abcdefghijklmnopqrstuvwx"
+
+git config --global mr.jira-code-pattern "[A-Z]{2,3}-[0-9]+"
+
+git config --global mr.gitlab-domain "myapp.gitlab.com"
+git config --global mr.gitlab-token  "Zyxwvutsrqponmlkjihg"
+
+# Optional configuration -------------------------------------------------------
+
+# Default labels for new merge requests
+git config --global mr.gitlab-default-labels "Review,My Team"
+
+# Check "Delete source branch" by default (defaults to 1)
+# git config --global mr.gitlab-remove-source-branch-on-merge 1
+
+# Gitlab status labels (comma-separated, without spaces in between)
+git config --global mr.gitlab-ip-labels "WIP"
+git config --global mr.gitlab-cr-labels "Review"
+git config --global mr.gitlab-qa-labels "Testing"
+git config --global mr.gitlab-ok-labels "Accepted"
+
+# Jira status - transition IDs
+git config --global mr.jira-ip-id "xx"
+git config --global mr.jira-cr-id "xx"
+git config --global mr.jira-qa-id "xx"
+git config --global mr.jira-ok-id "xx"
+
+# Always use extended commit messages
+# git config --global mr.git-mr-extended 1
+
+# Required upvote count to turn indicator green in `mr status` (defaults to 2)
+# git config --global mr.git-mr-required-upvotes 2
+
+# Network timeout (in seconds, defaults to 5)
+# git config --global mr.git-mr-timeout 5
+```
+
+#### Environment variables reference
+
+```bash
+# Required configuration -------------------------------------------------------
+
 export JIRA_INSTANCE="mycompany.atlassian.net"
+export JIRA_USER="user.name@mycompany.com"
 export JIRA_TOKEN="abcdefghijklmnopqrstuvwx"
+
 export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
 
 export GITLAB_DOMAIN="myapp.gitlab.com"
 export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
+
+# Optional configuration -------------------------------------------------------
+
+# Default labels for new merge requests
+export GITLAB_DEFAULT_LABELS="Review,My Team"
+
+# Check "Delete source branch" by default (defaults to 1)
+#export GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=1
+
+# Gitlab status labels (comma-separated, without spaces in between)
+export GITLAB_IP_LABELS="WIP"
+export GITLAB_CR_LABELS="Review"
+export GITLAB_QA_LABELS="Testing"
+export GITLAB_OK_LABELS="Accepted"
+
+# Jira status - transition IDs
+export JIRA_IP_ID="xx"
+export JIRA_CR_ID="xx"
+export JIRA_QA_ID="xx"
+export JIRA_OK_ID="xx"
+
+# Always use extended commit messages
+# export GIT_MR_EXTENDED=1
+
+# Required upvote count to turn indicator green in `mr status` (defaults to 2)
+#export GIT_MR_REQUIRED_UPVOTES=2
+
+# Network timeout (in seconds, defaults to 5)
+#export GIT_MR_TIMEOUT=5
 ```
+
+#### Jira & Gitlab tokens
 
 To create a Jira API Token, go to:
 * https://id.atlassian.com/manage-profile/security/api-tokens  
@@ -178,40 +270,6 @@ To create a Jira API Token, go to:
 To create a Gitlab API Token, go to:
 * https://myapp.gitlab.com/-/profile/personal_access_tokens?name=Git-MR+Access+token&scopes=api  
   (Settings -> Access Tokens)
-
-Other optional configuration variables:
-```bash
-# Default labels for new merge requests
-export GITLAB_DEFAULT_LABELS="Review,My Team"
-
-# Gitlab status labels (comma-separated, without spaces in between)
-export GITLAB_IP_LABELS="WIP"      # Label(s) set on "In Progress" step
-export GITLAB_CR_LABELS="Review"   # Label(s) set on "Code Review" step
-export GITLAB_QA_LABELS="Testing"  # Label(s) set on "Quality Assurance" step
-export GITLAB_OK_LABELS="Accepted" # Label(s) set on "Accepted" step
-
-# Jira status - transition IDs
-export JIRA_IP_ID="xx" # "In progress" transition ID
-export JIRA_CR_ID="xx" # "Code review" transition ID
-export JIRA_QA_ID="xx" # "Quality Assurance" transition ID
-export JIRA_OK_ID="xx" # "Accepted" transition ID
-
-# Always use extended commit messages
-# export GIT_MR_EXTENDED=1
-
-# Required upvote count to turn indicator green in `mr status` (defaults to 2)
-#export GIT_MR_REQUIRED_UPVOTES=2
-
-# Number of description lines shown in `mr menu update` (defaults to 15)
-#export GIT_MR_MENU_UPDATE_CONTEXT_LINES=15
-
-# Check "Delete source branch" by default (defaults to 1)
-#export GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH=1
-
-# Network timeout (in seconds, defaults to 5)
-#export GIT_MR_TIMEOUT=5
-```
-
 
 ## Commands
 
@@ -231,7 +289,7 @@ This will print a merge request description, with a link to Jira ticket and curr
 If a merge request based on the current branch is found on Gitlab, its URL will be provided, along with current votes, open and resolved threads and mergeable status.
 Otherwise, a link to create a new merge request will be provided. 
 
-Default labels and "Delete source branch" status can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_DEFAULT_FORCE_REMOVE_SOURCE_BRANCH` environment variables.
+Default labels and "Delete source branch" status can be configured with the `GITLAB_DEFAULT_LABELS` and `GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE` environment variables.
 
 ![git mr](doc/git-mr.png)
 

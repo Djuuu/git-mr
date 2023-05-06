@@ -9,16 +9,19 @@ load "test_helper/bats-assert/load"
 setup_file() {
     export LANG=C.UTF-8 # ensure tests handle UTF-8 properly
 
+    # Unset all git-mr environment variables (would take precedence over local configuration)
+    unset JIRA_INSTANCE JIRA_USER JIRA_TOKEN JIRA_CODE_PATTERN \
+          GITLAB_DOMAIN GITLAB_TOKEN GITLAB_DEFAULT_LABELS \
+          GITLAB_IP_LABELS GITLAB_CR_LABELS GITLAB_QA_LABELS GITLAB_OK_LABELS \
+            JIRA_IP_ID       JIRA_CR_ID       JIRA_QA_ID       JIRA_OK_ID \
+          GIT_MR_EXTENDED GIT_MR_REQUIRED_UPVOTES GIT_MR_TIMEOUT
+
     export GIT_MR_NO_COLORS=1
     export GIT_MR_NO_TERMINAL_LINK=1
     export GIT_MR_NO_COMMITS=
     export GIT_MR_EXTENDED=
 
-    export JIRA_CODE_PATTERN="[A-Z]{2,3}-[0-9]+"
-    export JIRA_INSTANCE=
-    export JIRA_USER=
     export GITLAB_DOMAIN="gitlab.example.net"
-    export GITLAB_TOKEN="test"
 
     export MD_BR='..' # for easier visualization
 
@@ -35,6 +38,8 @@ setup_file() {
     git init --bare remote
     git init --bare gitlab
     git init repo && cd repo || exit
+    configure-git-repo
+
     git remote add fs-local ../remote
     git remote add gitlab ../gitlab -m real-main
 
@@ -86,24 +91,29 @@ teardown_file() {
 }
 
 setup() {
+    # cd to repo first to take local git-mr configuration into account
+    cd "${BATS_TEST_DIRNAME}/data" || exit
+    cd repo
+
     # Source git-mr to load functions
     . "${BATS_TEST_DIRNAME}"/../git-mr >&3
 
-    cd "${BATS_TEST_DIRNAME}/data" || exit
-    cd repo
     git switch feature/AB-123-test-feature
 }
 
 ################################################################################
 # Wrappers & utilities
 
+# Use test config (useful when git is run by Bats)
 git() {
     command git \
-        -c init.defaultBranch=main \
-        -c user.email=test@example.com \
-        -c user.name=Test \
-        -c init.templatedir= \
+        -c include.path="${BATS_TEST_DIRNAME}/.gitconfig" \
         "$@"
+}
+
+# Set test config in repo (useful when git is run by git-mr)
+configure-git-repo() {
+    command git config --local include.path "${BATS_TEST_DIRNAME}/.gitconfig"
 }
 
 git-push() {
@@ -1943,6 +1953,7 @@ This is an example without menu.
     cd ../repo
     git -c protocol.file.allow=always submodule add ../subrepo sub
     cd sub
+    configure-git-repo
     git switch -c feature/XY-345-test
 
     run git commit --allow-empty -m "Sub message 1"

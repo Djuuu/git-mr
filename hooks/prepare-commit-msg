@@ -4,15 +4,18 @@
 # When on a branch referring to a Jira issue,
 # ensure commit messages start with the issue reference
 
-default_pattern="[A-Z]{2}-[0-9]+"
-jira_code_pattern="${JIRA_CODE_PATTERN:-$default_pattern}"
+JIRA_CODE_PATTERN=${JIRA_CODE_PATTERN:-$(git config --get mr.jira-code-pattern)}
+if [ -z "$JIRA_CODE_PATTERN" ]; then
+    echo "JIRA_CODE_PATTERN not set - unable to guess issue code" >&2
+    exit 0
+fi
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
-issue_code=$(echo "${current_branch}" | grep -Eo "$jira_code_pattern" | tail -n1)
+issue_code=$(echo "${current_branch}" | grep -Eo "$JIRA_CODE_PATTERN" | tail -n1)
 [ -n "$issue_code" ] || exit 0 # No issue code detected
 
 current_msg=$(cat "$1")
-msg_code=$(echo "${current_msg}" | grep -iEo "$jira_code_pattern" | tail -n1)
+msg_code=$(echo "${current_msg}" | grep -iEo "$JIRA_CODE_PATTERN" | tail -n1)
 [ -z "$msg_code" ] || exit 0 # existing issue code in message
 
 if case "$current_msg" in "fixup! "*) ;; *) false;; esac; then

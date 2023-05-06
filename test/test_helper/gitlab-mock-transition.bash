@@ -1,15 +1,3 @@
-GITLAB_IP_LABELS="WIP"
-GITLAB_CR_LABELS="Review"
-GITLAB_QA_LABELS="Testing"
-GITLAB_OK_LABELS="Accepted"
-
-JIRA_INSTANCE="mycompany.example.net"
-JIRA_USER="me"
-JIRA_TOKEN="hcnoiuyrsqgl"
-JIRA_IP_ID="110"
-JIRA_CR_ID="120"
-JIRA_QA_ID="130"
-JIRA_OK_ID="140"
 
 git_mr_mock_labels='"My Team"'
 git_mr_mock_title="My MR"
