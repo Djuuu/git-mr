@@ -151,7 +151,7 @@ Completion functions for Bash and Zsh are available:
 * **Zsh**   
   Add the `completion` directory to your `fpath` (in your `.zshrc`, before any call to `compinit` or `oh-my-zsh.sh`)
   ```zsh
-  fpath=("~/path/to/git-mr/completion" $fpath)
+  fpath=("/path/to/git-mr/completion" $fpath)
   ```
   You may have to force a rebuild of `zcompdump` by running:
   ```zsh
