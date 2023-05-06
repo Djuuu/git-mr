@@ -1941,19 +1941,20 @@ EOF
 mr_open() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
-    git_check_branches "$source_branch" "$target_branch"
 
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
     [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
-    local description; description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
-
-    cat <<EOF
+    local description;
+    if [[ -n $target_branch ]]; then
+        description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
+        cat <<EOF
 
 --------------------------------------------------------------------------------
 $description
 
 EOF
+    fi
 
     local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
     if [[ -n $mr_summary ]]; then
@@ -1962,6 +1963,8 @@ EOF
         # Print merge request status summary
         mr_status_block "$mr_summary"
     else
+        git_check_branches "$source_branch" "$target_branch"
+
         echo "--------------------------------------------------------------------------------"
         echo
 
