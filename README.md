@@ -45,10 +45,10 @@ Prepares a merge request description, with link to Jira ticket and current branc
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa|ok)</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>        <i>[BRANCH]</i>
 
-<b>git mr</b> <b>hook</b>
+<b>git mr</b>  <b>base</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <b>code</b>  <i>[BRANCH]</i>
 
-<b>git mr</b> <b>base</b>
-<b>git mr</b> <b>code</b>
+<b>git mr</b>  <b>hook</b>
 </pre>
 
 ### Arguments

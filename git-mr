@@ -1941,19 +1941,20 @@ EOF
 mr_open() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
-    git_check_branches "$source_branch" "$target_branch"
 
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
     [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
-    local description; description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
-
-    cat <<EOF
+    local description;
+    if [[ -n $target_branch ]]; then
+        description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
+        cat <<EOF
 
 --------------------------------------------------------------------------------
 $description
 
 EOF
+    fi
 
     local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
     if [[ -n $mr_summary ]]; then
@@ -1962,6 +1963,8 @@ EOF
         # Print merge request status summary
         mr_status_block "$mr_summary"
     else
+        git_check_branches "$source_branch" "$target_branch"
+
         echo "--------------------------------------------------------------------------------"
         echo
 
@@ -1983,12 +1986,13 @@ mr_status() {
     gitlab_check_env
 
     local source_branch=${1:-$(git_current_branch)}
-    git_check_branches "$source_branch" "-"
 
     # Search existing merge request
     local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
     if [[ -z $mr_summary ]]; then
         echo_error "Merge request not found"
+
+        git_check_branches "$source_branch" "-"
         mr_print "$source_branch"
         return "$ERR_GITLAB"
     fi
@@ -2514,10 +2518,10 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  (ip|cr|qa|ok)  [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  undraft        [BRANCH]
 
-       ${u}git${r} ${u}mr${r} hook
+       ${u}git${r} ${u}mr${r}  base  [BRANCH]
+       ${u}git${r} ${u}mr${r}  code  [BRANCH]
 
-       ${u}git${r} ${u}mr${r} base
-       ${u}git${r} ${u}mr${r} code
+       ${u}git${r} ${u}mr${r}  hook
 
 ${b}ARGUMENTS${r}
        BRANCH
@@ -2774,8 +2778,8 @@ case $1 in
     hook) mr_hook ;;
 
     # Plumbing
-    base) git_base_branch ;;
-    code) guess_issue_code ;;
+    base) git_base_branch "$2" ;;
+    code) guess_issue_code "$2" ;;
 
     *) mr_print "$@" ;;
 
