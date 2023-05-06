@@ -1050,14 +1050,19 @@ mr_description() {
 
     local title; title=$(mr_title "$source_branch" "$issue_code")
 
-    mr_print_description "$title" "$(mr_commit_list "$source_branch" "$target_branch")"
+    if [[ "${GIT_MR_NO_COMMITS}" == "1" ]]; then
+        mr_print_description "$title"
+    else 
+        mr_print_description "$title" "$(mr_commit_list "$source_branch" "$target_branch")"
+    fi
+    
 }
 
 mr_print_description() {
     local title=$1
-    local commit_list=$2
-
-    cat <<EOF
+    if [[ -n $2 ]]; then
+        local commit_list=$2
+        cat <<EOF
 $(markdown_title "$title")
 
 
@@ -1066,6 +1071,12 @@ $(markdown_title "$title")
 ${commit_list}
 
 EOF
+    else
+        cat <<EOF
+$(markdown_title "$title")
+
+EOF
+    fi
 }
 
 mr_status_block() {
@@ -2692,6 +2703,7 @@ while [[ $# -gt 0 ]]; do
 
         -y|--yes)     GIT_MR_YES=1 ;;
         -v|--verbose) GIT_MR_VERBOSE=1 ;;
+        --no-commits) GIT_MR_NO_COMMITS=1 ;;
 
         # mr update
         -n|--new-section) GIT_MR_UPDATE_NEW_SECTION=1

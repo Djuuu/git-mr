@@ -74,6 +74,8 @@ Prepares a merge request description, with link to Jira ticket and current branc
   Disable terminal colors.
 * `--no-links`  
   Disable terminal hyperlinks and show merge request URL in `mr status` and `mr menu status`.
+* `--no-commits`  
+  Do not display the list of commits in the merge request description.
 * `-y`, `--yes`  
   Bypass confirmation prompts (always answer "yes").
 * `-v`, `--verbose`  
@@ -149,7 +151,7 @@ Completion functions for Bash and Zsh are available:
 * **Zsh**   
   Add the `completion` directory to your `fpath` (in your `.zshrc`, before any call to `compinit` or `oh-my-zsh.sh`)
   ```zsh
-  fpath=("~/path/to/git-mr/completion" $fpath)
+  fpath=("/path/to/git-mr/completion" $fpath)
   ```
   You may have to force a rebuild of `zcompdump` by running:
   ```zsh
