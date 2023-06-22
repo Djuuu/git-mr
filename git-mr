@@ -479,15 +479,13 @@ jira_request() {
 
     local jira_base_url="https://${JIRA_INSTANCE}/rest/api/3"
 
-    local auth_token; auth_token=$(echo -n "${JIRA_USER}:${JIRA_TOKEN}" | base64 -w 0)
-
     echo_debug "Jira - ${request_verb} ${request_url} ${request_data}"
 
     [[ $request_verb != "GET" ]] && git_mr_readonly && return 0
 
     curl -Ss \
         -X "${request_verb}" \
-        -H "Authorization: Basic ${auth_token}" \
+        -u "${JIRA_USER}:${JIRA_TOKEN}" \
         -H "Content-Type: application/json" \
         --data "${request_data}" \
         --max-time "${GIT_MR_TIMEOUT}" \
