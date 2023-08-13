@@ -163,6 +163,11 @@ if ! declare -f __git_complete &>/dev/null; then
     fi
 fi
 
+# Exit if git completion is still missing
+if ! declare -f __git_complete &>/dev/null; then
+    return
+fi
+
 # Add completion for direct script usage
 __git_complete "git-mr" _git_mr
 
