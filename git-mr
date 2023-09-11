@@ -708,10 +708,10 @@ gitlab_merge_requests_search() {
     local search_term=$1;  [[ -n $search_term ]] || exit_error "$ERR_MR" "search_term required"
 
     local result
-    result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&order_by=created_at&sort=asc") || exit $?
+    result=$(gitlab_request "merge_requests?scope=all&state=all&view=simple&search=$(urlencode "$search_term")&in=title&per_page=50&order_by=created_at&sort=asc") || exit $?
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
-    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id})')
+    result=$(echo "$result" | jq -c 'map(select(.state != "closed") | {iid: .iid, title: .title, web_url: .web_url, state: .state, project_id: .project_id}) | sort_by(.state)')
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     echo "$result"
