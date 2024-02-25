@@ -134,6 +134,11 @@ full_sha() {
     git rev-parse "$(short_sha "$1")"
 }
 
+sha_link() {
+    local mr_url="some/project/-/merge_requests/1"
+    echo "[${1}](https://${GITLAB_DOMAIN}/${mr_url}/diffs?commit_id=$(git rev-parse "${1}"))"
+}
+
 ################################################################################
 # Git functions
 
@@ -355,7 +360,7 @@ full_sha() {
 @test "Shows commit with commit body" {
     sha2=$(short_sha "Feature test - 2")
 
-    run git_commit_extended "$sha2"
+    run git_commit_extended_console_display "$sha2"
 
     assert_output "$(cat <<- EOF
 		* **${sha2} Feature test - 2**..
@@ -483,8 +488,8 @@ full_sha() {
 }
 
 @test "Escapes regex literals" {
-    run regex_escape '[] \/ $ * . ^ []'
-    assert_output '\[\] \\\/ \$ \* \. \^ \[\]'
+    run regex_escape '[] \/ $ * . ^ ? []'
+    assert_output '\[\] \\\/ \$ \* \. \^ \? \[\]'
 }
 
 @test "Has read-only mode" {
@@ -856,9 +861,9 @@ full_sha() {
 @test "Generates MR description from commits" {
     load "test_helper/jira-mock.bash"
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2")
+    local c3sha=$(short_sha "Feature test - 3")
 
     GIT_MR_NO_COMMITS=1
     GIT_MR_EXTENDED=
@@ -889,7 +894,7 @@ full_sha() {
     GIT_MR_EXTENDED=1
     run mr_description
 
-    empty=""
+    local empty=""
     assert_output "$(cat <<- EOF
 		# [AB-123 This is an issue](https://mycompany.example.net/browse/AB-123)
 
@@ -975,10 +980,20 @@ full_sha() {
 }
 
 @test "Identifies first commit line in description" {
+
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
 * **472c4a8cb9 XY-1234 Pellentesque** {4}"
+    run mr_description_first_commit_line "$mr_description"
+    assert_output "3"
+
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}"
     run mr_description_first_commit_line "$mr_description"
     assert_output "3"
 }
@@ -987,6 +1002,7 @@ full_sha() {
     indent="  "
 
     # Standard commit list - Last description line is commit
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -994,7 +1010,17 @@ full_sha() {
     run mr_description_last_commit_line "$mr_description"
     assert_output "4"
 
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "4"
+
+
     # Standard commit list - Last non-empty description line is commit
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1003,8 +1029,19 @@ full_sha() {
 "
     run mr_description_last_commit_line "$mr_description"
     assert_output "4"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+
+"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "4"
+
 
     # Standard commit list - With additional global description
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1014,9 +1051,31 @@ full_sha() {
 Some Description {7}"
     run mr_description_last_commit_line "$mr_description"
     assert_output "4"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+
+
+Some Description {7}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "4"
 
 
     # Commits with extended description - Last description line is commit extended description
+    # Initial format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **431561fff0 XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+    # Proper merge request commit links format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1028,7 +1087,8 @@ ${indent}Pellentesque vulputate risus id posuere malesuada. {8}"
     run mr_description_last_commit_line "$mr_description"
     assert_output "8"
 
-    # (same with non-indented empty lines in extended description)
+    # (same with non-indented empty lines in extended description: {7})
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1039,8 +1099,21 @@ ${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
 ${indent}Pellentesque vulputate risus id posuere malesuada. {8}"
     run mr_description_last_commit_line "$mr_description"
     assert_output "8"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
 
     # Commits with extended description - Last non-empty description line is commit extended description
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1052,10 +1125,25 @@ ${indent}Pellentesque vulputate risus id posuere malesuada. {8}
 
 
 "
-    # (same with trailing indented line in extended description)
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+    # Proper merge request commit links format
+        mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+"
     run mr_description_last_commit_line "$mr_description"
     assert_output "8"
 
+    # (same with trailing indented line in extended description {9})
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1070,8 +1158,24 @@ ${indent}
 "
     run mr_description_last_commit_line "$mr_description"
     assert_output "9"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+${indent}
 
-    # (same with non-indented empty lines in extended description)
+
+"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "9"
+
+    # (same with non-indented empty lines in extended description {9-10})
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1085,8 +1189,24 @@ ${indent}Pellentesque vulputate risus id posuere malesuada. {8}
 "
     run mr_description_last_commit_line "$mr_description"
     assert_output "8"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+
 
     # Commits with extended description - With additional global description
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1098,8 +1218,21 @@ ${indent}Pellentesque vulputate risus id posuere malesuada. {8}
 Some global description. {9}"
     run mr_description_last_commit_line "$mr_description"
     assert_output "8"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+Some global description. {9}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
 
     # (same with additional blank lines before global description)
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
@@ -1114,13 +1247,46 @@ Nulla eget sem semper, scelerisque enim nec, pellentesque nisi. {11}
 ${indent}With unrelated indent {12}"
     run mr_description_last_commit_line "$mr_description"
     assert_output "8"
+    # Proper merge request commit links format
+        mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+${indent}
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+Nulla eget sem semper, scelerisque enim nec, pellentesque nisi. {11}
+${indent}With unrelated indent {12}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
 
     # (same with non-indented empty lines in extended description, and indented lines global description)
+    # Initial format
     mr_description="XY-1234 Some Feature {1}
 ## Commits {2}
 * **431561fff0 XY-1234 Donec id justo ut nisi** {3}
 ${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
 * **472c4a8cb9 XY-1234 Pellentesque** {5}
+${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
+
+${indent}Pellentesque vulputate risus id posuere malesuada. {8}
+
+
+Nulla eget sem semper, scelerisque enim nec, pellentesque nisi. {11}
+* Fusce vitae sem {12}
+${indent}non mi egestas dignissim {13}
+Nunc vitae {14}"
+    run mr_description_last_commit_line "$mr_description"
+    assert_output "8"
+    # Proper merge request commit links format
+    mr_description="XY-1234 Some Feature {1}
+## Commits {2}
+* **[a2678c36f3](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=a2678c36f307caedd20a11ecc6b3dc615b2bf7ed) XY-1234 Donec id justo ut nisi** {3}
+${indent}Curabitur eleifend elit in pellentesque dapibus. {4}
+* **[97278d35aa](https://${GITLAB_DOMAIN}/my/project/-/merge_requests/22/diffs?commit_id=97278d35aa2e62677bff1adf0a1824f0a0357ee3) XY-1234 Pellentesque** {4}
 ${indent}Duis bibendum lacus id lacus bibendum gravida. {6}
 
 ${indent}Pellentesque vulputate risus id posuere malesuada. {8}
@@ -1162,10 +1328,12 @@ End"
     assert_output "$(cat <<-EOF
 		# Title
 		## Commits
-		* **plop**..
+		* **plop**
 		* **new commit**..
 		EOF
     )"
+    # Note: mr_description_insert_new_commits does not handle trailing new line anymore.
+    # Commit lines are normalized by substition regexes in mr_update
 }
 
 @test "Updates MR description with new commits in new section" {
@@ -1174,9 +1342,30 @@ End"
 
     GIT_MR_UPDATE_NEW_SECTION=1
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
+
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
+
+    run mr_update <<< 'n'
+    assert_output "$(cat <<- EOF
+
+
+		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
+
+		## Commits
+
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
+		* **${c3sha}🔗 Feature test - descr 3**..
+
+		--------------------------------------------------------------------------------
+
+		   upgraded links: 1 🔗
+		EOF
+    )"
 
     # Amend last commit
     git reset --hard HEAD~1
@@ -1200,17 +1389,18 @@ End"
 
 		## Commits
 
-		* **${c1sha} Feature test - 1**..
-		* **${c2sha} Feature test - 2**..
-		* **${c3shaNew} Feature test - 3**..
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
+		* **${c3shaNew}🔗 Feature test - descr 3**..
 
 		## Update
 
-		* **${c4shaNew} Feature test - 4**..
-		* **${c5shaNew} Feature test - 5**..
+		* **${c4shaNew}🔗 Feature test - 4**..
+		* **${c5shaNew}🔗 Feature test - 5**..
 
 		--------------------------------------------------------------------------------
 
+		   upgraded links: 1 🔗
 		  updated commits: 1
 		      new commits: 2
 
@@ -1226,17 +1416,18 @@ End"
 
 		## Commits
 
-		* **${c1sha} Feature test - 1**..
-		* **${c2sha} Feature test - 2**..
-		* **${c3shaNew} Feature test - 3**..
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
+		* **${c3shaNew}🔗 Feature test - descr 3**..
 
 		## Cleanup & refactor
 
-		* **${c4shaNew} Feature test - 4**..
-		* **${c5shaNew} Feature test - 5**..
+		* **${c4shaNew}🔗 Feature test - 4**..
+		* **${c5shaNew}🔗 Feature test - 5**..
 
 		--------------------------------------------------------------------------------
 
+		   upgraded links: 1 🔗
 		  updated commits: 1
 		      new commits: 2
 
@@ -1255,26 +1446,15 @@ End"
     GIT_MR_EXTENDED=1
     GIT_MR_UPDATE_NEW_SECTION=
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
-
-    # Amend last commit
-    git reset --hard HEAD~1
-    git commit --allow-empty -m "Feature test - 3" -m "Updated"
-    c3shaNew=$(git rev-parse --short HEAD)
-
-    # Add new commits
-    git commit --allow-empty -m "Feature test - 4" -m "With extended message too"
-    c4shaNew=$(git rev-parse --short HEAD)
-    git commit --allow-empty -m "Feature test - 5"
-    c5shaNew=$(git rev-parse --short HEAD)
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
 
     # Ensure remote branch is up-to-date
     git-push gitlab feature/AB-123-test-feature --force
 
     run mr_update <<< 'n'
-    empty=""
+    local empty=""
     assert_output "$(cat <<-EOF
 
 
@@ -1282,19 +1462,58 @@ End"
 
 		## Commits
 
-		* **${c1sha} Feature test - 1**..
-		* **${c2sha} Feature test - 2**..
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
 		  This is my second commit..
-		* **${c3shaNew} Feature test - 3**..
+		* **${c3sha}🔗 Feature test - descr 3**..
 		  This is my third commit..
 		  ${empty}
 		  With an extended description
-		* **${c4shaNew} Feature test - 4**..
-		  With extended message too..
-		* **${c5shaNew} Feature test - 5**..
 
 		--------------------------------------------------------------------------------
 
+		   upgraded links: 1 🔗
+
+		EOF
+    )"
+
+    # Amend last commit
+    git reset --hard HEAD~1
+    git commit --allow-empty -m "Feature test - 3" -m "Updated"
+    local c3shaNew=$(git rev-parse --short HEAD)
+
+    # Add new commits
+    git commit --allow-empty -m "Feature test - 4" -m "With extended message too"
+    local c4shaNew=$(git rev-parse --short HEAD)
+    git commit --allow-empty -m "Feature test - 5"
+    local c5shaNew=$(git rev-parse --short HEAD)
+
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
+
+    run mr_update <<< 'n'
+    local empty=""
+    assert_output "$(cat <<-EOF
+
+
+		[AB-123 Test issue](https://mycompany.example.net/browse/AB-123)
+
+		## Commits
+
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
+		  This is my second commit..
+		* **${c3shaNew}🔗 Feature test - descr 3**..
+		  This is my third commit..
+		  ${empty}
+		  With an extended description
+		* **${c4shaNew}🔗 Feature test - 4**..
+		  With extended message too..
+		* **${c5shaNew}🔗 Feature test - 5**..
+
+		--------------------------------------------------------------------------------
+
+		   upgraded links: 1 🔗
 		  updated commits: 1
 		      new commits: 2
 
@@ -1310,13 +1529,16 @@ End"
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
+
+    # Ensure remote branch is up-to-date
+    git-push gitlab feature/AB-123-test-feature --force
 
     # Add new commit
     git commit --allow-empty -m "Feature test - 4"
-    c4shaNew=$(git rev-parse --short HEAD)
+    local c4shaNew=$(git rev-parse --short HEAD)
 
     run mr_update <<< 'n'
     assert_output "$(cat <<- EOF
@@ -1326,14 +1548,14 @@ End"
 
 		## Commits
 
-		* **${c1sha} Feature test - 1**..
-		* **${c2sha} Feature test - 2**..
-		* **${c3sha} Feature test - 3**..
-		* **${c4shaNew} Feature test - 4**..
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
+		* **${c3sha}🔗 Feature test - descr 3**..
+		* **${c4shaNew}🔗 Feature test - 4**..
 
 		--------------------------------------------------------------------------------
 
-		  updated commits: 0
+		   upgraded links: 1 🔗
 		      new commits: 1
 
 		Remote branch on gitlab is not up-to-date with local branch feature/AB-123-test-feature.
@@ -1348,14 +1570,14 @@ End"
 
 		## Commits
 
-		* **${c1sha} Feature test - 1**..
-		* **${c2sha} Feature test - 2**..
-		* **${c3sha} Feature test - 3**..
-		* **${c4shaNew} Feature test - 4**..
+		* **${c1sha}🔗✔ Feature test - descr 1**..
+		* **${c2sha}🔗 Feature test - descr 2**..
+		* **${c3sha}🔗 Feature test - descr 3**..
+		* **${c4shaNew}🔗 Feature test - 4**..
 
 		--------------------------------------------------------------------------------
 
-		  updated commits: 0
+		   upgraded links: 1 🔗
 		      new commits: 1
 
 		Remote branch on gitlab is not up-to-date with local branch feature/AB-123-test-feature.
@@ -1371,17 +1593,17 @@ End"
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
 
     # Create new branch which will be detected as base
-    baseCommit=$(short_sha "Feature base - 3")
+    local baseCommit=$(short_sha "Feature base - 3")
     git branch newbase "$baseCommit"
 
     # Add new commit
     git commit --allow-empty -m "Feature test - 4"
-    c4shaNew=$(git rev-parse --short HEAD)
+    local c4shaNew=$(git rev-parse --short HEAD)
 
     # Ensure remote branch is up-to-date
     git-push gitlab feature/AB-123-test-feature --force
@@ -1390,7 +1612,7 @@ End"
     assert_output --partial "$(cat <<-EOF
 		--------------------------------------------------------------------------------
 
-		  updated commits: 0
+		   upgraded links: 1 🔗
 		      new commits: 1
 
 		Target branch 'newbase' does not exist on remote.
@@ -1407,19 +1629,19 @@ End"
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
 
     # simulate commit ref base (when 1st possible merge base is used)
-    baseCommit=$(short_sha "Feature base - 3")
+    local baseCommit=$(short_sha "Feature base - 3")
     git_base_branch() {
         echo "$baseCommit"
     }
 
     # Add new commit
     git commit --allow-empty -m "Feature test - 4"
-    c4shaNew=$(git rev-parse --short HEAD)
+    local c4shaNew=$(git rev-parse --short HEAD)
 
     # Ensure remote branch is up-to-date
     git-push gitlab feature/AB-123-test-feature --force
@@ -1428,7 +1650,7 @@ End"
     assert_output --partial "$(cat <<-EOF
 		--------------------------------------------------------------------------------
 
-		  updated commits: 0
+		   upgraded links: 1 🔗
 		      new commits: 1
 
 
@@ -1447,9 +1669,9 @@ End"
     load "test_helper/gitlab-mock-mr-description-simple.bash"
     load "test_helper/gitlab-mock-mr-update.bash"
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
 
     # Create new branch which will be detected as base
     baseCommit=$(short_sha "Feature base - 3")
@@ -1459,8 +1681,8 @@ End"
     assert_output --partial "$(cat <<-EOF
 		--------------------------------------------------------------------------------
 
+		   upgraded links: 1 🔗
 		  updated commits: 2
-		      new commits: 0
 
 		  unknown commits: 1
 
@@ -1479,24 +1701,24 @@ End"
     GIT_MR_EXTENDED=1
     GIT_MR_REPLACE_COMMITS=1
 
-    c1sha=$(short_sha "Feature test - 1")
-    c2sha=$(short_sha "Feature test - 2")
-    c3sha=$(short_sha "Feature test - 3")
+    local c1sha=$(short_sha "Feature test - 1")
+    local c2sha=$(short_sha "Feature test - 2"); local c2href=$(sha_link "$c2sha")
+    local c3sha=$(short_sha "Feature test - 3"); local c3href=$(sha_link "$c3sha")
 
     # Amend first commit
     git reset --soft "$c1sha"
     git commit --amend --allow-empty -m "Feature test - new 1" -m "Updated"
-    c1shaNew=$(git rev-parse --short HEAD)
+    local c1shaNew=$(git rev-parse --short HEAD)
 
     # Add new commit
     git commit --allow-empty -m "Feature test - new 2" -m "With extended message too"
-    c2shaNew=$(git rev-parse --short HEAD)
+    local c2shaNew=$(git rev-parse --short HEAD)
 
     # Ensure remote branch is up-to-date
     git-push gitlab feature/AB-123-test-feature --force
 
     run mr_update <<< 'n'
-    empty=""
+    local empty=""
     assert_output "$(cat <<-EOF
 
 
@@ -1504,14 +1726,13 @@ End"
 
 		## Commits
 
-		* **${c1shaNew} Feature test - new 1**..
+		* **${c1shaNew}🔗 Feature test - new 1**..
 		  Updated..
-		* **${c2shaNew} Feature test - new 2**..
+		* **${c2shaNew}🔗 Feature test - new 2**..
 		  With extended message too..
 
 		--------------------------------------------------------------------------------
 
-		  updated commits: 0
 		      new commits: 2
 
 		EOF
