@@ -1832,8 +1832,10 @@ mr_menu_replace_description() {
     [[ $menu_start -gt 0 && $menu_end -gt "$menu_start" ]] &&
         has_menu=1
 
+    local menu_was_output=0
+
     # Iterate over description lines and insert/replace menu
-    local i=1 mr_description_line
+    local i=1 mr_description_line prev_description_line
     while IFS=$'\n' read -r mr_description_line; do
         if [[ $has_menu -eq 1 ]]; then
             if [[ $i -lt "$menu_start" || $i -gt "$menu_end" ]]; then
@@ -1844,20 +1846,30 @@ mr_menu_replace_description() {
                 if [[ $i -eq "$menu_end" ]]; then
                     echo_debug "Replacing menu"
                     echo "$menu_content"
+                    menu_was_output=1
                 fi
             fi
         else
             # output non-menu line
             echo "$mr_description_line"
             # insert menu once
-            if [[ $i -eq "2" ]]; then
+            if [[ $menu_was_output -eq 0 && -z "$mr_description_line" && $i -gt 1 ]]; then
                 echo_debug "Inserting menu"
                 echo "$menu_content"
                 echo
+                menu_was_output=1
             fi
         fi
+
+        prev_description_line="$mr_description_line"
         ((i += 1))
     done < <(echo "$mr_description")
+
+    if [[ $menu_was_output -eq 0 ]]; then
+        echo_debug "Inserting menu (failsafe)"
+        [[ -n "$prev_description_line" ]] && echo
+        echo "$menu_content"
+    fi
 }
 
 mr_menu_colorize() {

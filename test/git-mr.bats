@@ -1749,6 +1749,12 @@ End"
 
 @test "Replaces menu in MR descriptions" {
 
+    local menu_content="## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    # *** Replace menu in description ***
     mr_description="# [AB-123 Test feature](https://example.net/AB-123)
 
 This is an example.
@@ -1768,13 +1774,6 @@ This is an example.
 
 --------------------------------------------------------------------------------"
 
-    menu_content="## Menu
-
-* New Menu item 1
-* New Menu item 2
-
---------------------------------------------------------------------------------"
-
     run mr_menu_replace_description "$mr_description" "$menu_content"
     assert_output "# [AB-123 Test feature](https://example.net/AB-123)
 
@@ -1783,10 +1782,8 @@ This is an example.
 --------------------------------------------------------------------------------
 
 ## Menu
-
 * New Menu item 1
 * New Menu item 2
-
 --------------------------------------------------------------------------------
 
 ## Commits
@@ -1796,7 +1793,7 @@ This is an example.
 
 --------------------------------------------------------------------------------"
 
-
+    # *** Insert menu in description ***
     mr_description="# [AB-123 Test feature](https://example.net/AB-123)
 
 This is an example without menu.
@@ -1806,21 +1803,12 @@ This is an example without menu.
 * Lorem
 * Ipsum"
 
-    menu_content="## Menu
-
-* New Menu item 1
-* New Menu item 2
-
---------------------------------------------------------------------------------"
-
     run mr_menu_replace_description "$mr_description" "$menu_content"
     assert_output "# [AB-123 Test feature](https://example.net/AB-123)
 
 ## Menu
-
 * New Menu item 1
 * New Menu item 2
-
 --------------------------------------------------------------------------------
 
 This is an example without menu.
@@ -1829,6 +1817,54 @@ This is an example without menu.
 
 * Lorem
 * Ipsum"
+
+    # *** Insert menu in empty description ***
+
+    mr_description=""
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    # *** Insert menu in minimal description ***
+
+    mr_description="This is a merge request."
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "This is a merge request.
+
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    mr_description="This is a merge request
+paragraph."
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "This is a merge request
+paragraph.
+
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    mr_description="This is
+a merge request
+longer
+paragraph."
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "This is
+a merge request
+longer
+paragraph.
+
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
 }
 
 ################################################################################
