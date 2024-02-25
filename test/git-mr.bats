@@ -1658,8 +1658,13 @@ End"
 @test "Searches MRs across projects to build menu" {
     load "test_helper/gitlab-mock-menu.bash"
 
-    run mr_menu
+    run mr_menu XY-789
+    assert_output "$(cat <<- EOF
+		No merge requests found for 'XY-789'.
+		EOF
+    )"
 
+    run mr_menu
     assert_output "$(cat <<- EOF
 
 		================================================================================
@@ -1673,6 +1678,33 @@ End"
 		* Project B: [MR 21 title](https://example.net/21)
 
 		--------------------------------------------------------------------------------
+		EOF
+    )"
+}
+
+@test "Prints menu title" {
+    run mr_menu_print_title "AB-123" "" "" "$(echo -e "a\nb\nc")"
+    assert_output "$(cat <<- EOF
+		================================================================================
+		 AB-123 (3 merge requests)
+		================================================================================
+		EOF
+    )"
+
+    run mr_menu_print_title "AB-123" "" "" "$(echo -e "a\nb\nc")" 1
+    assert_output "$(cat <<- EOF
+		================================================================================
+		 AB-123 (merge request 1/3)
+		================================================================================
+		EOF
+    )"
+
+    run mr_menu_print_title "AB-123" "My Issue" "https://example.com/AB-123" "$(echo -e "a\nb\nc")"
+    assert_output "$(cat <<- EOF
+		================================================================================
+		 AB-123 My Issue  (3 merge requests)
+		 ⇒ https://example.com/AB-123
+		================================================================================
 		EOF
     )"
 }
