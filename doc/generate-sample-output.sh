@@ -166,6 +166,45 @@ $(mr_print_status "$mr" "$threads")
 EOF
 }
 
+sample_mr_update_links() {
+    fake_prompt "git mr update"
+
+    local mr='{
+        "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["Testing","My Team"], "target_branch": "main",
+        "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
+        "head_pipeline": {"status":"running", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
+    }'
+
+    local threads='1	unresolved:false	note_id:2
+2	unresolved:true	note_id:2'
+
+    cat << EOF
+
+$(mr_print_title "$mr_title" "$mr_url")
+
+$(markdown_title "$ticket_link")
+
+Vivamus venenatis tortor et neque sollicitudin, eget suscipit est malesuada.
+Suspendisse nec odio id arcu sagittis pulvinar ut nec lacus.
+
+Sed non nulla ac metus congue consectetur et vel magna.
+
+## Commits
+
+* **$(c_same "78330c9")🔗✔ In vulputate quam ac ultrices volutpat**
+* **$(c_same "0010a6a")🔗✔ Curabitur vel purus sed tortor finibus posuere**
+* **$(c_same "aac348f")🔗✔ Aenean sed sem hendrerit ex egestas tincidunt**
+
+--------------------------------------------------------------------------------
+
+   upgraded links: $(c_same "3") 🔗
+
+$(c_question "Do you want to update the merge request description?") [y/N]
+
+EOF
+}
+
 sample_mr_merge() {
     fake_prompt "git mr merge"
 
@@ -375,6 +414,7 @@ if [[ "$#" -gt 0 ]]; then
                 ;;
             update)
                 sample_mr_update
+                sample_mr_update_links
                 ;;
             menu)
                 sample_mr_menu
@@ -396,6 +436,7 @@ else
     sample_mr_status
 
     sample_mr_update
+    sample_mr_update_links
 
     sample_mr_menu
     sample_mr_menu_status

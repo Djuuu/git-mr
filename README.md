@@ -339,6 +339,24 @@ You can also update the source branch if it is different from the current one.
 
 ![git mr update](doc/git-mr-update.png)
 
+#### Note on commit links
+
+The initial merge request description lists commit SHA-1 and and message in a simple format.
+
+When Gitlab recognizes a partial Git SHA-1 in a description, it will automatically create a link to the commit,
+but this link has no reference to the current merge request:
+> `https://myapp.gitlab.com/my-project/-/commit/0a1b2c3d4e5f`
+
+If a comment is created from this commit page, it might appear in the merge request at first, 
+but **it will disappear as soon as the branch is rebased**.
+
+Once the merge request exists, `git mr update` will convert SHA-1 references to **links to the commit in the merge request diff view**:
+> `https://myapp.gitlab.com/my-project/-/merge_requests/123/diffs?commit_id=0a1b2c3d4e5f`
+
+This view allows navigating through the merge request commits, and comments left on this page will remain attached to the merge request.
+
+![git mr update links](doc/git-mr-update-links.png)
+
 ----------------------------------------------------------------
 
 ### `git mr menu`

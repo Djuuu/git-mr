@@ -113,6 +113,13 @@ git_commits() {
     git log --oneline --reverse --no-decorate "${target_branch}..${source_branch}"
 }
 
+git_commits_hybrid() {
+    local source_branch=${1:-$(git_current_branch)}
+    local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
+
+    git log --reverse --format="%H %h %s" "${target_branch}".."${source_branch}"
+}
+
 git_commits_extended() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
@@ -129,7 +136,7 @@ git_commits_extended() {
         sed -r "s/${end}$//g" # remove trailing body end for bodies without trailing blank line
 }
 
-git_commit_extended() {
+git_commit_extended_console_display() {
     local revision=${1:-HEAD}
 
     local prefix="* ${MD_BOLD}"
@@ -371,7 +378,7 @@ jq_build() {
 
 # escape regex special characters for literal usage
 regex_escape() {
-    echo "${1}" | sed -e 's/[]\/$*.^[]/\\&/g'
+    echo "${1}" | sed -e 's/[]\/$*.^?[]/\\&/g'
 }
 
 open_in_browser() {
@@ -1289,8 +1296,11 @@ mr_print_status() {
 mr_description_first_commit_line() {
     local mr_description=$1
 
-    local first_commit_line
-    first_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' -m 1 | cut -d: -f1)
+    local first_commit_line; first_commit_line=$(
+        echo "$mr_description" |
+            grep -Pn "$_git_mr_commit_regex" -m 1 |
+            cut -d: -f1
+    )
 
     echo "$first_commit_line"
 }
@@ -1298,8 +1308,12 @@ mr_description_first_commit_line() {
 mr_description_last_commit_line() {
     local mr_description=$1
 
-    local last_commit_line
-    last_commit_line=$(echo "$mr_description" | grep -Pn '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' | tail -n1 | cut -d: -f1)
+    local last_commit_line; last_commit_line=$(
+        echo "$mr_description" |
+            grep -Pn "$_git_mr_commit_regex" |
+            tail -n1 |
+            cut -d: -f1
+    )
 
     local description_after_last_commit
     description_after_last_commit=$(echo "$mr_description" | tail -n "+$((last_commit_line + 1))")
@@ -1328,20 +1342,10 @@ mr_description_insert_new_commits() {
 
     [[ -n $last_commit_line ]] || last_commit_line=$(mr_description_last_commit_line "$mr_description")
 
-    local description_length; description_length=$(echo "$mr_description" | wc -l)
-
     # Iterate over description lines
-    local i=1 mr_description_line trailing_br
+    local i=1 mr_description_line
     while IFS=$'\n' read -r mr_description_line; do
-
-        # Add trailing markdown newline (that would have been trimmes by Gitlab) to list item on last line.
-        # (As other commit lines, to prepare for an extended description going on the next line.)
-        [[ $i -eq $description_length && $i -eq $last_commit_line ]] &&
-            grep -q '^* ' <<< "$mr_description_line" &&
-            trailing_br="$MD_BR"
-
-        echo "${mr_description_line}${trailing_br}"
-
+        echo "${mr_description_line}"
         # Insert new commits
         if [[ $i -eq $last_commit_line ]]; then
             mr_description_print_new_commits "$new_commits" "$for_terminal"
@@ -2057,17 +2061,27 @@ mr_update() {
 
     # Init commit lists
 
-    local commit_messages; commit_messages=$(git_commits "$source_branch" "$target_branch")
+    local commit_reference_combo; commit_reference_combo=$(git_commits_hybrid "$source_branch" "$target_branch")
 
-    local current_commits; current_commits=$(echo "$commit_messages" | cut -d ' ' -f1)
-    local old_commits;     old_commits=$(echo "$mr_description" |
-        grep -Po '^[^0-9a-fA-F]*[0-9a-fA-F]{7,}\s' |
-        sed -r 's/^[^0-9a-fA-F]*([0-9a-fA-F]{7,})\s/\1/g')
+    local current_commits_long; current_commits_long=$(echo "$commit_reference_combo" | cut -d ' ' -f1)
+    local current_commits_short; current_commits_short=$(echo "$commit_reference_combo" | cut -d ' ' -f2)
+    local commit_messages; commit_messages=$(echo "$commit_reference_combo" | cut -d ' ' -f3-)
 
-    local old_commits_array current_commits_array oIFS
+    local old_commit_lines; old_commit_lines=$(echo "$mr_description" | grep -P "${_git_mr_commit_regex}")
+
+    local old_commits;      old_commits=$(echo "$old_commit_lines" |
+        sed -r -e "s/^${_git_mr_commit_prefix}(${_git_mr_commit_ref})\s.*/\1/g" \
+               -e "s/^${_git_mr_commit_prefix}\[(${_git_mr_commit_ref})\]\(http[^)]+\)\s.*/\1/g")
+
+    local old_commits_array oIFS
     oIFS=$IFS; IFS=$'\n'
         # shellcheck disable=SC2206
-        current_commits_array=($current_commits)
+        current_commits_long_array=($current_commits_long)
+        # shellcheck disable=SC2206
+        current_commits_short_array=($current_commits_short)
+        # shellcheck disable=SC2206
+        current_commits_messages_array=($commit_messages)
+
         # shellcheck disable=SC2206
         old_commits_array=($old_commits)
     IFS=$oIFS
@@ -2090,7 +2104,7 @@ mr_update() {
     fi
 
     local updated_commit_count=0
-    local new_commit=
+    local upgraded_link_count=0
     local new_commit_messages_display=()
     local new_commit_messages_content=()
 
@@ -2103,43 +2117,94 @@ mr_update() {
     local wrongColor="lightred"
 
     # Iterate over commit lists, compare sha-1 and update description
-    for i in ${!current_commits_array[*]}; do
+    for i in ${!current_commits_long_array[*]}; do
+        
+        local oldSha=${old_commits_array[$i]}
 
-        local curr=${current_commits_array[$i]}
-        local old=${old_commits_array[$i]}
+        local currSha=${current_commits_short_array[$i]}
+        local currShaaaa=${current_commits_long_array[$i]}
+        local currMsg=${current_commits_messages_array[$i]}
+        
+        local oldCommitUrl="$mr_url/diffs?commit_id=$oldSha"
+        local currCommitUrl="$mr_url/diffs?commit_id=$currShaaaa"
 
-        if [[ -n $old ]]; then
-            if [[ $old == "$curr" ]]; then
-                # same sha-1 - only decorate
-                new_description_display=${new_description_display//"$old"/"$(colorize "$curr" "$sameColor")"}
-                new_description_content=${new_description_content//"$old"/"$curr"}
+        local msgSuffix matchOldCommitUrl matchOldLogOrLink matchOldLog matchLink
+
+        msgSuffix="(.*)($(regex_escape "$MD_BOLD"))($(regex_escape "$MD_BR"))?"
+        matchOldCommitUrl="$(regex_escape "$oldCommitUrl")[0-9a-fA-F]*"
+
+        matchOldLogOrLink="^(${_git_mr_commit_prefix})(${oldSha}|\[${oldSha}\]\(${matchOldCommitUrl}\)) ${msgSuffix}"
+        matchOldLog="^(${_git_mr_commit_prefix})(${oldSha}) ${msgSuffix}"
+        matchLink="^(${_git_mr_commit_prefix})(\[${oldSha}\]\(${matchOldCommitUrl}\)) ${msgSuffix}"
+
+        local consoleShaColor
+        if [[ -n $oldSha ]]; then if [[ $oldSha == "$currSha" ]]; then
+            consoleShaColor="$sameColor";        else
+            consoleShaColor="$updatedColor"; fi; else
+            consoleShaColor="$newColor";     fi
+
+        local forConsole_converted forConsole_link forDescription forDescriptionNew
+        forConsole_converted="\1$(colorize "$currSha" "$consoleShaColor")🔗✔ \3\4${MD_BR}"
+        forConsole_link="\1$(colorize "$currSha" "$consoleShaColor")🔗 \3\4${MD_BR}"
+        forDescription="\1[$currSha]($(regex_escape "$currCommitUrl")) \3\4${MD_BR}"
+        forDescriptionNew="\1[$currSha]($(regex_escape "$currCommitUrl")) \3"
+
+        if [[ -n $oldSha ]]; then
+            # Existing commit
+            # echo "🚧 Existing"
+            new_description_display_before="$new_description_display"
+
+            # shellcheck disable=SC2001
+            new_description_display=$(echo "$new_description_display" | sed -r -e "s/${matchOldLog}/${forConsole_converted}/g")
+            if [[ "$new_description_display" != "$new_description_display_before" ]]; then
+                upgraded_link_count=$((upgraded_link_count + 1))
             else
-                # different sha-1 - replace & decorate
-                new_description_display=${new_description_display//"$old"/"$(colorize "$curr" "$updatedColor")"}
-                new_description_content=${new_description_content//"$old"/"$curr"}
+                # shellcheck disable=SC2001
+                new_description_display=$(echo "$new_description_display" | sed -r -e "s/${matchLink}/${forConsole_link}/g")
+            fi
+
+            # shellcheck disable=SC2001
+            new_description_content=$(echo "$new_description_content" | sed -r -e "s/${matchOldLogOrLink}/${forDescription}/g")
+
+            if [[ $oldSha != "$currSha" ]]; then
+                # Updated commit
                 updated_commit_count=$((updated_commit_count + 1))
             fi
         else
-            # new commit
-            [[ $GIT_MR_EXTENDED -eq 1 ]] &&
-                new_commit="$(git_commit_extended "$curr")" ||
-                new_commit="$(echo "$commit_messages" | grep "$curr")"
+            # New commit
+            local new_commit_line_display new_commit_line_content
 
-            new_commit_messages_display+=("${new_commit//"$curr"/$(colorize "$curr" "$newColor")}")
-            new_commit_messages_content+=("$new_commit")
+            if [[ $GIT_MR_EXTENDED -eq 1 ]]; then
+                # shellcheck disable=SC2001
+                new_commit_line_display="$(git_commit_extended_console_display "$currSha")"
+                # shellcheck disable=SC2001
+                new_commit_line_content="$(echo "$new_commit_line_display" | sed -r -e "s/^(\* \*\*)(${currSha}) (.*)/${forDescriptionNew}/")"
+                # shellcheck disable=SC2001
+                new_commit_line_display="$(echo "$new_commit_line_display" |
+                    sed -r -e "s/^(\* \*\*)(${currSha}) (.*)$/\1$(colorize "$currSha" "$consoleShaColor")🔗 \3/"
+                )"
+            else
+                new_commit_line_display="$(colorize "$currSha" "$consoleShaColor")🔗 ${currMsg}"
+                new_commit_line_content="[$currSha]($currCommitUrl) ${currMsg}"
+            fi
+
+            new_commit_messages_display+=("$new_commit_line_display")
+            new_commit_messages_content+=("$new_commit_line_content")
         fi
     done
 
     local old_commit_count=${#old_commits_array[@]}
-    local current_commit_count=${#current_commits_array[@]}
+    local current_commit_count=${#current_commits_short_array[@]}
     local new_commit_count=${#new_commit_messages_content[@]}
     local unknown_commit_count=$((old_commit_count - current_commit_count))
 
     if [[ $unknown_commit_count -gt 0 ]]; then
         for (( i = current_commit_count; i < old_commit_count; i++ )); do
-            old="${old_commits_array[$i]}"
-            new_description_display=${new_description_display//"$old"/"$(colorize "$old" "$wrongColor")"}
+            oldSha="${old_commits_array[$i]}"
+            new_description_display=${new_description_display//"$oldSha"/"$(colorize "$oldSha" "$wrongColor")"}
         done
+    else
+        unknown_commit_count=0
     fi
 
     # implode arrays
@@ -2163,8 +2228,15 @@ mr_update() {
     echo
     echo "--------------------------------------------------------------------------------"
     echo
-    echo "  updated commits: $(colorize "$updated_commit_count" "$updatedColor")"
-    echo "      new commits: $(colorize "$new_commit_count"     "$newColor")"
+    if [[ $upgraded_link_count -gt 0 ]]; then
+        echo "   upgraded links: $(colorize "$upgraded_link_count" "$sameColor") 🔗"
+    fi
+    if [[ $updated_commit_count -gt 0 ]]; then
+        echo "  updated commits: $(colorize "$updated_commit_count" "$updatedColor")"
+    fi
+    if [[ $new_commit_count -gt 0 ]]; then
+        echo "      new commits: $(colorize "$new_commit_count"     "$newColor")"
+    fi
     if [[ $unknown_commit_count -gt 0 ]]; then
         echo
         echo "  unknown commits: $(colorize "$unknown_commit_count" "$wrongColor")"
@@ -2181,7 +2253,7 @@ mr_update() {
         echo_error
     fi
 
-    if [[ $((updated_commit_count + new_commit_count)) -gt 0 ]]; then
+    if [[ $((upgraded_link_count + updated_commit_count + new_commit_count)) -gt 0 ]]; then
         update_prompt=1
 
         local remote; remote=$(gitlab_remote)
@@ -2689,6 +2761,11 @@ MD_BR=${MD_BR="  "} # Markdown line break
 GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
 GIT_MR_MENU_END=${GIT_MR_MENU_END:-"--------------------------------------------------------------------------------"}
 GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
+
+_git_mr_commit_prefix='[^0-9a-fA-F]*'
+_git_mr_commit_ref='[0-9a-fA-F]{7,}'
+_git_mr_commit_href="\[${_git_mr_commit_ref}\]\(http[^)]+\)"
+_git_mr_commit_regex="^${_git_mr_commit_prefix}(${_git_mr_commit_ref}|${_git_mr_commit_href})\s"
 
 # Custom file descriptors
 git_mr_fd_mr=${GIT_MR_FD_MR=}
