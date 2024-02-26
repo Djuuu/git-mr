@@ -341,7 +341,7 @@ You can also update the source branch if it is different from the current one.
 
 #### Note on commit links
 
-The initial merge request description lists commit SHA-1 and and message in a simple format.
+The initial merge request description lists commit SHA-1 and message in a simple format.
 
 When Gitlab recognizes a partial Git SHA-1 in a description, it will automatically create a link to the commit,
 but this link has no reference to the current merge request:
