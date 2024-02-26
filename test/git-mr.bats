@@ -1658,8 +1658,13 @@ End"
 @test "Searches MRs across projects to build menu" {
     load "test_helper/gitlab-mock-menu.bash"
 
-    run mr_menu
+    run mr_menu XY-789
+    assert_output "$(cat <<- EOF
+		No merge requests found for 'XY-789'.
+		EOF
+    )"
 
+    run mr_menu
     assert_output "$(cat <<- EOF
 
 		================================================================================
@@ -1668,17 +1673,88 @@ End"
 
 		## Menu
 
-		* Project C: [MR 31 title](https://example.net/31)
-		* Project A: [MR 11 title](https://example.net/11)
-		* Project B: [MR 21 title](https://example.net/21)
+		* Project C: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+		* Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+		* Project B: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21)
 
 		--------------------------------------------------------------------------------
 		EOF
     )"
 }
 
+@test "Prints menu title" {
+    run mr_menu_print_title "AB-123" "" "" "$(echo -e "a\nb\nc")"
+    assert_output "$(cat <<- EOF
+		================================================================================
+		 AB-123 (3 merge requests)
+		================================================================================
+		EOF
+    )"
+
+    run mr_menu_print_title "AB-123" "" "" "$(echo -e "a\nb\nc")" 1
+    assert_output "$(cat <<- EOF
+		================================================================================
+		 AB-123 (merge request 1/3)
+		================================================================================
+		EOF
+    )"
+
+    run mr_menu_print_title "AB-123" "My Issue" "https://example.com/AB-123" "$(echo -e "a\nb\nc")"
+    assert_output "$(cat <<- EOF
+		================================================================================
+		 AB-123 My Issue  (3 merge requests)
+		 ⇒ https://example.com/AB-123
+		================================================================================
+		EOF
+    )"
+}
+
+@test "Prints menu status" {
+    load "test_helper/gitlab-mock-menu.bash"
+    load "test_helper/jira-mock.bash"
+
+    run mr_menu_status "AB-123" "$(mr_menu_merge_requests "AB-123")"
+    assert_output "$(cat <<-EOF
+
+		================================================================================
+		 AB-123 This is an issue  (3 merge requests)
+		 ⇒ https://mycompany.example.net/browse/AB-123
+		================================================================================
+
+		* Project C: MR 31 title
+		  ⇒ https://gitlab.example.net/proj-C/-/merge_requests/31
+
+		   🏷  [Accepted]                                                      (↣ main)
+
+		   👍  3   👎  0                                CI: ⏰       Can be merged: ✔
+
+
+		* Project A: MR 11 title
+		  ⇒ https://gitlab.example.net/proj-A/-/merge_requests/11
+
+		   🏷  [QA]                                                            (↣ main)
+
+		   👍  2   👎  0                                CI: ⏱       Can be merged: ✔
+
+
+		* Project B: MR 21 title
+		  ⇒ https://gitlab.example.net/proj-B/-/merge_requests/21
+
+		   🏷  [Review]                                                        (↣ main)
+
+		   👍  0   👎  1                                CI: ❌       Can be merged: ❌
+		EOF
+    )"
+}
+
 @test "Replaces menu in MR descriptions" {
 
+    local menu_content="## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    # *** Replace menu in description ***
     mr_description="# [AB-123 Test feature](https://example.net/AB-123)
 
 This is an example.
@@ -1698,13 +1774,6 @@ This is an example.
 
 --------------------------------------------------------------------------------"
 
-    menu_content="## Menu
-
-* New Menu item 1
-* New Menu item 2
-
---------------------------------------------------------------------------------"
-
     run mr_menu_replace_description "$mr_description" "$menu_content"
     assert_output "# [AB-123 Test feature](https://example.net/AB-123)
 
@@ -1713,10 +1782,8 @@ This is an example.
 --------------------------------------------------------------------------------
 
 ## Menu
-
 * New Menu item 1
 * New Menu item 2
-
 --------------------------------------------------------------------------------
 
 ## Commits
@@ -1726,7 +1793,7 @@ This is an example.
 
 --------------------------------------------------------------------------------"
 
-
+    # *** Insert menu in description ***
     mr_description="# [AB-123 Test feature](https://example.net/AB-123)
 
 This is an example without menu.
@@ -1736,21 +1803,12 @@ This is an example without menu.
 * Lorem
 * Ipsum"
 
-    menu_content="## Menu
-
-* New Menu item 1
-* New Menu item 2
-
---------------------------------------------------------------------------------"
-
     run mr_menu_replace_description "$mr_description" "$menu_content"
     assert_output "# [AB-123 Test feature](https://example.net/AB-123)
 
 ## Menu
-
 * New Menu item 1
 * New Menu item 2
-
 --------------------------------------------------------------------------------
 
 This is an example without menu.
@@ -1759,6 +1817,54 @@ This is an example without menu.
 
 * Lorem
 * Ipsum"
+
+    # *** Insert menu in empty description ***
+
+    mr_description=""
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    # *** Insert menu in minimal description ***
+
+    mr_description="This is a merge request."
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "This is a merge request.
+
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    mr_description="This is a merge request
+paragraph."
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "This is a merge request
+paragraph.
+
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
+    mr_description="This is
+a merge request
+longer
+paragraph."
+    run mr_menu_replace_description "$mr_description" "$menu_content"
+    assert_output "This is
+a merge request
+longer
+paragraph.
+
+## Menu
+* New Menu item 1
+* New Menu item 2
+--------------------------------------------------------------------------------"
+
 }
 
 ################################################################################

@@ -1603,16 +1603,23 @@ mr_menu_contents() {
 
 mr_menu_print_title() {
     local issue_code=$1
-    local menu_items=$2
-    local current_index=$3
+    local issue_title=$2
+    local issue_url=$3
+    local menu_items=$4
+    local current_index=$5
 
     local search_url; search_url="https://${GITLAB_DOMAIN}/dashboard/merge_requests?scope=all&state=all&search=$(urlencode "$issue_code")&in=title&sort=created_asc"
     local mr_count; mr_count=$(echo "$menu_items" | wc -l | tr -d ' ')
 
     echo "================================================================================"
-    [[ -z $current_index ]] &&
-        echo " $(terminal_link "$search_url" "$issue_code") (${mr_count} merge request$([[ $mr_count -gt 1 ]] && echo 's'))" ||
-        echo " $(terminal_link "$search_url" "$issue_code") (merge request ${current_index}/${mr_count})"
+    if [[ -n $issue_title ]] && [[ -n $issue_url ]]; then
+        echo " $(terminal_link "$search_url" "$issue_code") $(terminal_link "$issue_url" "$issue_title")  (${mr_count} merge request$([[ $mr_count -gt 1 ]] && echo 's'))"
+        has_links || echolor " ⇒ $issue_url" "midgray"
+    else
+        [[ -z $current_index ]] &&
+            echo " $(terminal_link "$search_url" "$issue_code") (${mr_count} merge request$([[ $mr_count -gt 1 ]] && echo 's'))" ||
+            echo " $(terminal_link "$search_url" "$issue_code") (merge request ${current_index}/${mr_count})"
+    fi
     echo "================================================================================"
 }
 
@@ -1620,8 +1627,16 @@ mr_menu_status() {
     local issue_code=$1
     local menu_items=$2
 
+    local issue_content issue_key issue_title issue_url
+    issue_content=$(jira_ticket_data "$issue_code")
+    eval "$(echo "$issue_content" | jq -r '
+        "issue_key="   + (.key            // empty | @sh) + ";\n" +
+        "issue_title=" + (.fields.summary // empty | @sh) + ";\n"
+    ')"
+    [[ -n $issue_title ]] && issue_url="https://${JIRA_INSTANCE}/browse/${issue_key}"
+
     echo
-    mr_menu_print_title "$issue_code" "$menu_items"
+    mr_menu_print_title "$issue_code" "$issue_title" "$issue_url" "$menu_items"
     echo
 
     while IFS= read -r menu_item; do
@@ -1668,7 +1683,7 @@ mr_menu_show() {
     local menu_items=$2
 
     echo
-    mr_menu_print_title "$issue_code" "$menu_items"
+    mr_menu_print_title "$issue_code" "" "" "$menu_items"
     echo
 
     mr_menu_contents "$menu_items"
@@ -1766,7 +1781,7 @@ mr_menu_update_all() {
         updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
 
         clear_screen
-        mr_menu_print_title "$issue_code" "$menu_items" "$i"
+        mr_menu_print_title "$issue_code" "" "" "$menu_items" "$i"
         mr_menu_print_description "$updated_description" "$mr_url" "$mr_title" "$project_name"
 
         mr_update_data='{}'
@@ -1817,8 +1832,10 @@ mr_menu_replace_description() {
     [[ $menu_start -gt 0 && $menu_end -gt "$menu_start" ]] &&
         has_menu=1
 
+    local menu_was_output=0
+
     # Iterate over description lines and insert/replace menu
-    local i=1 mr_description_line
+    local i=1 mr_description_line prev_description_line
     while IFS=$'\n' read -r mr_description_line; do
         if [[ $has_menu -eq 1 ]]; then
             if [[ $i -lt "$menu_start" || $i -gt "$menu_end" ]]; then
@@ -1829,20 +1846,30 @@ mr_menu_replace_description() {
                 if [[ $i -eq "$menu_end" ]]; then
                     echo_debug "Replacing menu"
                     echo "$menu_content"
+                    menu_was_output=1
                 fi
             fi
         else
             # output non-menu line
             echo "$mr_description_line"
             # insert menu once
-            if [[ $i -eq "2" ]]; then
+            if [[ $menu_was_output -eq 0 && -z "$mr_description_line" && $i -gt 1 ]]; then
                 echo_debug "Inserting menu"
                 echo "$menu_content"
                 echo
+                menu_was_output=1
             fi
         fi
+
+        prev_description_line="$mr_description_line"
         ((i += 1))
     done < <(echo "$mr_description")
+
+    if [[ $menu_was_output -eq 0 ]]; then
+        echo_debug "Inserting menu (failsafe)"
+        [[ -n "$prev_description_line" ]] && echo
+        echo "$menu_content"
+    fi
 }
 
 mr_menu_colorize() {
