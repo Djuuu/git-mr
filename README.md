@@ -272,8 +272,9 @@ To create a Jira API Token, go to:
   (Account Settings -> Security -> API Token -> Create and manage API tokens)
 
 To create a Gitlab API Token, go to:
-* https://myapp.gitlab.com/-/profile/personal_access_tokens?name=Git-MR+Access+token&scopes=api  
-  (Settings -> Access Tokens)
+* https://myapp.gitlab.com/-/user_settings/personal_access_tokens  
+  (Edit profile -> Access Tokens)  
+  Required scope : `api`
 
 ## Commands
 
