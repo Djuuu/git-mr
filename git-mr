@@ -1204,6 +1204,38 @@ mr_print_status() {
         then downvotes=$(colorize "$downvotes" "bold" "lightred")
         else downvotes=$(colorize "$downvotes" "bold"); fi
 
+    # Approvals
+    local approvals_required="${approvals#*/}"    # after '/'
+    local approvals_status="${approvals%% *}"     # before ' '
+    local approvals_obtained="${approvals%%/*}"   # remove '/' and after
+    approvals_obtained="${approvals_obtained#* }" # remove ' ' and before
+
+    local approvals_display approvals_color
+
+    if [[ $approvals_required -gt 0 || $approvals_obtained -gt 0 ]]; then
+
+        local approvals_icon='☑️'
+
+        if [[ "$approvals_status" == "true" ]]; then
+            approvals_icon='✅'
+            approvals_color="lightgreen"
+        elif [[ $approvals_obtained -gt 0 ]]; then
+            approvals_color="lightyellow"
+        else
+            approvals_color="lightred"
+        fi
+
+        approvals_display="$approvals_icon $(colorize "$approvals_obtained" "bold" "$approvals_color")"
+
+        if [[ $approvals_required -gt 0 ]]; then
+            approvals_display="${approvals_display}/$(colorize "$approvals_required" "bold")"
+        else
+            approvals_display="${approvals_display}  "
+        fi
+    else
+        approvals_display="      "
+    fi
+
     # Threads
     local thread_count;   thread_count="$(echo "$threads" | grep -c 'unresolved:' || true)"
     local resolved_count; resolved_count="$(echo "$threads" | grep -c 'unresolved:false' || true)"
@@ -1299,14 +1331,22 @@ mr_print_status() {
     echo
 
     # 2nd row ------------------------------------------------------------------
+    # Approvals (required)
+    if [[ $approvals_required -gt 0 ]]; then
+        echo -en "   ${approvals_display}"
+    fi
     # Votes
-    echo -en "   \U0001F44D  ${upvotes}"
-    echo -en "   \U0001F44E  ${downvotes}"
+    echo -en "   \U0001F44D ${upvotes}"
+    echo -en "  \U0001F44E ${downvotes}"
+    # Approvals (optional)
+    if [[ $approvals_required -eq 0 ]]; then
+        echo -en "   ${approvals_display}"
+    fi
     # Threads
     if [[ $thread_count -gt 0 ]]; then
-        echo -n "     Resolved threads: ${threads_display}"
+        echo -n "       Threads: ${threads_display} "
     else
-        echo -n "                          "
+        echo -n "                    "
     fi
     # Pipeline
     if [[ -n $ci_str ]]; then

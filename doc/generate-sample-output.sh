@@ -96,18 +96,46 @@ EOF
 }
 
 sample_mr_status() {
-    fake_prompt "git mr status"
 
-    local mr='{
+    local mr approvals threads
+
+    mr='{
         "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
         "labels":["WIP","My Team"], "target_branch": "main",
         "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
         "head_pipeline": {"status":"failed", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
+    approvals="true 0/0"
+    # approvals="true 1/0"
+    threads="\n"
 
-    local approvals="2/3"
-    local threads='1	unresolved:true	note_id:1'
+    fake_prompt "git mr status"
+    echo
+    mr_status_block "$mr" "$mr" "$approvals" "$threads"
 
+    mr='{
+        "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["WIP","My Team"], "target_branch": "main",
+        "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
+        "head_pipeline": {"status":"running", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
+    }'
+    approvals="false 1/2"
+    threads='1	unresolved:true	note_id:1'
+
+    fake_prompt "git mr status"
+    echo
+    mr_status_block "$mr" "$mr" "$approvals" "$threads"
+
+    mr='{
+        "title": "'"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["My Team"], "target_branch": "main",
+        "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
+        "head_pipeline": {"status":"success", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
+    }'
+    approvals="true 2/2"
+    threads='1	unresolved:false	note_id:1'
+
+    fake_prompt "git mr status"
     echo
     mr_status_block "$mr" "$mr" "$approvals" "$threads"
 }
