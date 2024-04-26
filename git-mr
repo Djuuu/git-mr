@@ -983,6 +983,10 @@ gitlab_load_mr() {
     exec {git_mr_fd_mr}< <(gitlab_merge_request "$@")
 }
 
+gitlab_load_approvals() {
+    exec {git_mr_fd_ap}< <(gitlab_merge_request_approvals "$@")
+}
+
 gitlab_load_threads() {
     exec {git_mr_fd_th}< <(gitlab_merge_request_threads "$@")
 }
@@ -991,6 +995,12 @@ gitlab_read_mr() {
     local var_name=$1
     IFS= read -r -d '' -u "$git_mr_fd_mr" "$var_name"
     exec {git_mr_fd_mr}<&-
+}
+
+gitlab_read_approvals() {
+    local var_name=$1
+    IFS= read -r -d '' -u "$git_mr_fd_ap" "$var_name"
+    exec {git_mr_fd_ap}<&-
 }
 
 gitlab_read_threads() {
@@ -2791,6 +2801,7 @@ _git_mr_commit_regex="^${_git_mr_commit_prefix}(${_git_mr_commit_ref}|${_git_mr_
 
 # Custom file descriptors
 git_mr_fd_mr=${GIT_MR_FD_MR=}
+git_mr_fd_ap=${GIT_MR_FD_AP=}
 git_mr_fd_th=${GIT_MR_FD_TH=}
 
 

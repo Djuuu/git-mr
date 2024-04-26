@@ -28,7 +28,8 @@ setup_file() {
     # Custom file descriptors
     # {var}-style redirects automatically allocating free file descriptors don't seem to work well in bats context
     export GIT_MR_FD_MR=21
-    export GIT_MR_FD_TH=22
+    export GIT_MR_FD_AP=22
+    export GIT_MR_FD_TH=23
 
     cd "${BATS_TEST_DIRNAME}" || exit
 
