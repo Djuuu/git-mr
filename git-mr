@@ -1145,7 +1145,7 @@ mr_status_block() {
     [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
     [[ -n $mr_threads  ]]   || gitlab_read_threads mr_threads
 
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 }
 
 mr_print_title() {
@@ -1160,7 +1160,8 @@ mr_print_title() {
 
 mr_print_status() {
     local merge_request=$1
-    local threads=$2
+    local approvals=$2
+    local threads=$3
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
@@ -1711,7 +1712,7 @@ mr_menu_status() {
         gitlab_read_approvals mr_approvals
         gitlab_read_threads mr_threads
 
-        mr_print_status "$merge_request" "$mr_threads"
+        mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
         echo
 
     done <<<"$menu_items"
@@ -2365,7 +2366,7 @@ mr_update() {
 
     # --------------------------------------------------------------------------------
     mr_print_title "$mr_title" "$mr_url"
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 }
 
 mr_merge() {
@@ -2405,7 +2406,7 @@ mr_merge() {
     gitlab_read_threads mr_threads
 
     # Merge request status summary - status
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 
     echo "--------------------------------------------------------------------------------"
     echo
@@ -2601,7 +2602,7 @@ mr_transition() {
     gitlab_read_threads mr_threads
 
     # Merge request status summary - status
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 
     echo "--------------------------------------------------------------------------------"
     echo
