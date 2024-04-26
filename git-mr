@@ -809,6 +809,24 @@ gitlab_extract_project_url_part() {
     echo "$url"
 }
 
+gitlab_merge_request_approvals() {
+    gitlab_check_env
+
+    local mr_url=$1
+
+    local mr_iid="${mr_url##*/}"
+    local project_url; project_url="$(gitlab_extract_project_url_part "$mr_url")"
+
+    [[ -n $mr_url ]]      || exit_error "$ERR_MR" "No mr_url provided"
+    [[ -n $mr_iid ]]      || exit_error "$ERR_MR" "Unable to determine mr_iid from mr_url"
+    [[ -n $project_url ]] || exit_error "$ERR_MR" "Unable to determine project_url from mr_url"
+
+    gitlab_project_request "$project_url" "merge_requests/${mr_iid}/approval_state" | jq -r '
+      ([.rules[] | .approved] | all                                      | tostring) + " " +
+      (reduce (.rules[] | .approved_by | length) as $item (0; . + $item) | tostring) + "/" +
+      (reduce (.rules[] | .approvals_required)   as $item (0; . + $item) | tostring)'
+}
+
 gitlab_merge_request_threads() {
     gitlab_check_env
 

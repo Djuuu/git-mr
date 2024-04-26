@@ -754,6 +754,92 @@ sha_link() {
     assert_output "some/project"
 }
 
+@test "Extracts Gitlab merge request approvals" {
+    gitlab_request() {
+        [[ $1 == "projects/some%2Fproject/merge_requests/1/approval_state" ]] &&
+            echo '{"rules": '"$approval_rules"'}'
+    }
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 2,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"}
+        ],
+        "approved": false
+      }, {
+        "id": 2, "name": "Example",
+        "approvals_required": 1,
+        "approved_by": [
+          {"id": 3, "name": "Jane Doe"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "false 2/3"
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 2,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"},
+          {"id": 2, "name": "John Dough"}
+        ],
+        "approved": true
+      }, {
+        "id": 2, "name": "Example",
+        "approvals_required": 1,
+        "approved_by": [
+          {"id": 3, "name": "Jane Doe"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "true 3/3"
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 2,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"}
+        ],
+        "approved": false
+      }, {
+        "id": 2, "name": "Example",
+        "approvals_required": 1,
+        "approved_by": [
+          {"id": 3, "name": "Jane Doe"},
+          {"id": 4, "name": "Jenn Doh"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "false 3/3"
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 0,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "true 1/0"
+
+    approval_rules='[]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "true 0/0"
+}
+
 @test "Extracts Gitlab merge request threads" {
     gitlab_request() {
         [[ $1 == "projects/some%2Fproject/merge_requests/123/discussions?per_page=100&page=1" ]] &&
