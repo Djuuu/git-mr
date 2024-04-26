@@ -1117,6 +1117,7 @@ EOF
 mr_status_block() {
     local mr_summary=$1
     local merge_request=$2
+    local mr_approvals= # TODO
     local mr_threads=$3
 
     local mr_iid=$4
@@ -1132,14 +1133,16 @@ mr_status_block() {
         eval "$(echo "$mr_summary" | jq -r "${parse[*]}")"
     }
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     [[ -n $merge_request ]] || gitlab_load_mr "$mr_iid"
+    [[ -n $mr_approvals ]]  || gitlab_load_approvals "$mr_url"
     [[ -n $mr_threads  ]]   || gitlab_load_threads "$mr_url"
 
     mr_print_title "$mr_title" "$mr_url"
 
-    # Read MR & threads
+    # Read merge request, approvals & threads
     [[ -n $merge_request ]] || gitlab_read_mr merge_request
+    [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
     [[ -n $mr_threads  ]]   || gitlab_read_threads mr_threads
 
     mr_print_status "$merge_request" "$mr_threads"
@@ -1687,8 +1690,9 @@ mr_menu_status() {
 
         [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
 
-        # Load merge request & threads in parallel
+        # Load merge request, approvals & threads in parallel
         gitlab_load_mr "$mr_iid" "$project_url"
+        gitlab_load_approvals "$mr_url"
         gitlab_load_threads "$mr_url"
 
         mr_title=$(gitlab_title_undraft "$mr_title")
@@ -1702,8 +1706,9 @@ mr_menu_status() {
         fi
 
         # Read MR & threads
-        local merge_request mr_threads
+        local merge_request mr_approvals mr_threads
         gitlab_read_mr merge_request
+        gitlab_read_approvals mr_approvals
         gitlab_read_threads mr_threads
 
         mr_print_status "$merge_request" "$mr_threads"
@@ -2085,8 +2090,9 @@ mr_update() {
         "mr_description=" + (.description | @sh) + ";\n"
     ')"
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     gitlab_load_mr "$mr_iid"
+    gitlab_load_approvals "$mr_url"
     gitlab_load_threads "$mr_url"
 
     # Init commit lists
@@ -2351,9 +2357,10 @@ mr_update() {
     fi
 
     # Read MR & threads
-    local mr_threads
+    local mr_approvals mr_threads
     [[ -n $merge_request ]] ||
         gitlab_read_mr merge_request
+    gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
     # --------------------------------------------------------------------------------
@@ -2382,8 +2389,9 @@ mr_merge() {
         "mr_title=" + (.title   | @sh) + ";\n"
     ')"
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     gitlab_load_mr "$mr_iid"
+    gitlab_load_approvals "$mr_url"
     gitlab_load_threads "$mr_url"
 
     # Merge request status summary - title
@@ -2391,8 +2399,9 @@ mr_merge() {
     mr_print_title "$mr_title" "$mr_url"
 
     # Read MR & threads
-    local merge_request mr_threads
+    local merge_request mr_approvals mr_threads
     gitlab_read_mr merge_request
+    gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
     # Merge request status summary - status
@@ -2544,8 +2553,9 @@ mr_transition() {
         "mr_title=" + (.title   | @sh) + ";\n"
     ')"
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     gitlab_load_mr "$mr_iid"
+    gitlab_load_approvals "$mr_url"
     gitlab_load_threads "$mr_url"
 
     local name labels_to_add labels_to_remove jira_transition_var
@@ -2585,8 +2595,9 @@ mr_transition() {
     mr_print_title "$mr_title" "$mr_url"
 
     # Read MR & threads
-    local merge_request mr_threads
+    local merge_request mr_approvals mr_threads
     gitlab_read_mr merge_request
+    gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
     # Merge request status summary - status
