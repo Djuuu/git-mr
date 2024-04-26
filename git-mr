@@ -955,7 +955,7 @@ gitlab_undraft() {
 
     # Print merge request status summary
     echo
-    mr_status_block "$mr_summary" "" "" "$mr_iid" "$mr_url" "$mr_title"
+    mr_status_block "$mr_summary" "" "" "" "$mr_iid" "$mr_url" "$mr_title"
     echo "--------------------------------------------------------------------------------"
     echo
 
@@ -1117,12 +1117,12 @@ EOF
 mr_status_block() {
     local mr_summary=$1
     local merge_request=$2
-    local mr_approvals= # TODO
-    local mr_threads=$3
+    local mr_approvals=$3
+    local mr_threads=$4
 
-    local mr_iid=$4
-    local mr_url=$5
-    local mr_title=$6
+    local mr_iid=$5
+    local mr_url=$6
+    local mr_title=$7
 
     local parse=()
     [[ -z $merge_request && -z $mr_iid ]] && parse+=('"mr_iid=" + (.iid | @sh) + ";\n" +')

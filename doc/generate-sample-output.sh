@@ -105,10 +105,11 @@ sample_mr_status() {
         "head_pipeline": {"status":"failed", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
 
+    local approvals="2/3"
     local threads='1	unresolved:true	note_id:1'
 
     echo
-    mr_status_block "$mr" "$mr" "$threads"
+    mr_status_block "$mr" "$mr" "$approvals" "$threads"
 }
 
 sample_mr_update() {
@@ -209,18 +210,19 @@ sample_mr_merge() {
     fake_prompt "git mr merge"
 
     local mr='{
-        "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
+        "title": "'"$mr_title"'", "web_url":"'"$mr_url"'",
         "labels":["Accepted","My Team"], "target_branch": "main",
         "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
         "head_pipeline": {"status":"success", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
 
+    local approvals="true 2/2"
     local threads="1	unresolved:false	note_id:2
 2	unresolved:false	note_id:2"
 
     cat << EOF
 
-$(mr_status_block "$mr" "$mr" "$threads")
+$(mr_status_block "$mr" "$mr" "$approvals" "$threads")
 
 --------------------------------------------------------------------------------
 

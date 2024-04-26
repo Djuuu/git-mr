@@ -1005,10 +1005,11 @@ sha_link() {
         "labels":["Review","My Team"], "target_branch": "main", "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
         "head_pipeline": {"status":"failed", "web_url":"https://example.net/ci/1"}
     }'
+    approvals='true 0/0'
     threads='1	unresolved:false	note_id:1
 2	unresolved:true	note_id:2'
 
-    run mr_status_block "$mr" "$mr" "$threads"
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -1028,10 +1029,11 @@ sha_link() {
         "labels":["Testing","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
         "head_pipeline": {"status":"success", "web_url":"https://example.net/ci/1"}
     }'
+    approvals='true 0/0'
     threads='1	unresolved:false	note_id:1
 2	unresolved:false	note_id:2'
 
-    run mr_status_block "$mr" "$mr" "$threads"
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -1050,9 +1052,10 @@ sha_link() {
         "title": "Feature/XY-1234 Lorem Ipsum", "web_url":"https://gitlab.example.net/my/project/merge_requests/6",
         "labels":["Accepted","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "state":"merged"
     }'
+    approvals='true 0/0'
     threads="\n"
 
-    run mr_status_block "$mr" "$mr" "$threads"
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
