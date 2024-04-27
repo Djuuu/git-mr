@@ -1018,7 +1018,69 @@ sha_link() {
 
 		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
 
-		   👍  1   👎  1     Resolved threads: 1/2      CI: ❌       Can be merged: ❌
+		   👍 1  👎 1                Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    approvals='true 1/0'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   👍 1  👎 1   ✅ 1         Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    approvals='false 1/2'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ☑️ 1/2   👍 1  👎 1       Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    approvals='false 2/2'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ☑️ 2/2   👍 1  👎 1       Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    approvals='true 2/2'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ✅ 2/2   👍 1  👎 1       Threads: 1/2       CI: ❌       Can be merged: ❌
 		EOF
     )"
 
@@ -1042,7 +1104,7 @@ sha_link() {
 
 		   🏷  [Testing] [My Team]                                             (↣ main)
 
-		   👍  2   👎  0     Resolved threads: 2/2      CI: ✔       Can be merged: ✔
+		   👍 2  👎 0                Threads: 2/2       CI: ✔       Can be merged: ✔
 		EOF
     )"
 
@@ -1064,7 +1126,7 @@ sha_link() {
 
 		   🏷  [Accepted] [My Team]                                            (↣ main)
 
-		   👍  2   👎  0                                                   Merged
+		   👍 2  👎 0                                                      Merged
 		EOF
     )"
 }
@@ -2037,7 +2099,7 @@ End"
 
 		   🏷  [Accepted]                                                      (↣ main)
 
-		   👍  3   👎  0                                CI: ⏰       Can be merged: ✔
+		   👍 3  👎 0                Threads: 1/2       CI: ⏰       Can be merged: ✔
 
 
 		* Project A: MR 11 title
@@ -2045,7 +2107,7 @@ End"
 
 		   🏷  [QA]                                                            (↣ main)
 
-		   👍  2   👎  0                                CI: ⏱       Can be merged: ✔
+		   ✅ 2/2   👍 2  👎 0                          CI: ⏱       Can be merged: ✔
 
 
 		* Project B: MR 21 title
@@ -2053,7 +2115,7 @@ End"
 
 		   🏷  [Review]                                                        (↣ main)
 
-		   👍  0   👎  1                                CI: ❌       Can be merged: ❌
+		   ☑️ 1/2   👍 0  👎 1                          CI: ❌       Can be merged: ❌
 		EOF
     )"
 }
