@@ -269,6 +269,7 @@ colorize() {
 
         local reset='\e[0m'
 
+        local style
         for style in "${@:2}"; do
             echo -en "${!style}"
         done
@@ -677,6 +678,7 @@ gitlab_new_merge_request_url() {
     gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[target_branch]")=${target_branch}"
 
     # default labels
+    local label_id
     for label_id in $(gitlab_default_label_ids); do
         gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[label_ids][]")=${label_id}"
     done
@@ -2073,7 +2075,7 @@ mr_update() {
         sed -r -e "s/^${_git_mr_commit_prefix}(${_git_mr_commit_ref})\s.*/\1/g" \
                -e "s/^${_git_mr_commit_prefix}\[(${_git_mr_commit_ref})\]\(http[^)]+\)\s.*/\1/g")
 
-    local old_commits_array oIFS
+    local old_commits_array oIFS current_commits_long_array current_commits_short_array current_commits_messages_array
     oIFS=$IFS; IFS=$'\n'
         # shellcheck disable=SC2206
         current_commits_long_array=($current_commits_long)
@@ -2149,6 +2151,7 @@ mr_update() {
         forDescription="\1[$currSha]($(regex_escape "$currCommitUrl")) \3\4${MD_BR}"
         forDescriptionNew="\1[$currSha]($(regex_escape "$currCommitUrl")) \3"
 
+        local new_description_display_before
         if [[ -n $oldSha ]]; then
             # Existing commit
             # echo "🚧 Existing"
