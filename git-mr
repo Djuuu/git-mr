@@ -821,7 +821,7 @@ gitlab_merge_request_approvals() {
     [[ -n $mr_iid ]]      || exit_error "$ERR_MR" "Unable to determine mr_iid from mr_url"
     [[ -n $project_url ]] || exit_error "$ERR_MR" "Unable to determine project_url from mr_url"
 
-    gitlab_project_request "$project_url" "merge_requests/${mr_iid}/approval_state" | jq -r '
+    gitlab_project_request "$project_url" "merge_requests/${mr_iid}/approval_state" | jq -jr '
       ([.rules[] | .approved] | all                                      | tostring) + " " +
       (reduce (.rules[] | .approved_by | length) as $item (0; . + $item) | tostring) + "/" +
       (reduce (.rules[] | .approvals_required)   as $item (0; . + $item) | tostring)'
