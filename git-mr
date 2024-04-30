@@ -1210,7 +1210,7 @@ mr_print_status() {
     local approvals_obtained="${approvals%%/*}"   # remove '/' and after
     approvals_obtained="${approvals_obtained#* }" # remove ' ' and before
 
-    local approvals_display approvals_color
+    local approvals_display approvals_color approvals_spacer
 
     if [[ $approvals_required -gt 0 || $approvals_obtained -gt 0 ]]; then
 
@@ -1230,10 +1230,10 @@ mr_print_status() {
         if [[ $approvals_required -gt 0 ]]; then
             approvals_display="${approvals_display}/$(colorize "$approvals_required" "bold")"
         else
-            approvals_display="${approvals_display}  "
+            approvals_spacer="  "
         fi
     else
-        approvals_display="      "
+        approvals_spacer="         "
     fi
 
     # Threads
@@ -1331,17 +1331,15 @@ mr_print_status() {
     echo
 
     # 2nd row ------------------------------------------------------------------
-    # Approvals (required)
-    if [[ $approvals_required -gt 0 ]]; then
+    # Approvals
+    if [[ -n $approvals_display ]]; then
         echo -en "   ${approvals_display}"
     fi
     # Votes
     echo -en "   \U0001F44D ${upvotes}"
     echo -en "  \U0001F44E ${downvotes}"
-    # Approvals (optional)
-    if [[ $approvals_required -eq 0 ]]; then
-        echo -en "   ${approvals_display}"
-    fi
+    # Approvals spacer (when absent or optional)
+    echo -en "${approvals_spacer}"
     # Threads
     if [[ $thread_count -gt 0 ]]; then
         echo -n "       Threads: ${threads_display} "

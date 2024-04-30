@@ -1035,7 +1035,7 @@ sha_link() {
 
 		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
 
-		   👍 1  👎 1   ✅ 1         Threads: 1/2       CI: ❌       Can be merged: ❌
+		   ✅ 1   👍 1  👎 1         Threads: 1/2       CI: ❌       Can be merged: ❌
 		EOF
     )"
 
