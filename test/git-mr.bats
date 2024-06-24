@@ -28,7 +28,8 @@ setup_file() {
     # Custom file descriptors
     # {var}-style redirects automatically allocating free file descriptors don't seem to work well in bats context
     export GIT_MR_FD_MR=21
-    export GIT_MR_FD_TH=22
+    export GIT_MR_FD_AP=22
+    export GIT_MR_FD_TH=23
 
     cd "${BATS_TEST_DIRNAME}" || exit
 
@@ -754,6 +755,92 @@ sha_link() {
     assert_output "some/project"
 }
 
+@test "Extracts Gitlab merge request approvals" {
+    gitlab_request() {
+        [[ $1 == "projects/some%2Fproject/merge_requests/1/approval_state" ]] &&
+            echo '{"rules": '"$approval_rules"'}'
+    }
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 2,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"}
+        ],
+        "approved": false
+      }, {
+        "id": 2, "name": "Example",
+        "approvals_required": 1,
+        "approved_by": [
+          {"id": 3, "name": "Jane Doe"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "false 2/3"
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 2,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"},
+          {"id": 2, "name": "John Dough"}
+        ],
+        "approved": true
+      }, {
+        "id": 2, "name": "Example",
+        "approvals_required": 1,
+        "approved_by": [
+          {"id": 3, "name": "Jane Doe"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "true 3/3"
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 2,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"}
+        ],
+        "approved": false
+      }, {
+        "id": 2, "name": "Example",
+        "approvals_required": 1,
+        "approved_by": [
+          {"id": 3, "name": "Jane Doe"},
+          {"id": 4, "name": "Jenn Doh"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "false 3/3"
+
+    approval_rules='[
+      {
+        "id": 1, "name": "Example",
+        "approvals_required": 0,
+        "approved_by": [
+          {"id": 1, "name": "John Doe"}
+        ],
+        "approved": true
+      }
+    ]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "true 1/0"
+
+    approval_rules='[]'
+    run gitlab_merge_request_approvals "https://gitlab.example.net/some/project/-/merge_requests/1"
+    assert_output "true 0/0"
+}
+
 @test "Extracts Gitlab merge request threads" {
     gitlab_request() {
         [[ $1 == "projects/some%2Fproject/merge_requests/123/discussions?per_page=100&page=1" ]] &&
@@ -918,10 +1005,11 @@ sha_link() {
         "labels":["Review","My Team"], "target_branch": "main", "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
         "head_pipeline": {"status":"failed", "web_url":"https://example.net/ci/1"}
     }'
+    approvals='true 0/0'
     threads='1	unresolved:false	note_id:1
 2	unresolved:true	note_id:2'
 
-    run mr_status_block "$mr" "$mr" "$threads"
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -930,7 +1018,69 @@ sha_link() {
 
 		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
 
-		   👍  1   👎  1     Resolved threads: 1/2      CI: ❌       Can be merged: ❌
+		   👍 1  👎 1                Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    # ------------------------------------------------------------------------------------------------------------------
+
+    approvals='true 1/0'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ✅ 1   👍 1  👎 1         Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    approvals='false 1/2'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ☑️ 1/2   👍 1  👎 1       Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    approvals='false 2/2'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ☑️ 2/2   👍 1  👎 1       Threads: 1/2       CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    approvals='true 2/2'
+
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
+    assert_output "$(cat <<- EOF
+		--------------------------------------------------------------------------------
+		 Feature/XY-1234 Lorem Ipsum
+		 ⇒ https://gitlab.example.net/my/project/merge_requests/6
+		--------------------------------------------------------------------------------
+
+		   🏷  [Review] [My Team]                       🚧 Draft               (↣ main)
+
+		   ✅ 2/2   👍 1  👎 1       Threads: 1/2       CI: ❌       Can be merged: ❌
 		EOF
     )"
 
@@ -941,10 +1091,11 @@ sha_link() {
         "labels":["Testing","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
         "head_pipeline": {"status":"success", "web_url":"https://example.net/ci/1"}
     }'
+    approvals='true 0/0'
     threads='1	unresolved:false	note_id:1
 2	unresolved:false	note_id:2'
 
-    run mr_status_block "$mr" "$mr" "$threads"
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -953,7 +1104,7 @@ sha_link() {
 
 		   🏷  [Testing] [My Team]                                             (↣ main)
 
-		   👍  2   👎  0     Resolved threads: 2/2      CI: ✔       Can be merged: ✔
+		   👍 2  👎 0                Threads: 2/2       CI: ✔       Can be merged: ✔
 		EOF
     )"
 
@@ -963,9 +1114,10 @@ sha_link() {
         "title": "Feature/XY-1234 Lorem Ipsum", "web_url":"https://gitlab.example.net/my/project/merge_requests/6",
         "labels":["Accepted","My Team"], "target_branch": "main", "upvotes": 2, "downvotes": 0, "state":"merged"
     }'
+    approvals='true 0/0'
     threads="\n"
 
-    run mr_status_block "$mr" "$mr" "$threads"
+    run mr_status_block "$mr" "$mr" "$approvals" "$threads"
     assert_output "$(cat <<- EOF
 		--------------------------------------------------------------------------------
 		 Feature/XY-1234 Lorem Ipsum
@@ -974,7 +1126,7 @@ sha_link() {
 
 		   🏷  [Accepted] [My Team]                                            (↣ main)
 
-		   👍  2   👎  0                                                   Merged
+		   👍 2  👎 0                                                      Merged
 		EOF
     )"
 }
@@ -1947,7 +2099,7 @@ End"
 
 		   🏷  [Accepted]                                                      (↣ main)
 
-		   👍  3   👎  0                                CI: ⏰       Can be merged: ✔
+		   👍 3  👎 0                Threads: 1/2       CI: ⏰       Can be merged: ✔
 
 
 		* Project A: MR 11 title
@@ -1955,7 +2107,7 @@ End"
 
 		   🏷  [QA]                                                            (↣ main)
 
-		   👍  2   👎  0                                CI: ⏱       Can be merged: ✔
+		   ✅ 2/2   👍 2  👎 0                          CI: ⏱       Can be merged: ✔
 
 
 		* Project B: MR 21 title
@@ -1963,7 +2115,7 @@ End"
 
 		   🏷  [Review]                                                        (↣ main)
 
-		   👍  0   👎  1                                CI: ❌       Can be merged: ❌
+		   ☑️ 1/2   👍 0  👎 1                          CI: ❌       Can be merged: ❌
 		EOF
     )"
 }

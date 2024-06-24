@@ -75,6 +75,27 @@ gitlab_merge_request() {
     esac
 }
 
+gitlab_merge_request_approvals() {
+    local f="gitlab_merge_request_approvals "
+    case $1 in
+        'https://gitlab.example.net/proj-A/-/merge_requests/11')
+            # echo "$f✔️ $1 $2" >> gitlab-mock-menu.log;
+            echo 'true 2/2'; ;;
+        'https://gitlab.example.net/proj-B/-/merge_requests/21')
+            # echo "$f✔️ $1 $2" >> gitlab-mock-menu.log;
+            echo 'false 1/2'; ;;
+        'https://gitlab.example.net/proj-C/-/merge_requests/31')
+            # echo "$f✔️ $1 $2" >> gitlab-mock-menu.log;
+            echo 'true 0/0'; ;;
+        'https://gitlab.example.net/proj-D/-/merge_requests/41')
+            # echo "$f✔️ $1 $2" >> gitlab-mock-menu.log;
+            echo 'true 2/2'; ;;
+        *)
+            echo "$f❌ $1 $2" >> gitlab-mock-menu.log;
+            return 1; ;;
+    esac
+}
+
 gitlab_merge_request_threads() {
     local f="gitlab_merge_request_threads "
     case $1 in
@@ -86,7 +107,7 @@ gitlab_merge_request_threads() {
             echo '[]'; ;;
         'https://gitlab.example.net/proj-C/-/merge_requests/31')
             # echo "$f✔️ $1 $2" >> gitlab-mock-menu.log;
-            echo '[]'; ;;
+            echo -e '1	unresolved:false	note_id:1\n2	unresolved:true	note_id:2'; ;;
         'https://gitlab.example.net/proj-D/-/merge_requests/41')
             # echo "$f✔️ $1 $2" >> gitlab-mock-menu.log;
             echo '[]'; ;;

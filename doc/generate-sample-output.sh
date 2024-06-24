@@ -96,19 +96,48 @@ EOF
 }
 
 sample_mr_status() {
-    fake_prompt "git mr status"
 
-    local mr='{
+    local mr approvals threads
+
+    mr='{
         "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
         "labels":["WIP","My Team"], "target_branch": "main",
         "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
         "head_pipeline": {"status":"failed", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
+    approvals="true 0/0"
+    # approvals="true 1/0"
+    threads="\n"
 
-    local threads='1	unresolved:true	note_id:1'
-
+    fake_prompt "git mr status"
     echo
-    mr_status_block "$mr" "$mr" "$threads"
+    mr_status_block "$mr" "$mr" "$approvals" "$threads"
+
+    mr='{
+        "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["WIP","My Team"], "target_branch": "main",
+        "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
+        "head_pipeline": {"status":"running", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
+    }'
+    approvals="false 1/2"
+    threads='1	unresolved:true	note_id:1'
+
+    fake_prompt "git mr status"
+    echo
+    mr_status_block "$mr" "$mr" "$approvals" "$threads"
+
+    mr='{
+        "title": "'"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["My Team"], "target_branch": "main",
+        "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
+        "head_pipeline": {"status":"success", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
+    }'
+    approvals="true 2/2"
+    threads='1	unresolved:false	note_id:1'
+
+    fake_prompt "git mr status"
+    echo
+    mr_status_block "$mr" "$mr" "$approvals" "$threads"
 }
 
 sample_mr_update() {
@@ -121,6 +150,7 @@ sample_mr_update() {
         "head_pipeline": {"status":"running", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
 
+    local approvals="false 1/2"
     local threads='1	unresolved:false	note_id:2
 2	unresolved:true	note_id:2'
 
@@ -161,7 +191,7 @@ $(c_question "Do you want to update the merge request target branch from 'oldtrg
 Updating merge request...OK
 
 --------------------------------------------------------------------------------
-$(mr_print_status "$mr" "$threads")
+$(mr_print_status "$mr" "$approvals" "$threads")
 
 EOF
 }
@@ -209,18 +239,19 @@ sample_mr_merge() {
     fake_prompt "git mr merge"
 
     local mr='{
-        "title": "Draft: '"$mr_title"'", "web_url":"'"$mr_url"'",
+        "title": "'"$mr_title"'", "web_url":"'"$mr_url"'",
         "labels":["Accepted","My Team"], "target_branch": "main",
         "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
         "head_pipeline": {"status":"success", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
 
+    local approvals="true 2/2"
     local threads="1	unresolved:false	note_id:2
 2	unresolved:false	note_id:2"
 
     cat << EOF
 
-$(mr_status_block "$mr" "$mr" "$threads")
+$(mr_status_block "$mr" "$mr" "$approvals" "$threads")
 
 --------------------------------------------------------------------------------
 
@@ -283,6 +314,7 @@ sample_mr_menu_status() {
         "upvotes": 1, "downvotes": 1, "merge_status": "cannot_be_merged",
         "head_pipeline": {"status":"pending", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
+    local approvals1='true 0/0'
     local threads1='1	unresolved:true	note_id:1'
 
     local mr2='{
@@ -292,6 +324,7 @@ sample_mr_menu_status() {
         "upvotes": 2, "downvotes": 1, "merge_status": "can_be_merged",
         "head_pipeline": {"status":"skipped", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
+    local approvals2='false 1/2'
     local threads2='1	unresolved:false	note_id:1
 2	unresolved:true	note_id:2'
 
@@ -302,6 +335,7 @@ sample_mr_menu_status() {
         "upvotes": 2, "downvotes": 0, "merge_status": "can_be_merged",
         "head_pipeline": {"status":"success", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
     }'
+    local approvals3='true 2/2'
     local threads3='1	unresolved:false	note_id:1
 2	unresolved:false	note_id:2'
 
@@ -315,17 +349,17 @@ EOF
 
     echo "* $(colorize "Some Project" "bold"): $(terminal_link "https://myapp.gitlab.com/some/project/-/merge_requests/12" "Feature/XY-1234 Lorem Ipsum")"
     has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/12" "midgray"
-    mr_print_status "$mr1" "$threads1"
+    mr_print_status "$mr1" "$approvals1" "$threads1"
     echo
 
     echo "* $(colorize "Other Project" "bold"): $(terminal_link "https://myapp.gitlab.com/other/project/-/merge_requests/34" "Feature/XY-1234 Quisque sed")"
     has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/34" "midgray"
-    mr_print_status "$mr2" "$threads2"
+    mr_print_status "$mr2" "$approvals2" "$threads2"
     echo
 
     echo "* $(colorize "Third Project" "bold"): $(terminal_link "https://myapp.gitlab.com/third/project/-/merge_requests/56" "Feature/XY-1234 Nunc vestibulum")"
     has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/56" "midgray"
-    mr_print_status "$mr3" "$threads3"
+    mr_print_status "$mr3" "$approvals3" "$threads3"
     echo
 }
 

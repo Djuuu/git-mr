@@ -269,6 +269,7 @@ colorize() {
 
         local reset='\e[0m'
 
+        local style
         for style in "${@:2}"; do
             echo -en "${!style}"
         done
@@ -677,6 +678,7 @@ gitlab_new_merge_request_url() {
     gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[target_branch]")=${target_branch}"
 
     # default labels
+    local label_id
     for label_id in $(gitlab_default_label_ids); do
         gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[label_ids][]")=${label_id}"
     done
@@ -807,6 +809,24 @@ gitlab_extract_project_url_part() {
     echo "$url"
 }
 
+gitlab_merge_request_approvals() {
+    gitlab_check_env
+
+    local mr_url=$1
+
+    local mr_iid="${mr_url##*/}"
+    local project_url; project_url="$(gitlab_extract_project_url_part "$mr_url")"
+
+    [[ -n $mr_url ]]      || exit_error "$ERR_MR" "No mr_url provided"
+    [[ -n $mr_iid ]]      || exit_error "$ERR_MR" "Unable to determine mr_iid from mr_url"
+    [[ -n $project_url ]] || exit_error "$ERR_MR" "Unable to determine project_url from mr_url"
+
+    gitlab_project_request "$project_url" "merge_requests/${mr_iid}/approval_state" | jq -jr '
+      ([.rules[] | .approved] | all                                      | tostring) + " " +
+      (reduce (.rules[] | .approved_by | length) as $item (0; . + $item) | tostring) + "/" +
+      (reduce (.rules[] | .approvals_required)   as $item (0; . + $item) | tostring)'
+}
+
 gitlab_merge_request_threads() {
     gitlab_check_env
 
@@ -935,7 +955,7 @@ gitlab_undraft() {
 
     # Print merge request status summary
     echo
-    mr_status_block "$mr_summary" "" "" "$mr_iid" "$mr_url" "$mr_title"
+    mr_status_block "$mr_summary" "" "" "" "$mr_iid" "$mr_url" "$mr_title"
     echo "--------------------------------------------------------------------------------"
     echo
 
@@ -963,6 +983,10 @@ gitlab_load_mr() {
     exec {git_mr_fd_mr}< <(gitlab_merge_request "$@")
 }
 
+gitlab_load_approvals() {
+    exec {git_mr_fd_ap}< <(gitlab_merge_request_approvals "$@")
+}
+
 gitlab_load_threads() {
     exec {git_mr_fd_th}< <(gitlab_merge_request_threads "$@")
 }
@@ -971,6 +995,12 @@ gitlab_read_mr() {
     local var_name=$1
     IFS= read -r -d '' -u "$git_mr_fd_mr" "$var_name"
     exec {git_mr_fd_mr}<&-
+}
+
+gitlab_read_approvals() {
+    local var_name=$1
+    IFS= read -r -d '' -u "$git_mr_fd_ap" "$var_name"
+    exec {git_mr_fd_ap}<&-
 }
 
 gitlab_read_threads() {
@@ -1087,11 +1117,12 @@ EOF
 mr_status_block() {
     local mr_summary=$1
     local merge_request=$2
-    local mr_threads=$3
+    local mr_approvals=$3
+    local mr_threads=$4
 
-    local mr_iid=$4
-    local mr_url=$5
-    local mr_title=$6
+    local mr_iid=$5
+    local mr_url=$6
+    local mr_title=$7
 
     local parse=()
     [[ -z $merge_request && -z $mr_iid ]] && parse+=('"mr_iid=" + (.iid | @sh) + ";\n" +')
@@ -1102,17 +1133,19 @@ mr_status_block() {
         eval "$(echo "$mr_summary" | jq -r "${parse[*]}")"
     }
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     [[ -n $merge_request ]] || gitlab_load_mr "$mr_iid"
+    [[ -n $mr_approvals ]]  || gitlab_load_approvals "$mr_url"
     [[ -n $mr_threads  ]]   || gitlab_load_threads "$mr_url"
 
     mr_print_title "$mr_title" "$mr_url"
 
-    # Read MR & threads
+    # Read merge request, approvals & threads
     [[ -n $merge_request ]] || gitlab_read_mr merge_request
+    [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
     [[ -n $mr_threads  ]]   || gitlab_read_threads mr_threads
 
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 }
 
 mr_print_title() {
@@ -1127,7 +1160,8 @@ mr_print_title() {
 
 mr_print_status() {
     local merge_request=$1
-    local threads=$2
+    local approvals=$2
+    local threads=$3
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
@@ -1169,6 +1203,38 @@ mr_print_status() {
     if [[ $downvotes -gt 0 ]];
         then downvotes=$(colorize "$downvotes" "bold" "lightred")
         else downvotes=$(colorize "$downvotes" "bold"); fi
+
+    # Approvals
+    local approvals_required="${approvals#*/}"    # after '/'
+    local approvals_status="${approvals%% *}"     # before ' '
+    local approvals_obtained="${approvals%%/*}"   # remove '/' and after
+    approvals_obtained="${approvals_obtained#* }" # remove ' ' and before
+
+    local approvals_display approvals_color approvals_spacer
+
+    if [[ $approvals_required -gt 0 || $approvals_obtained -gt 0 ]]; then
+
+        local approvals_icon='☑️'
+
+        if [[ "$approvals_status" == "true" ]]; then
+            approvals_icon='✅'
+            approvals_color="lightgreen"
+        elif [[ $approvals_obtained -gt 0 ]]; then
+            approvals_color="lightyellow"
+        else
+            approvals_color="lightred"
+        fi
+
+        approvals_display="$approvals_icon $(colorize "$approvals_obtained" "bold" "$approvals_color")"
+
+        if [[ $approvals_required -gt 0 ]]; then
+            approvals_display="${approvals_display}/$(colorize "$approvals_required" "bold")"
+        else
+            approvals_spacer="  "
+        fi
+    else
+        approvals_spacer="         "
+    fi
 
     # Threads
     local thread_count;   thread_count="$(echo "$threads" | grep -c 'unresolved:' || true)"
@@ -1265,14 +1331,20 @@ mr_print_status() {
     echo
 
     # 2nd row ------------------------------------------------------------------
+    # Approvals
+    if [[ -n $approvals_display ]]; then
+        echo -en "   ${approvals_display}"
+    fi
     # Votes
-    echo -en "   \U0001F44D  ${upvotes}"
-    echo -en "   \U0001F44E  ${downvotes}"
+    echo -en "   \U0001F44D ${upvotes}"
+    echo -en "  \U0001F44E ${downvotes}"
+    # Approvals spacer (when absent or optional)
+    echo -en "${approvals_spacer}"
     # Threads
     if [[ $thread_count -gt 0 ]]; then
-        echo -n "     Resolved threads: ${threads_display}"
+        echo -n "       Threads: ${threads_display} "
     else
-        echo -n "                          "
+        echo -n "                    "
     fi
     # Pipeline
     if [[ -n $ci_str ]]; then
@@ -1657,8 +1729,9 @@ mr_menu_status() {
 
         [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
 
-        # Load merge request & threads in parallel
+        # Load merge request, approvals & threads in parallel
         gitlab_load_mr "$mr_iid" "$project_url"
+        gitlab_load_approvals "$mr_url"
         gitlab_load_threads "$mr_url"
 
         mr_title=$(gitlab_title_undraft "$mr_title")
@@ -1672,11 +1745,12 @@ mr_menu_status() {
         fi
 
         # Read MR & threads
-        local merge_request mr_threads
+        local merge_request mr_approvals mr_threads
         gitlab_read_mr merge_request
+        gitlab_read_approvals mr_approvals
         gitlab_read_threads mr_threads
 
-        mr_print_status "$merge_request" "$mr_threads"
+        mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
         echo
 
     done <<<"$menu_items"
@@ -2055,8 +2129,9 @@ mr_update() {
         "mr_description=" + (.description | @sh) + ";\n"
     ')"
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     gitlab_load_mr "$mr_iid"
+    gitlab_load_approvals "$mr_url"
     gitlab_load_threads "$mr_url"
 
     # Init commit lists
@@ -2073,7 +2148,7 @@ mr_update() {
         sed -r -e "s/^${_git_mr_commit_prefix}(${_git_mr_commit_ref})\s.*/\1/g" \
                -e "s/^${_git_mr_commit_prefix}\[(${_git_mr_commit_ref})\]\(http[^)]+\)\s.*/\1/g")
 
-    local old_commits_array oIFS
+    local old_commits_array oIFS current_commits_long_array current_commits_short_array current_commits_messages_array
     oIFS=$IFS; IFS=$'\n'
         # shellcheck disable=SC2206
         current_commits_long_array=($current_commits_long)
@@ -2149,6 +2224,7 @@ mr_update() {
         forDescription="\1[$currSha]($(regex_escape "$currCommitUrl")) \3\4${MD_BR}"
         forDescriptionNew="\1[$currSha]($(regex_escape "$currCommitUrl")) \3"
 
+        local new_description_display_before
         if [[ -n $oldSha ]]; then
             # Existing commit
             # echo "🚧 Existing"
@@ -2320,14 +2396,15 @@ mr_update() {
     fi
 
     # Read MR & threads
-    local mr_threads
+    local mr_approvals mr_threads
     [[ -n $merge_request ]] ||
         gitlab_read_mr merge_request
+    gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
     # --------------------------------------------------------------------------------
     mr_print_title "$mr_title" "$mr_url"
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 }
 
 mr_merge() {
@@ -2351,8 +2428,9 @@ mr_merge() {
         "mr_title=" + (.title   | @sh) + ";\n"
     ')"
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     gitlab_load_mr "$mr_iid"
+    gitlab_load_approvals "$mr_url"
     gitlab_load_threads "$mr_url"
 
     # Merge request status summary - title
@@ -2360,12 +2438,13 @@ mr_merge() {
     mr_print_title "$mr_title" "$mr_url"
 
     # Read MR & threads
-    local merge_request mr_threads
+    local merge_request mr_approvals mr_threads
     gitlab_read_mr merge_request
+    gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
     # Merge request status summary - status
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 
     echo "--------------------------------------------------------------------------------"
     echo
@@ -2513,8 +2592,9 @@ mr_transition() {
         "mr_title=" + (.title   | @sh) + ";\n"
     ')"
 
-    # Load merge request & threads in parallel
+    # Load merge request, approvals & threads in parallel
     gitlab_load_mr "$mr_iid"
+    gitlab_load_approvals "$mr_url"
     gitlab_load_threads "$mr_url"
 
     local name labels_to_add labels_to_remove jira_transition_var
@@ -2554,12 +2634,13 @@ mr_transition() {
     mr_print_title "$mr_title" "$mr_url"
 
     # Read MR & threads
-    local merge_request mr_threads
+    local merge_request mr_approvals mr_threads
     gitlab_read_mr merge_request
+    gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
     # Merge request status summary - status
-    mr_print_status "$merge_request" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
 
     echo "--------------------------------------------------------------------------------"
     echo
@@ -2770,6 +2851,7 @@ _git_mr_commit_regex="^${_git_mr_commit_prefix}(${_git_mr_commit_ref}|${_git_mr_
 
 # Custom file descriptors
 git_mr_fd_mr=${GIT_MR_FD_MR=}
+git_mr_fd_ap=${GIT_MR_FD_AP=}
 git_mr_fd_th=${GIT_MR_FD_TH=}
 
 
