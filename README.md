@@ -213,8 +213,14 @@ git config --global mr.jira-ok-id "xx"
 # Required upvote count to turn indicator green in `mr status` (defaults to 2)
 # git config --global mr.git-mr-required-upvotes 2
 
-# Network timeout (in seconds, defaults to 5)
-# git config --global mr.git-mr-timeout 5
+# Limit merge request search for menu to given group (empty by default, useful on gitlab.com)
+# git config --global mr.gitlab-mr-limit-group "my-company"
+
+# Limit project name search to the ones you are a member of (defaults to 1, useful on gitlab.com)
+# git config --global mr.gitlab-projects-limit-member 1
+
+# Network timeout (in seconds, defaults to 10)
+# git config --global mr.git-mr-timeout 10
 ```
 
 **Tip:**  
@@ -261,8 +267,14 @@ export JIRA_OK_ID="xx"
 # Required upvote count to turn indicator green in `mr status` (defaults to 2)
 #export GIT_MR_REQUIRED_UPVOTES=2
 
-# Network timeout (in seconds, defaults to 5)
-#export GIT_MR_TIMEOUT=5
+# Limit merge request search for menu to given group (empty by default, useful on gitlab.com)
+#GITLAB_MR_LIMIT_GROUP="my-company"
+
+# Limit project name search to the ones you are a member of (defaults to 1, useful on gitlab.com)
+#GITLAB_PROJECTS_LIMIT_MEMBER=1
+
+# Network timeout (in seconds, defaults to 10)
+#export GIT_MR_TIMEOUT=10
 ```
 
 #### Jira & Gitlab tokens
