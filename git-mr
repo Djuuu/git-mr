@@ -734,7 +734,13 @@ gitlab_merge_requests_search() {
 gitlab_projects() {
     local result
 
-    result=$(gitlab_request "projects?simple=true&archived=false&order_by=last_activity_at&per_page=${GIT_MR_LAST_PROJECTS_LIMIT:-40}") || exit $?
+    local params=""
+    if [[ ${GITLAB_PROJECTS_LIMIT_MEMBER} -eq 1 ]]; then
+        params="&membership=true"
+    fi
+    params="${params}&archived=false&order_by=last_activity_at&per_page=${GIT_MR_LAST_PROJECTS_LIMIT:-50}"
+
+    result=$(gitlab_request "projects?simple=true${params}") || exit $?
     [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
 
     result=$(echo "$result" | jq 'map({id: .id, name: .name, path_with_namespace: .path_with_namespace})')
@@ -2871,6 +2877,7 @@ GITLAB_DOMAIN=${GITLAB_DOMAIN:-$(git config --get mr.gitlab-domain || true)}
 GITLAB_TOKEN=${GITLAB_TOKEN:-$(  git config --get mr.gitlab-token  || true)}
 
 GITLAB_MR_LIMIT_GROUP=${GITLAB_MR_LIMIT_GROUP:-$(git config --get mr.gitlab-mr-limit-group || true)}
+GITLAB_PROJECTS_LIMIT_MEMBER=${GITLAB_PROJECTS_LIMIT_MEMBER:-$(git config --get mr.gitlab-projects-limit-member || true)}
 
 JIRA_CODE_PATTERN=${JIRA_CODE_PATTERN:-$(git config --get mr.jira-code-pattern || true)}
 
@@ -2893,6 +2900,7 @@ GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-$(g
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-$(git config --get mr.git-mr-timeout || true)}
 
 # Defaults
+GITLAB_PROJECTS_LIMIT_MEMBER=${GITLAB_PROJECTS_LIMIT_MEMBER:-1}
 GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-2}
 GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-1}
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-5}

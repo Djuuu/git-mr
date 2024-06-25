@@ -20,6 +20,24 @@ gitlab_request() {
             ]'
             ;;
 
+        "projects?simple=true&archived=false&order_by=last_activity_at&per_page="*)
+            # echo "$f✔️ $1" >> gitlab-mock-search.log
+            echo '[
+                {"id": 1, "name": "Project A", "path_with_namespace": "public-group/project-a"},
+                {"id": 2, "name": "Project B", "path_with_namespace": "public-group/project-b"},
+                {"id": 3, "name": "Project C", "path_with_namespace": "private-group/project-c"},
+                {"id": 4, "name": "Project D", "path_with_namespace": "private-group/project-d"}
+            ]'
+            ;;
+
+        "projects?simple=true&membership=true&archived=false&order_by=last_activity_at&per_page="*)
+            # echo "$f✔️ $1" >> gitlab-mock-search.log
+            echo '[
+                {"id": 3, "name": "Project C", "path_with_namespace": "private-group/project-c"},
+                {"id": 4, "name": "Project D", "path_with_namespace": "private-group/project-d"}
+            ]'
+            ;;
+
         *)
             echo "$f❌ $1" >> gitlab-mock-search.log
             return 1
