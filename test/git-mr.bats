@@ -11,9 +11,10 @@ setup_file() {
 
     # Unset all git-mr environment variables (would take precedence over local configuration)
     unset JIRA_INSTANCE JIRA_USER JIRA_TOKEN JIRA_CODE_PATTERN \
-          GITLAB_DOMAIN GITLAB_TOKEN GITLAB_DEFAULT_LABELS \
+          GITLAB_DOMAIN GITLAB_TOKEN GITLAB_MR_LIMIT_GROUP GITLAB_DEFAULT_LABELS \
           GITLAB_IP_LABELS GITLAB_CR_LABELS GITLAB_QA_LABELS GITLAB_OK_LABELS \
             JIRA_IP_ID       JIRA_CR_ID       JIRA_QA_ID       JIRA_OK_ID \
+          GITLAB_PROJECTS_LIMIT_MEMBER \
           GIT_MR_EXTENDED GIT_MR_REQUIRED_UPVOTES GIT_MR_TIMEOUT
 
     export GIT_MR_NO_COLORS=1
@@ -2027,6 +2028,56 @@ End"
 
 ################################################################################
 # Merge request menu utility functions
+
+@test "Searches projects" {
+    load "test_helper/gitlab-mock-search.bash"
+
+    run gitlab_projects
+    assert_success
+    refute_output --partial '"path_with_namespace": "public-group/project-a"' # not a member
+    refute_output --partial '"path_with_namespace": "public-group/project-b"' # not a member
+    assert_output --partial '"path_with_namespace": "private-group/project-c"'
+    assert_output --partial '"path_with_namespace": "private-group/project-d"'
+
+    GITLAB_PROJECTS_LIMIT_MEMBER=0
+
+    run gitlab_projects
+    assert_success
+    assert_output --partial '"path_with_namespace": "public-group/project-a"' # no membership filtering
+    assert_output --partial '"path_with_namespace": "public-group/project-b"' # no membership filtering
+    assert_output --partial '"path_with_namespace": "private-group/project-c"'
+    assert_output --partial '"path_with_namespace": "private-group/project-d"'
+
+    GITLAB_PROJECTS_LIMIT_MEMBER=1
+}
+
+@test "Searches MRs across projects filtering by group when configured" {
+    load "test_helper/gitlab-mock-search.bash"
+
+    run gitlab_merge_requests_search
+    assert_failure "search_term required"
+
+
+    run gitlab_merge_requests_search AB-123
+    assert_success
+    assert_output --partial "public-group/proj-C/-/merge_requests/31"
+    assert_output --partial "public-group/proj-A/-/merge_requests/11"
+    assert_output --partial "private-group/proj-B/-/merge_requests/21"
+    refute_output --partial "private-group/proj-D/-/merge_requests/41" # closed
+
+
+    GITLAB_MR_LIMIT_GROUP=private-group
+
+    run gitlab_merge_requests_search AB-123
+    assert_success
+
+    refute_output --partial "public-group/proj-C/-/merge_requests/31" # not in private group
+    refute_output --partial "public-group/proj-A/-/merge_requests/11" # not in private group
+    assert_output --partial "private-group/proj-B/-/merge_requests/21"
+    refute_output --partial "private-group/proj-D/-/merge_requests/41" # closed
+
+    unset GITLAB_MR_LIMIT_GROUP
+}
 
 @test "Searches MRs across projects to build menu" {
     load "test_helper/gitlab-mock-menu.bash"
