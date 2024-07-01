@@ -70,6 +70,9 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * `-e`, `--extended`  
   Use full commit messages in description ("extended", for `git mr [open|update]`).  
   You can also set `GIT_MR_EXTENDED=1` in your environment variables to always use extended commit descriptions.
+* `-s`, `--short`  
+  Use short commit messages in description.  
+  Useful when extended mode is enabled in configuration or environment.
 * `--no-color`  
   Disable terminal colors.
 * `--no-links`  

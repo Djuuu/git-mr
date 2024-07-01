@@ -2732,6 +2732,10 @@ ${b}OPTIONS${r}
            Use full commit messages in description ("extended", for \`git mr [open|update]\`).
            You can also set GIT_MR_EXTENDED=1 in your environment variables to always use extended commit descriptions.
 
+       -s, --short
+           Use short commit messages in description.
+           Useful when extended mode is enabled in configuration or environment.
+
        --no-color
            Disable terminal colors.
 
@@ -2928,6 +2932,7 @@ while [[ $# -gt 0 ]]; do
         -t|--target) GIT_MR_TARGET="$2"; shift ;;
 
         -e|--extended) GIT_MR_EXTENDED=1 ;;
+        -s|--short) GIT_MR_EXTENDED=0 ;;
 
         --no-color) GIT_MR_NO_COLORS=1 ;;
         --no-links) GIT_MR_NO_TERMINAL_LINK=1 ;;
@@ -2939,7 +2944,7 @@ while [[ $# -gt 0 ]]; do
         # mr update
         -n|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
             case "$2" in
-                -c|--code | -t|--target | -e|--extended | --no-color|--no-links | -y|--yes | -v|--verbose | -r|--replace-commits | -f|--force | -h) ;;
+                -c|--code | -t|--target | -e|--extended | -s|--short | --no-color|--no-links | -y|--yes | -v|--verbose | -r|--replace-commits | -f|--force | -h) ;;
                 *) GIT_MR_UPDATE_NEW_SECTION_NAME="$2"; shift ;;
             esac ;;
         -r|--replace-commits) GIT_MR_REPLACE_COMMITS=1 ;;
