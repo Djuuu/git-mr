@@ -82,6 +82,7 @@ _git-mr() {
     case $mr_action in default|open|update) opts+=(
         '(-t --target)'{-t,--target}'[force target branch]:merge request target branch:->target_branch'
         '(-e --extended)'{-e,--extended}'[use full commit messages in description]'
+        '(-s --short)'{-s,--short}'[use short commit messages in description]'
         '(--no-commits)'--no-commits'[omit commit list from description]'
     );; esac
     case $mr_action in default|open|status|menu-status) opts+=(

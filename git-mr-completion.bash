@@ -85,6 +85,7 @@ _git_mr() {
         case $mr_action in default | open | update)
             __gitcomp_nl_append '-t'; __gitcomp_nl_append '--target'
             __gitcomp_nl_append '-e'; __gitcomp_nl_append '--extended'
+            __gitcomp_nl_append '-s'; __gitcomp_nl_append '--short'
             __gitcomp_nl_append '--no-commits'
         ;; esac
         case $mr_action in default | open | status | menu-status)
