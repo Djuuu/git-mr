@@ -2670,7 +2670,7 @@ mr_hook() {
     git_mr_readonly show
 
     local git_dir; git_dir=$(git rev-parse --git-dir)
-    local git_mr_dir; git_mr_dir="$(dirname "${BASH_SOURCE[0]}")"
+    local git_mr_dir; git_mr_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
     [[ -d "${git_dir}/hooks" ]] || mkdir "${git_dir}/hooks"
 
