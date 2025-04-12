@@ -709,7 +709,7 @@ sha_link() {
             "merge_requests?state=opened&view=simple&source_branch=feature/nope")
                 echo '[]'
                 ;;
-            *) return ;;
+            *) return $ERR_GITLAB;;
         esac
     }
 
@@ -720,7 +720,7 @@ sha_link() {
     run gitlab_extract_title "$mr_summary"; assert_output "Draft: Feature/XY-1234 Lorem Ipsum"
 
     run gitlab_merge_request_summary "feature/nope"
-    assert_failure "$ERR_GITLAB"
+    assert_success
     assert_output ""
 
     run gitlab_merge_request_summary "nope"

@@ -701,9 +701,11 @@ gitlab_merge_request_summary() {
     local source_branch=${1:-$(git_current_branch)}
 
     local result
-    result=$(gitlab_current_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || exit $?
+    result=$(gitlab_current_project_request "merge_requests?state=opened&view=simple&source_branch=${source_branch}") || return $?
 
-    [[ -n $result && $result != "[]" ]] || return "$ERR_GITLAB"
+    [[ -z $result ]] && return "$ERR_GITLAB"
+
+    [[ $result == "[]" ]] && return 0
 
     echo "$result" | jq '.[0]'
 }
@@ -2028,7 +2030,15 @@ $(mr_description "$source_branch" "$target_branch" "$issue_code")
 
 EOF
 
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    local mr_summary
+    if [[ -z $_gitlab_error ]]; then
+        mr_summary=$(gitlab_merge_request_summary "$source_branch") || _gitlab_error=$?
+    fi
+    if [[ $_gitlab_error -gt 0 ]]; then
+        echo
+        return $_gitlab_error
+    fi
+
     if [[ -n $mr_summary ]]; then
         # Print merge request status summary
         mr_status_block "$mr_summary"
@@ -2098,13 +2108,17 @@ mr_status() {
     local source_branch=${1:-$(git_current_branch)}
 
     # Search existing merge request
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [[ -z $mr_summary ]]; then
-        echo_error "Merge request not found"
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch") || _gitlab_error=$?
 
+    if [[ -z $_gitlab_error && -z $mr_summary ]]; then
+        _gitlab_error=0
+        echo_error "Merge request not found"
+    fi
+
+    if [[ -n $_gitlab_error ]]; then
         git_check_branches "$source_branch" "-"
         mr_print "$source_branch"
-        return "$ERR_GITLAB"
+        return $_gitlab_error
     fi
 
     # Print merge request title & status
@@ -2859,6 +2873,8 @@ _git_mr_commit_prefix='[^0-9a-fA-F]*'
 _git_mr_commit_ref='[0-9a-fA-F]{7,}'
 _git_mr_commit_href="\[${_git_mr_commit_ref}\]\(http[^)]+\)"
 _git_mr_commit_regex="^${_git_mr_commit_prefix}(${_git_mr_commit_ref}|${_git_mr_commit_href})\s"
+
+_gitlab_error=
 
 # Custom file descriptors
 git_mr_fd_mr=${GIT_MR_FD_MR=}
