@@ -1743,19 +1743,32 @@ mr_menu_status() {
         gitlab_load_approvals "$mr_url"
         gitlab_load_threads "$mr_url"
 
-        mr_title=$(gitlab_title_undraft "$mr_title")
+        # Read MR (to get source branch)
+        local merge_request
+        gitlab_read_mr merge_request
+        local source_branch
+        eval "$(echo "$merge_request" | jq -r '
+            "source_branch=" + (.source_branch | @sh) + ";\n"
+        ')"
 
+        # Print MR title line
         echo -n "* $(colorize "$project_name" "bold"): "
-        if has_links; then
-            echolink "$mr_url" "$mr_title"
-        else
-            echo "$mr_title"
-            echolor "  ⇒ $mr_url" "midgray"
+
+        local show="$GIT_MR_MENU_STATUS_SHOW"
+        if [[ $show == "title" || $show == "both" ]]; then
+            terminal_link "$mr_url" "$(gitlab_title_undraft "$mr_title")"
         fi
+        [[ $show == "both" ]] && echo -en "$GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR"
+        if [[ $show == "branch" || $show == "both" ]]; then
+            echo -n "$(colorize "( " "gray")"
+            echo -n "$(terminal_link "$mr_url" "$(colorize "$source_branch" "lightpurple")")"
+            echo -n "$(colorize ")" "gray")"
+        fi
+        echo
+        has_links || echolor "  ⇒ $mr_url" "midgray"
 
         # Read MR & threads
-        local merge_request mr_approvals mr_threads
-        gitlab_read_mr merge_request
+        local mr_approvals mr_threads
         gitlab_read_approvals mr_approvals
         gitlab_read_threads mr_threads
 
@@ -2921,6 +2934,11 @@ GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-2}
 GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-1}
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-10}
 
+GIT_MR_MENU_STATUS_SHOW=both
+#GIT_MR_MENU_STATUS_SHOW=title
+#GIT_MR_MENU_STATUS_SHOW=branch
+GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="  "
+#GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="\n   "
 
 ################################################################################
 # Run
