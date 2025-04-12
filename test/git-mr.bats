@@ -651,22 +651,26 @@ sha_link() {
 
 @test "Warns for Gitlab API request errors" {
     run gitlab_check_error '{"error":"failed"}'
+    assert_failure
     assert_output "$(cat <<- EOF
 
 		Gitlab error:
 		  {"error":"failed"}
-		ko
 		EOF
     )"
 
     run gitlab_check_error '{"message":"failed"}'
+    assert_failure
     assert_output "$(cat <<- EOF
 
 		Gitlab error:
 		  {"message":"failed"}
-		ko
 		EOF
     )"
+
+    run gitlab_check_error '{"ok":"ok"}'
+    assert_success
+    assert_output ""
 }
 
 @test "Determines new merge request URL" {

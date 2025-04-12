@@ -635,9 +635,7 @@ gitlab_request() {
         --max-time "${GIT_MR_TIMEOUT}" \
         "${gitlab_base_url}/${request_url}") || exit_error "$ERR_GITLAB_API" "Gitlab request error"
 
-    if [[ $request_verb != "GET" ]]; then
-        [[ -z "$(gitlab_check_error "$result")" ]] || return "$ERR_GITLAB"
-    fi
+    gitlab_check_error "$result" || return "$ERR_GITLAB"
 
     echo "$result"
 }
@@ -650,8 +648,7 @@ gitlab_check_error() {
 
     if [[ $hasErrorMessage == 'true' ]]; then
         echo_error "\nGitlab error:\n  ${result}"
-
-        echo "ko"
+        return "$ERR_GITLAB"
     fi
 }
 
