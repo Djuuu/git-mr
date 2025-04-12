@@ -1098,10 +1098,9 @@ mr_description() {
 
     if [[ "${GIT_MR_NO_COMMITS}" == "1" ]]; then
         mr_print_description "$title"
-    else 
+    else
         mr_print_description "$title" "$(mr_commit_list "$source_branch" "$target_branch")"
     fi
-    
 }
 
 mr_print_description() {
@@ -2204,13 +2203,13 @@ mr_update() {
 
     # Iterate over commit lists, compare sha-1 and update description
     for i in ${!current_commits_long_array[*]}; do
-        
+
         local oldSha=${old_commits_array[$i]}
 
         local currSha=${current_commits_short_array[$i]}
         local currShaaaa=${current_commits_long_array[$i]}
         local currMsg=${current_commits_messages_array[$i]}
-        
+
         local oldCommitUrl="$mr_url/diffs?commit_id=$oldSha"
         local currCommitUrl="$mr_url/diffs?commit_id=$currShaaaa"
 
