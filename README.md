@@ -280,6 +280,19 @@ export JIRA_OK_ID="xx"
 #export GIT_MR_TIMEOUT=10
 ```
 
+Environment-only configuration:
+```bash
+## What to show as merge request title in `git mr menu status`. Available values:
+## - "both":   Merge request title and branch (default)
+## - "title":  Merge request title only
+## - "branch": Merge request source branch only
+#GIT_MR_MENU_STATUS_SHOW=both
+
+## Separator between merge request title and branch when GIT_MR_MENU_STATUS_SHOW=both 
+#GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="  "    # default
+#GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="\n   " # send to the next line
+```
+
 #### Jira & Gitlab tokens
 
 To create a Jira API Token, go to:

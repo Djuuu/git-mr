@@ -20,10 +20,10 @@ GITLAB_QA_LABELS="Testing"
 GITLAB_OK_LABELS="Accepted"
 
 issue_code="XY-1234"
-
-ticket_title="${issue_code} Lorem Ipsum"
-ticket_url="https://mycompany.atlassian.net/browse/${issue_code}"
-ticket_link="$(markdown_link "$ticket_title" "$ticket_url")"
+issue_title="Lorem Ipsum"
+issue_full_title="${issue_code} ${issue_title}"
+issue_url="https://mycompany.atlassian.net/browse/${issue_code}"
+issue_link="$(markdown_link "$issue_full_title" "$issue_url")"
 
 mr_title="Feature/${issue_code} Lorem Ipsum"
 mr_url="https://myapp.gitlab.com/my/project/merge_requests/6"
@@ -37,7 +37,7 @@ fake_prompt() {
     local branch=${2:-"feature/xy-1234-lorem-ipsum"}
 
     colorize "\n___________________________________________________________________________________________\n\n\n" "gray"
-    echo "$(colorize "me@mystation" "green"):$(colorize "~/my-project" "lightblue") $(colorize "($branch)" "purple") $(colorize "↔ ✔" "green") $ $cmd"
+    echo "$(colorize "me@mystation" "green"):$(colorize "~/my-project" "lightblue") $(colorize "($branch)" "purple") $(colorize "↔ ✔ " "green") $ $cmd"
 }
 
 c_same() {
@@ -60,7 +60,7 @@ sample_mr() {
     cat <<EOF
 
 --------------------------------------------------------------------------------
-$(mr_print_description "$ticket_link" "* **78330c9 In vulputate quam ac ultrices volutpat**
+$(mr_print_description "$issue_link" "* **78330c9 In vulputate quam ac ultrices volutpat**
 * **0010a6a Curabitur vel purus sed tortor finibus posuere**
 * **3621817 Aenean sed sem hendrerit ex egestas**  ")
 
@@ -78,7 +78,7 @@ sample_mr_extended() {
     cat <<EOF
 
 --------------------------------------------------------------------------------
-$(mr_print_description "$ticket_link" "* **78330c9 In vulputate quam ac ultrices volutpat**
+$(mr_print_description "$issue_link" "* **78330c9 In vulputate quam ac ultrices volutpat**
   Some commit description
 * **0010a6a Curabitur vel purus sed tortor finibus posuere**
   Extended description
@@ -158,7 +158,7 @@ sample_mr_update() {
 
 $(mr_print_title "$mr_title" "$mr_url")
 
-$(markdown_title "$ticket_link")
+$(markdown_title "$issue_link")
 
 Vivamus venenatis tortor et neque sollicitudin, eget suscipit est malesuada.
 Suspendisse nec odio id arcu sagittis pulvinar ut nec lacus.
@@ -213,7 +213,7 @@ sample_mr_update_links() {
 
 $(mr_print_title "$mr_title" "$mr_url")
 
-$(markdown_title "$ticket_link")
+$(markdown_title "$issue_link")
 
 Vivamus venenatis tortor et neque sollicitudin, eget suscipit est malesuada.
 Suspendisse nec odio id arcu sagittis pulvinar ut nec lacus.
@@ -342,22 +342,25 @@ sample_mr_menu_status() {
     cat <<EOF
 
 ================================================================================
- $(terminal_link "$search_url" "$issue_code") (3 merge requests)
+ $(terminal_link "$search_url" "$issue_code") $(terminal_link "$search_url" "$issue_title") (3 merge requests)
 ================================================================================
 
 EOF
 
-    echo "* $(colorize "Some Project" "bold"): $(terminal_link "https://myapp.gitlab.com/some/project/-/merge_requests/12" "Feature/XY-1234 Lorem Ipsum")"
+    echo -n "* $(colorize "Some Project" "bold"): $(terminal_link "https://myapp.gitlab.com/some/project/-/merge_requests/12" "Feature/XY-1234 Lorem Ipsum")"
+    echo "  $(colorize "( " "gray")$(terminal_link "https://myapp.gitlab.com/some/project/-/merge_requests/12" "$(colorize "feat/XY-1234-lorem" "lightpurple")")$(colorize ")" "gray")"
     has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/12" "midgray"
     mr_print_status "$mr1" "$approvals1" "$threads1"
     echo
 
-    echo "* $(colorize "Other Project" "bold"): $(terminal_link "https://myapp.gitlab.com/other/project/-/merge_requests/34" "Feature/XY-1234 Quisque sed")"
+    echo -n "* $(colorize "Other Project" "bold"): $(terminal_link "https://myapp.gitlab.com/other/project/-/merge_requests/34" "Feature/XY-1234 Quisque sed")"
+    echo "  $(colorize "( " "gray")$(terminal_link "https://myapp.gitlab.com/other/project/-/merge_requests/34" "$(colorize "feat/XY-1234-quisque" "lightpurple")")$(colorize ")" "gray")"
     has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/34" "midgray"
     mr_print_status "$mr2" "$approvals2" "$threads2"
     echo
 
-    echo "* $(colorize "Third Project" "bold"): $(terminal_link "https://myapp.gitlab.com/third/project/-/merge_requests/56" "Feature/XY-1234 Nunc vestibulum")"
+    echo -n "* $(colorize "Third Project" "bold"): $(terminal_link "https://myapp.gitlab.com/third/project/-/merge_requests/56" "Feature/XY-1234 Nunc vestibulum")"
+    echo "  $(colorize "( " "gray")$(terminal_link "https://myapp.gitlab.com/third/project/-/merge_requests/56" "$(colorize "feat/XY-1234-nunc" "lightpurple")")$(colorize ")" "gray")"
     has_links || echolor "  ⇒ https://myapp.gitlab.com/some/project/-/merge_requests/56" "midgray"
     mr_print_status "$mr3" "$approvals3" "$threads3"
     echo
@@ -451,9 +454,9 @@ if [[ "$#" -gt 0 ]]; then
                 sample_mr_update_links
                 ;;
             menu)
-                sample_mr_menu
+#                sample_mr_menu
                 sample_mr_menu_status
-                sample_mr_menu_update
+#                sample_mr_menu_update
                 ;;
             merge)
                 sample_mr_merge

@@ -22,6 +22,9 @@
     jira-qa-id = "130"
     jira-ok-id = "140"
 
+    gitlab-mr-limit-group        = ""
+    gitlab-projects-limit-member = ""
+
     gitlab-ip-labels = "WIP"
     gitlab-cr-labels = "Review"
     gitlab-qa-labels = "Testing"

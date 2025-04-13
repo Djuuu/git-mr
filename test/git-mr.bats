@@ -651,22 +651,26 @@ sha_link() {
 
 @test "Warns for Gitlab API request errors" {
     run gitlab_check_error '{"error":"failed"}'
+    assert_failure
     assert_output "$(cat <<- EOF
 
 		Gitlab error:
 		  {"error":"failed"}
-		ko
 		EOF
     )"
 
     run gitlab_check_error '{"message":"failed"}'
+    assert_failure
     assert_output "$(cat <<- EOF
 
 		Gitlab error:
 		  {"message":"failed"}
-		ko
 		EOF
     )"
+
+    run gitlab_check_error '{"ok":"ok"}'
+    assert_success
+    assert_output ""
 }
 
 @test "Determines new merge request URL" {
@@ -705,7 +709,7 @@ sha_link() {
             "merge_requests?state=opened&view=simple&source_branch=feature/nope")
                 echo '[]'
                 ;;
-            *) return ;;
+            *) return $ERR_GITLAB;;
         esac
     }
 
@@ -716,7 +720,7 @@ sha_link() {
     run gitlab_extract_title "$mr_summary"; assert_output "Draft: Feature/XY-1234 Lorem Ipsum"
 
     run gitlab_merge_request_summary "feature/nope"
-    assert_failure "$ERR_GITLAB"
+    assert_success
     assert_output ""
 
     run gitlab_merge_request_summary "nope"
@@ -2137,6 +2141,8 @@ End"
     load "test_helper/gitlab-mock-menu.bash"
     load "test_helper/jira-mock.bash"
 
+    GIT_MR_MENU_STATUS_SHOW=title
+
     run mr_menu_status "AB-123" "$(mr_menu_merge_requests "AB-123")"
     assert_output "$(cat <<-EOF
 
@@ -2162,6 +2168,42 @@ End"
 
 
 		* Project B: MR 21 title
+		  ⇒ https://gitlab.example.net/proj-B/-/merge_requests/21
+
+		   🏷  [Review]                                                        (↣ main)
+
+		   ☑️ 1/2   👍 0  👎 1                          CI: ❌       Can be merged: ❌
+		EOF
+    )"
+
+    GIT_MR_MENU_STATUS_SHOW=both
+    GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="  "
+
+    run mr_menu_status "AB-123" "$(mr_menu_merge_requests "AB-123")"
+    assert_output "$(cat <<-EOF
+
+		================================================================================
+		 AB-123 This is an issue  (3 merge requests)
+		 ⇒ https://mycompany.example.net/browse/AB-123
+		================================================================================
+
+		* Project C: MR 31 title  ( feature/branch-31)
+		  ⇒ https://gitlab.example.net/proj-C/-/merge_requests/31
+
+		   🏷  [Accepted]                                                      (↣ main)
+
+		   👍 3  👎 0                Threads: 1/2       CI: ⏰       Can be merged: ✔
+
+
+		* Project A: MR 11 title  ( feature/branch-11)
+		  ⇒ https://gitlab.example.net/proj-A/-/merge_requests/11
+
+		   🏷  [QA]                                                            (↣ main)
+
+		   ✅ 2/2   👍 2  👎 0                          CI: ⏱       Can be merged: ✔
+
+
+		* Project B: MR 21 title  ( feature/branch-21)
 		  ⇒ https://gitlab.example.net/proj-B/-/merge_requests/21
 
 		   🏷  [Review]                                                        (↣ main)
