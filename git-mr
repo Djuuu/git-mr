@@ -1871,7 +1871,7 @@ mr_menu_update() {
     ')"
 
     local mr_menu_content; mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
-    local updated_description; updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+    local updated_description; updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content" | tr -d '\r')"
 
     mr_menu_print_description "$updated_description" "$mr_url" "$mr_title"
 
@@ -1926,7 +1926,7 @@ mr_menu_update_all() {
         mr_description=$(gitlab_extract_description "$merge_request")
 
         mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
-        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content" | tr -d '\r')"
 
         clear_screen
         mr_menu_print_title "$issue_code" "" "" "$menu_items" "$i"
@@ -2018,7 +2018,7 @@ mr_menu_edit() {
 
         # Prepare menu content
         mr_menu_content="$(mr_menu_highlight_current "$edited_content" "$mr_url")"
-        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content" | tr -d '\r')"
 
         clear_screen
         mr_menu_print_title "$issue_code" "" "" "$menu_items" "$i"
@@ -2103,7 +2103,7 @@ mr_menu_replace_description() {
 
         prev_description_line="$mr_description_line"
         ((i += 1))
-    done < <(echo "$mr_description")
+    done < <(echo "$mr_description" | tr -d '\r')
 
     if [[ $menu_was_output -eq 0 ]]; then
         [[ -n "$prev_description_line" ]] && echo
