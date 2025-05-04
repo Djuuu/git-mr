@@ -1869,12 +1869,10 @@ mr_menu_update_all() {
         ')"
 
         project_url=$(gitlab_extract_project_url_part "$mr_url")
-
         [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
 
         # Load existing merge request details
         merge_request=$(gitlab_merge_request "$mr_iid" "$project_url")
-
         mr_description=$(gitlab_extract_description "$merge_request")
 
         mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
@@ -1944,7 +1942,6 @@ mr_menu_replace_description() {
             else
                 # replace menu once
                 if [[ $i -eq "$menu_end" ]]; then
-                    echo_debug "Replacing menu"
                     echo "$menu_content"
                     menu_was_output=1
                 fi
@@ -1954,7 +1951,6 @@ mr_menu_replace_description() {
             echo "$mr_description_line"
             # insert menu once
             if [[ $menu_was_output -eq 0 && -z "$mr_description_line" && $i -gt 1 ]]; then
-                echo_debug "Inserting menu"
                 echo "$menu_content"
                 echo
                 menu_was_output=1
@@ -1966,7 +1962,6 @@ mr_menu_replace_description() {
     done < <(echo "$mr_description")
 
     if [[ $menu_was_output -eq 0 ]]; then
-        echo_debug "Inserting menu (failsafe)"
         [[ -n "$prev_description_line" ]] && echo
         echo "$menu_content"
     fi

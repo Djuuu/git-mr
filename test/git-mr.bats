@@ -150,16 +150,6 @@ sha_link() {
     assert_failure "$ERR_GIT_REPO"
 }
 
-@test "Uses GNU commands" {
-    run sed --version
-    assert_success
-    assert_output --partial "GNU sed"
-
-    run grep --version
-    assert_success
-    assert_output --partial "GNU grep"
-}
-
 @test "Determines current branch" {
     git switch main
     run git_current_branch
@@ -384,6 +374,16 @@ sha_link() {
 
 ################################################################################
 # Misc. utilities
+
+@test "Uses GNU commands" {
+    run sed --version
+    assert_success
+    assert_output --partial "GNU sed"
+
+    run grep --version
+    assert_success
+    assert_output --partial "GNU grep"
+}
 
 @test "Exits with error" {
     run exit_error 99 "Nope!"
