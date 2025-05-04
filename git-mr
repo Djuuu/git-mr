@@ -1715,6 +1715,27 @@ mr_menu_contents() {
     echo "$GIT_MR_MENU_END"
 }
 
+mr_menu_list_contents() {
+    local menu_items=$1
+
+    while IFS=$'\n' read -r menu_item; do
+        local mr_url mr_title project_name
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
+
+        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
+            project_name=$(gitlab_extract_project_url_part "$mr_url")
+
+        mr_title=$(gitlab_title_undraft "$mr_title")
+
+        echo "* ${project_name}: $(markdown_link "$mr_title" "$mr_url")"
+
+    done < <(echo "$menu_items")
+}
+
 mr_menu_print_title() {
     local issue_code=$1
     local issue_title=$2

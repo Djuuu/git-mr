@@ -2124,6 +2124,20 @@ End"
     )"
 }
 
+@test "Builds raw menu list" {
+    test_menu_items='{"iid":31,"title":"MR 31 title","web_url":"https://gitlab.example.net/proj-C/-/merge_requests/31","state":"opened","project_id":3,"project_name":"Project C"}
+{"iid":11,"title":"MR 11 title","web_url":"https://gitlab.example.net/proj-A/-/merge_requests/11","state":"opened","project_id":1,"project_name":"Project A"}
+{"iid":21,"title":"MR 21 title","web_url":"https://gitlab.example.net/proj-B/-/merge_requests/21","state":"opened","project_id":2,"project_name":"Project B"}'
+
+    run mr_menu_list_contents "$test_menu_items"
+    assert_output "$(cat <<- EOF
+		* Project C: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+		* Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+		* Project B: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21)
+		EOF
+    )"
+}
+
 @test "Prints menu title" {
     run mr_menu_print_title "AB-123" "" "" "$(echo -e "a\nb\nc")"
     assert_output "$(cat <<- EOF
