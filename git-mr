@@ -1952,6 +1952,17 @@ mr_menu_update_all() {
         echo "${updated_count} merge request$([[ $updated_count -gt 1 ]] && echo 's') updated"
 }
 
+mr_menu_highlight_current() {
+    local menu_content=$1
+    local mr_url=$2
+
+    local search replace
+    search="(\s?)\* (.*\[.*\]\($(regex_escape "$mr_url")\).*)"
+    replace="\1* ${MD_BOLD}\2${MD_BOLD}"
+
+    echo "$menu_content" | sed -r -e "s/${search}/${replace}/"
+}
+
 mr_menu_start_line() {
     local mr_description=$1
 

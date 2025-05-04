@@ -2241,6 +2241,39 @@ End"
     )"
 }
 
+@test "Highlights current MR link in edited menu" {
+
+    test_menu_content='## Menu
+
+### Main feature
+
+  * Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+  * Project Bee: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21) (/!\ WIP)
+
+### Documentation
+
+  * Project Doc: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+
+--------------------------------------------------------------------------------'
+
+    run mr_menu_highlight_current "$test_menu_content" "https://gitlab.example.net/proj-B/-/merge_requests/21"
+    assert_output "$(cat <<- EOF
+		## Menu
+
+		### Main feature
+
+		  * Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+		  * **Project Bee: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21) (/!\ WIP)**
+
+		### Documentation
+
+		  * Project Doc: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+
+		--------------------------------------------------------------------------------
+		EOF
+    )"
+}
+
 @test "Replaces menu in MR descriptions" {
 
     local menu_content="## Menu
