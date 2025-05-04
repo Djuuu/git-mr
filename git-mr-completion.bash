@@ -35,6 +35,7 @@ __git-mr_menu_commands() {
         cat <<-'ACTIONS'
 		status
 		update
+		edit
 		ACTIONS
     )"
 }
@@ -55,6 +56,7 @@ _git_mr() {
             open) mr_action="open" ;;
             status) [[ $mr_action == "menu" ]] && mr_action="menu-status" || mr_action="status" ;;
             update) [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
+            edit)   [[ $mr_action == "menu" ]] && mr_action="menu-edit"   || mr_action="default" ;;
             merge) mr_action="merge" ;;
             menu) mr_action="menu" ;;
             ip | cr | qa | ok) mr_action="transition" ;;
@@ -70,6 +72,7 @@ _git_mr() {
                 op) mr_action="open" ;;
                 st) [[ $mr_action == "menu" ]] && mr_action="menu-status" || mr_action="status" ;;
                 up) [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
+                ed) [[ $mr_action == "menu" ]] && mr_action="menu-edit"   || mr_action="default" ;;
                 mg) mr_action="merge" ;;
             esac
         fi
@@ -92,7 +95,7 @@ _git_mr() {
             __gitcomp_nl_append '--no-color'
             __gitcomp_nl_append '--no-links'
         ;; esac
-        case $mr_action in default | update | menu-update | transition | merge)
+        case $mr_action in default | update | menu-update | menu-edit | transition | merge)
             __gitcomp_nl_append '-y'; __gitcomp_nl_append '--yes'
         ;; esac
         __gitcomp_nl_append '-v'; __gitcomp_nl_append '--verbose'
