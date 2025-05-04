@@ -419,6 +419,35 @@ git_mr_readonly() {
     return 0
 }
 
+git_mr_editor() {
+    local editor
+
+    if [[ -n "$VISUAL" ]]; then
+        echo_debug "Using VISUAL=$VISUAL"
+        editor=$VISUAL
+    elif [[ -n "$EDITOR" ]]; then
+        echo_debug "Using EDITOR=$EDITOR"
+        editor=$EDITOR
+    elif [[ -x /usr/bin/editor ]]; then
+        echo_debug "Using default system editor: /usr/bin/editor"
+        editor=/usr/bin/editor
+    elif [[ -x "$(command -v "vim")"  ]]; then
+        echo_debug "Falling back to vim editor"
+        editor=vim
+    elif [[ -x "$(command -v "nano")"  ]]; then
+        echo_debug "Falling back to nano editor"
+        editor=nano
+    else
+        local errmsg="Unable to find any suitable editor. Please set VISUAL or EDITOR env variable."
+        [[ -x "$(command -v "update-alternatives")" ]] &&
+            errmsg="${errmsg}\nAlternatively, you can configure the default system editor with:\n  sudo update-alternatives --config editor"
+        exit_error "$ERR_MR_DEPS" "$errmsg"
+    fi
+
+    [[ -x "$(command -v "$editor")" ]] || exit_error "$ERR_MR_DEPS" "Invalid editor: $editor"
+
+    echo "$editor"
+}
 
 ################################################################################
 # Markdown formatting

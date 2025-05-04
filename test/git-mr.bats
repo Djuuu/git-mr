@@ -527,6 +527,20 @@ sha_link() {
     assert_success
 }
 
+@test "Determines default text editor from env" {
+    VISUAL=fake_visual_test
+    EDITOR=fake_editor_test
+    run git_mr_editor
+    assert_failure
+    assert_output "Invalid editor: fake_visual_test"
+
+    VISUAL=
+    EDITOR=fake_editor_test
+    run git_mr_editor
+    assert_failure
+    assert_output "Invalid editor: fake_editor_test"
+}
+
 ################################################################################
 # Markdown formatting
 
