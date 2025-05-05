@@ -2124,16 +2124,27 @@ End"
     )"
 }
 
-@test "Builds raw menu list" {
+@test "Builds editable menu content" {
     test_menu_items='{"iid":31,"title":"MR 31 title","web_url":"https://gitlab.example.net/proj-C/-/merge_requests/31","state":"opened","project_id":3,"project_name":"Project C"}
 {"iid":11,"title":"MR 11 title","web_url":"https://gitlab.example.net/proj-A/-/merge_requests/11","state":"opened","project_id":1,"project_name":"Project A"}
 {"iid":21,"title":"MR 21 title","web_url":"https://gitlab.example.net/proj-B/-/merge_requests/21","state":"opened","project_id":2,"project_name":"Project B"}'
 
-    run mr_menu_list_contents "$test_menu_items"
+    run mr_menu_editable_content "$test_menu_items"
     assert_output "$(cat <<- EOF
+
 		* Project C: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
 		* Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
 		* Project B: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21)
+
+
+		//!
+		//!  Here you can rearrange menu items, add additional description, etc.
+		//!
+		//!  Individual menu items will be highlighted in the relevant merge request,
+		//!  provided you keep the markdown list & link format.
+		//!
+		//!  If you remove everything, menu update will be aborted.
+		//!
 		EOF
     )"
 }
@@ -2392,6 +2403,29 @@ paragraph.
 * New Menu item 2
 --------------------------------------------------------------------------------"
 
+}
+
+@test "Cleans up edited menu" {
+    run mr_menu_edit_read_file ../../test-menu-contents.md
+    assert_output "$(cat <<-EOF
+		## Menu
+
+		Content line: first
+
+		Content line: before comments
+		Content line: after comments
+
+		* Menu item 1
+		* Menu item 2
+		  * [Menu item 3](https://example.net)
+
+		    Content line ddd
+
+		Content line eee
+
+		--------------------------------------------------------------------------------
+		EOF
+    )"
 }
 
 @test "Allows menu edit before update" {

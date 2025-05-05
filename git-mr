@@ -1715,9 +1715,10 @@ mr_menu_contents() {
     echo "$GIT_MR_MENU_END"
 }
 
-mr_menu_list_contents() {
+mr_menu_editable_content() {
     local menu_items=$1
 
+    echo
     while IFS=$'\n' read -r menu_item; do
         local mr_url mr_title project_name
         eval "$(echo "$menu_item" | jq -r '
@@ -1734,6 +1735,19 @@ mr_menu_list_contents() {
         echo "* ${project_name}: $(markdown_link "$mr_title" "$mr_url")"
 
     done < <(echo "$menu_items")
+
+        cat << EOF
+
+
+//!
+//!  Here you can rearrange menu items, add additional description, etc.
+//!
+//!  Individual menu items will be highlighted in the relevant merge request,
+//!  provided you keep the markdown list & link format.
+//!
+//!  If you remove everything, menu update will be aborted.
+//!
+EOF
 }
 
 mr_menu_print_title() {
@@ -1963,6 +1977,23 @@ mr_menu_highlight_current() {
     echo "$menu_content" | sed -r -e "s/${search}/${replace}/"
 }
 
+mr_menu_edit_read_file() {
+    local menu_file=$1
+
+    # Cleanup edited menu contents:
+    # - remove comments
+    # - remove leading blank lines and collapse multiple blank lines
+    local edited_content; edited_content=$( \
+        sed -e '/^\s*\/\/!/d' "$menu_file" |
+        sed -e '/./,$!d' -e '/^$/N;/^\n$/D' \
+    )
+
+    # Output menu contents
+    echo -e "${GIT_MR_MENU_START}\n"
+    echo -e "${edited_content}\n"
+    echo -e "${GIT_MR_MENU_END}"
+}
+
 mr_menu_edit() {
     local issue_code=$1
     local menu_items=$2
@@ -1972,15 +2003,13 @@ mr_menu_edit() {
 
     # Init temporary menu file
     local menu_file; menu_file="$(git rev-parse --git-dir)/MR_MENU_EDITMSG"
-    mr_menu_list_contents "$menu_items" > "$menu_file"
+    mr_menu_editable_content "$menu_items" > "$menu_file"
 
-    # Edit temporary menu file
+    # Open temporary menu file in editor
     "$editor" "$menu_file"
 
-    # Cleanup menu content
-    local edited_content
-    edited_content=$(sed -e :a -e '/./,$!d;/^\n*$/{$d;N;};/\n$/ba' "$menu_file") # Remove leading and training empty lines
-    edited_content=$(echo -e "${GIT_MR_MENU_START}\n\n${edited_content}\n\n${GIT_MR_MENU_END}\n") # Add menu header and footer
+    # Get file contents
+    local edited_content; edited_content="$(mr_menu_edit_read_file "$menu_file")"
 
     local mr_iid \
         mr_url \
