@@ -2426,6 +2426,9 @@ paragraph.
 		--------------------------------------------------------------------------------
 		EOF
     )"
+
+    run mr_menu_edit_read_file ../../test-empty-menu-contents.md
+    assert_output ""
 }
 
 @test "Allows menu edit before update" {
@@ -2513,6 +2516,16 @@ n'
     assert_output --partial "2 merge requests updated"
 
     refute [ -e '.git/MR_MENU_EDITMSG' ]
+}
+
+@test "Aborts menu update when edited menu is empty" {
+    load "test_helper/gitlab-mock-menu.bash"
+
+    VISUAL="../../fake-menu-edit-empty.sh"
+    GIT_MR_YES=1
+
+    run mr_menu edit "AB-123"
+    assert_output "Empty menu, aborting."
 }
 
 ################################################################################

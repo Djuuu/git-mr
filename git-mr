@@ -1988,6 +1988,9 @@ mr_menu_edit_read_file() {
         sed -e '/./,$!d' -e '/^$/N;/^\n$/D' \
     )
 
+    # Abort if menu is empty
+    [[ -z "${edited_content// /}" ]] && return
+
     # Output menu contents
     echo -e "${GIT_MR_MENU_START}\n"
     echo -e "${edited_content}\n"
@@ -2010,6 +2013,9 @@ mr_menu_edit() {
 
     # Get file contents
     local edited_content; edited_content="$(mr_menu_edit_read_file "$menu_file")"
+
+    # Abort if menu is empty
+    [[ -z "$edited_content" ]] && exit_error 0 "Empty menu, aborting."
 
     local mr_iid \
         mr_url \
