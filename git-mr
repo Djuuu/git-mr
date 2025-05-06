@@ -2902,6 +2902,7 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  merge   [BRANCH]
 
        ${u}git${r} ${u}mr${r} [OPTION...]  menu                     [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu edit                [SEARCH_TERM]
        ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--current]  [SEARCH_TERM]
        ${u}git${r} ${u}mr${r} [OPTION...]  menu status              [SEARCH_TERM]
 
