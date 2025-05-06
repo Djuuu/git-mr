@@ -36,6 +36,7 @@ __git-mr_menu_commands() {
     local -a commands=(
         'status:show menu merge requests status summary'
         'update:update menu in related merge request descriptions'
+        'edit:edit menu before updating in related merge request descriptions'
     )
     _describe -V -t mr-menu-commands 'mr menu commands' commands
 }
@@ -61,6 +62,7 @@ _git-mr() {
             op|open)     mr_action="open" ;;
             st|status)   [[ $mr_action == "menu" ]] && mr_action="menu-status" || mr_action="status" ;;
             up|update)   [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
+            ed|edit)     [[ $mr_action == "menu" ]] && mr_action="menu-edit"   || mr_action="default" ;;
             mg|merge)    mr_action="merge" ;;
             menu)        mr_action="menu" ;;
             ip|cr|qa|ok) mr_action="transition" ;;
@@ -89,7 +91,7 @@ _git-mr() {
         '(--no-color)'--no-color'[disable terminal colors]'
         '(--no-links)'--no-links'[disable terminal hyperlinks]'
     );; esac
-    case $mr_action in default|update|menu-update|transition|merge) opts+=(
+    case $mr_action in default|update|menu-update|menu-edit|transition|merge) opts+=(
          '(-y --yes)'{-y,--yes}'[bypass confirmation prompts ("yes")]'
     );; esac
     opts+=(

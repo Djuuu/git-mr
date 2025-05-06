@@ -150,16 +150,6 @@ sha_link() {
     assert_failure "$ERR_GIT_REPO"
 }
 
-@test "Uses GNU commands" {
-    run sed --version
-    assert_success
-    assert_output --partial "GNU sed"
-
-    run grep --version
-    assert_success
-    assert_output --partial "GNU grep"
-}
-
 @test "Determines current branch" {
     git switch main
     run git_current_branch
@@ -385,6 +375,16 @@ sha_link() {
 ################################################################################
 # Misc. utilities
 
+@test "Uses GNU commands" {
+    run sed --version
+    assert_success
+    assert_output --partial "GNU sed"
+
+    run grep --version
+    assert_success
+    assert_output --partial "GNU grep"
+}
+
 @test "Exits with error" {
     run exit_error 99 "Nope!"
     assert_failure 99
@@ -525,6 +525,20 @@ sha_link() {
 
     run gitlab_request "whatever" "POST" "{}"
     assert_success
+}
+
+@test "Determines default text editor from env" {
+    VISUAL=fake_visual_test
+    EDITOR=fake_editor_test
+    run git_mr_editor
+    assert_failure
+    assert_output "Invalid editor: fake_visual_test"
+
+    VISUAL=
+    EDITOR=fake_editor_test
+    run git_mr_editor
+    assert_failure
+    assert_output "Invalid editor: fake_editor_test"
 }
 
 ################################################################################
@@ -2110,6 +2124,33 @@ End"
     )"
 }
 
+@test "Builds editable menu content" {
+    test_menu_items='{"iid":31,"title":"MR 31 title","web_url":"https://gitlab.example.net/proj-C/-/merge_requests/31","state":"opened","project_id":3,"project_name":"Project C"}
+{"iid":11,"title":"MR 11 title","web_url":"https://gitlab.example.net/proj-A/-/merge_requests/11","state":"opened","project_id":1,"project_name":"Project A"}
+{"iid":21,"title":"MR 21 title","web_url":"https://gitlab.example.net/proj-B/-/merge_requests/21","state":"opened","project_id":2,"project_name":"Project B"}'
+
+    run mr_menu_editable_content "$test_menu_items"
+    assert_output "$(cat <<- EOF
+
+		* Project C: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+		* Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+		* Project B: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21)
+
+
+		<!------------------------------------------------------------------------->
+		<!--                                                                     -->
+		<!--  Here you can rearrange menu items and add additional description.  -->
+		<!--                                                                     -->
+		<!--  Current menu item will be highlighted in each merge request,       -->
+		<!--  provided you keep the markdown list & link format.                 -->
+		<!--                                                                     -->
+		<!--  If you remove everything, menu update will be aborted.             -->
+		<!--                                                                     -->
+		<!------------------------------------------------------------------------->
+		EOF
+    )"
+}
+
 @test "Prints menu title" {
     run mr_menu_print_title "AB-123" "" "" "$(echo -e "a\nb\nc")"
     assert_output "$(cat <<- EOF
@@ -2209,6 +2250,39 @@ End"
 		   🏷  [Review]                                                        (↣ main)
 
 		   ☑️ 1/2   👍 0  👎 1                          CI: ❌       Can be merged: ❌
+		EOF
+    )"
+}
+
+@test "Highlights current MR link in edited menu" {
+
+    test_menu_content='## Menu
+
+### Main feature
+
+  * Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+  * Project Bee: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21) (/!\ WIP)
+
+### Documentation
+
+  * Project Doc: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+
+--------------------------------------------------------------------------------'
+
+    run mr_menu_highlight_current "$test_menu_content" "https://gitlab.example.net/proj-B/-/merge_requests/21"
+    assert_output "$(cat <<- EOF
+		## Menu
+
+		### Main feature
+
+		  * Project A: [MR 11 title](https://gitlab.example.net/proj-A/-/merge_requests/11)
+		  * **Project Bee: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21) (/!\ WIP)**
+
+		### Documentation
+
+		  * Project Doc: [MR 31 title](https://gitlab.example.net/proj-C/-/merge_requests/31)
+
+		--------------------------------------------------------------------------------
 		EOF
     )"
 }
@@ -2331,6 +2405,129 @@ paragraph.
 * New Menu item 2
 --------------------------------------------------------------------------------"
 
+}
+
+@test "Cleans up edited menu" {
+    run mr_menu_edit_read_file ../../test-menu-contents.md
+    assert_output "$(cat <<-EOF
+		## Menu
+
+		Content line: first
+
+		Content line: before comments
+		Content line: after comments
+
+		* Menu item 1
+		* Menu item 2
+		  * [Menu item 3](https://example.net)
+
+		    Content line ddd
+
+		Content line eee
+
+		--------------------------------------------------------------------------------
+		EOF
+    )"
+
+    run mr_menu_edit_read_file ../../test-empty-menu-contents.md
+    assert_output ""
+}
+
+@test "Allows menu edit before update" {
+    load "test_helper/gitlab-mock-menu.bash"
+
+    VISUAL="../../fake-menu-edit.sh"
+    run mr_menu edit "AB-123" <<< 'y
+y
+n'
+
+    assert_output --partial "$(cat <<-EOF
+		================================================================================
+		 AB-123 (merge request 1/3)
+		================================================================================
+
+		--------------------------------------------------------------------------------
+		 Project C: MR 31 title
+		--------------------------------------------------------------------------------
+
+		# Merge request with only title
+
+		## Menu
+
+		* Fake edited menu
+		* For test
+
+		--------------------------------------------------------------------------------
+
+		--------------------------------------------------------------------------------
+		Updating merge request...OK
+		EOF
+    )"
+
+    assert_output --partial "$(cat <<-EOF
+		================================================================================
+		 AB-123 (merge request 2/3)
+		================================================================================
+
+		--------------------------------------------------------------------------------
+		 Project A: MR 11 title
+		--------------------------------------------------------------------------------
+
+		# Lorem ipsum
+
+		## Menu
+
+		* Fake edited menu
+		* For test
+
+		--------------------------------------------------------------------------------
+
+		Merge request with description
+		and previous menu to be updated.
+
+		--------------------------------------------------------------------------------
+		Updating merge request...OK
+		EOF
+    )"
+
+    assert_output --partial "$(cat <<-EOF
+		================================================================================
+		 AB-123 (merge request 3/3)
+		================================================================================
+
+		--------------------------------------------------------------------------------
+		 Project B: MR 21 title
+		--------------------------------------------------------------------------------
+
+		# Deserunt laborum nibh
+
+		## Menu
+
+		* Fake edited menu
+		* For test
+
+		--------------------------------------------------------------------------------
+
+		Merge request with description,
+		but missing menu.
+
+		--------------------------------------------------------------------------------
+		EOF
+    )"
+
+    assert_output --partial "2 merge requests updated"
+
+    refute [ -e '.git/MR_MENU_EDITMSG.md' ]
+}
+
+@test "Aborts menu update when edited menu is empty" {
+    load "test_helper/gitlab-mock-menu.bash"
+
+    VISUAL="../../fake-menu-edit-empty.sh"
+    GIT_MR_YES=1
+
+    run mr_menu edit "AB-123"
+    assert_output "Empty menu, aborting."
 }
 
 ################################################################################

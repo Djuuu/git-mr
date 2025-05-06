@@ -40,6 +40,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>                     <i>[SEARCH_TERM]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>update [--current]</i>  <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>edit</i>                <i>[SEARCH_TERM]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>status</i>              <i>[SEARCH_TERM]</i>
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa|ok)</b>  <i>[BRANCH]</i>
@@ -393,6 +394,7 @@ This view allows navigating through the merge request commits, and comments left
 <pre>
 <b>git mr</b> <i>[OPTION...]</i> <b>menu</b>                       <i>[SEARCH_TERM]</i> 
 <b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>up|update [--current]</i> <i>[SEARCH_TERM]</i> 
+<b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>ed|edit</i>               <i>[SEARCH_TERM]</i> 
 <b>git mr</b> <i>[OPTION...]</i> <b>menu</b> <i>st|status</i>             <i>[SEARCH_TERM]</i> 
 </pre>
 
@@ -410,6 +412,16 @@ Searches for all (non-closed) merge requests with the current issue code in the 
 
 * `git mr menu up|update --current`  
   Inserts or updates menu in current merge request description only (prompts for confirmation).
+
+* `git mr menu ed|edit`  
+  Opens menu in editor for tweaking before updating related merge request descriptions.  
+  Uses default editor, guessed through `VISUAL` or `EDITOR` environment variables.
+
+  ![git mr menu edit](doc/git-mr-menu-edit-0.png)
+
+  ![git mr menu edit](doc/git-mr-menu-edit-1.png)
+
+  ![git mr menu edit](doc/git-mr-menu-edit-2.png)
 
 * `git mr menu st|status`  
   Prints menu and status indicators for every related merge request.

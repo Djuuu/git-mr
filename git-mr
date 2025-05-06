@@ -419,6 +419,35 @@ git_mr_readonly() {
     return 0
 }
 
+git_mr_editor() {
+    local editor
+
+    if [[ -n "$VISUAL" ]]; then
+        echo_debug "Using VISUAL=$VISUAL"
+        editor=$VISUAL
+    elif [[ -n "$EDITOR" ]]; then
+        echo_debug "Using EDITOR=$EDITOR"
+        editor=$EDITOR
+    elif [[ -x /usr/bin/editor ]]; then
+        echo_debug "Using default system editor: /usr/bin/editor"
+        editor=/usr/bin/editor
+    elif [[ -x "$(command -v "vim")"  ]]; then
+        echo_debug "Falling back to vim editor"
+        editor=vim
+    elif [[ -x "$(command -v "nano")"  ]]; then
+        echo_debug "Falling back to nano editor"
+        editor=nano
+    else
+        local errmsg="Unable to find any suitable editor. Please set VISUAL or EDITOR env variable."
+        [[ -x "$(command -v "update-alternatives")" ]] &&
+            errmsg="${errmsg}\nAlternatively, you can configure the default system editor with:\n  sudo update-alternatives --config editor"
+        exit_error "$ERR_MR_DEPS" "$errmsg"
+    fi
+
+    [[ -x "$(command -v "$editor")" ]] || exit_error "$ERR_MR_DEPS" "Invalid editor: $editor"
+
+    echo "$editor"
+}
 
 ################################################################################
 # Markdown formatting
@@ -1686,6 +1715,43 @@ mr_menu_contents() {
     echo "$GIT_MR_MENU_END"
 }
 
+mr_menu_editable_content() {
+    local menu_items=$1
+
+    echo
+    while IFS=$'\n' read -r menu_item; do
+        local mr_url mr_title project_name
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
+
+        [[ -n $project_name && $project_name != "null" ]] || # Fallback to URL portion
+            project_name=$(gitlab_extract_project_url_part "$mr_url")
+
+        mr_title=$(gitlab_title_undraft "$mr_title")
+
+        echo "* ${project_name}: $(markdown_link "$mr_title" "$mr_url")"
+
+    done < <(echo "$menu_items")
+
+        cat << EOF
+
+
+<!------------------------------------------------------------------------->
+<!--                                                                     -->
+<!--  Here you can rearrange menu items and add additional description.  -->
+<!--                                                                     -->
+<!--  Current menu item will be highlighted in each merge request,       -->
+<!--  provided you keep the markdown list & link format.                 -->
+<!--                                                                     -->
+<!--  If you remove everything, menu update will be aborted.             -->
+<!--                                                                     -->
+<!------------------------------------------------------------------------->
+EOF
+}
+
 mr_menu_print_title() {
     local issue_code=$1
     local issue_title=$2
@@ -1821,7 +1887,7 @@ mr_menu_update() {
     ')"
 
     local mr_menu_content; mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
-    local updated_description; updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+    local updated_description; updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content" | tr -d '\r')"
 
     mr_menu_print_description "$updated_description" "$mr_url" "$mr_title"
 
@@ -1869,16 +1935,14 @@ mr_menu_update_all() {
         ')"
 
         project_url=$(gitlab_extract_project_url_part "$mr_url")
-
         [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
 
         # Load existing merge request details
         merge_request=$(gitlab_merge_request "$mr_iid" "$project_url")
-
         mr_description=$(gitlab_extract_description "$merge_request")
 
         mr_menu_content=$(mr_menu_contents "$menu_items" "$mr_url")
-        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content")"
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content" | tr -d '\r')"
 
         clear_screen
         mr_menu_print_title "$issue_code" "" "" "$menu_items" "$i"
@@ -1902,6 +1966,121 @@ mr_menu_update_all() {
 
     [[ $updated_count -gt 0 ]] &&
         echo "${updated_count} merge request$([[ $updated_count -gt 1 ]] && echo 's') updated"
+}
+
+mr_menu_highlight_current() {
+    local menu_content=$1
+    local mr_url=$2
+
+    local search replace
+    search="(\s?)\* (.*\[.*\]\($(regex_escape "$mr_url")\).*)"
+    replace="\1* ${MD_BOLD}\2${MD_BOLD}"
+
+    echo "$menu_content" | sed -r -e "s/${search}/${replace}/"
+}
+
+mr_menu_edit_read_file() {
+    local menu_file=$1
+
+    # Cleanup edited menu contents:
+    # - remove comment lines and sections
+    # - remove leading blank lines and collapse multiple blank lines
+    local edited_content; edited_content=$( \
+        sed -e '/<!--.*-->/d' -e '/<!--/,/-->/d' "$menu_file" |
+        sed -e '/./,$!d' -e '/^$/N;/^\n$/D' \
+    )
+
+    # Abort if menu is empty
+    [[ -z "${edited_content// /}" ]] && return
+
+    # Output menu contents
+    echo -e "${GIT_MR_MENU_START}\n"
+    echo -e "${edited_content}\n"
+    echo -e "${GIT_MR_MENU_END}"
+}
+
+mr_menu_edit() {
+    local issue_code=$1
+    local menu_items=$2
+
+    # Determine editor
+    local editor; editor=$(git_mr_editor) || exit $?
+
+    # Init temporary menu file
+    local menu_file; menu_file="$(git rev-parse --git-dir)/MR_MENU_EDITMSG.md"
+    mr_menu_editable_content "$menu_items" > "$menu_file"
+
+    # Open temporary menu file in editor
+    "$editor" "$menu_file"
+
+    # Get file contents
+    local edited_content; edited_content="$(mr_menu_edit_read_file "$menu_file")"
+
+    # Abort if menu is empty
+    [[ -z "$edited_content" ]] && exit_error 0 "Empty menu, aborting."
+
+    local mr_iid \
+        mr_url \
+        mr_title \
+        project_name \
+        project_url \
+        merge_request \
+        mr_description \
+        mr_menu_content \
+        updated_description \
+        mr_update_data \
+        result
+
+    # Use array instead of looping over variable content with `read` to leave standard input open for `confirm`
+    local menu_array
+    readarray menu_array < <(echo "$menu_items")
+
+    # Iterate over menu merge requests
+    local i=1 updated_count=0
+    for menu_item in "${menu_array[@]}"; do
+
+        eval "$(echo "$menu_item" | jq -r '
+            "mr_iid="       + (.iid          | @sh) + ";\n" +
+            "mr_url="       + (.web_url      | @sh) + ";\n" +
+            "mr_title="     + (.title        | @sh) + ";\n" +
+            "project_name=" + (.project_name | @sh) + ";\n"
+        ')"
+
+        project_url=$(gitlab_extract_project_url_part "$mr_url")
+        [[ -n $project_name && $project_name != "null" ]] || project_name="$project_url" # Fallback to URL portion
+
+        # Load existing merge request details
+        merge_request=$(gitlab_merge_request "$mr_iid" "$project_url")
+        mr_description=$(gitlab_extract_description "$merge_request")
+
+        # Prepare menu content
+        mr_menu_content="$(mr_menu_highlight_current "$edited_content" "$mr_url")"
+        updated_description="$(mr_menu_replace_description "$mr_description" "$mr_menu_content" | tr -d '\r')"
+
+        clear_screen
+        mr_menu_print_title "$issue_code" "" "" "$menu_items" "$i"
+        mr_menu_print_description "$updated_description" "$mr_url" "$mr_title" "$project_name"
+
+        mr_update_data='{}'
+        if confirm "Do you want to update the menu in the merge request description?"; then
+            mr_update_data=$(jq_build "description" "$updated_description" "$mr_update_data") || exit "$ERR_MR"
+        fi
+        if [[ $mr_update_data != "{}" ]]; then
+            echo -n "Updating merge request..."
+            result=$(gitlab_merge_request_update "$mr_iid" "$mr_update_data" "$project_url")
+            [[ -n $result ]] &&
+                ((updated_count += 1)) &&
+                echo -e "OK\n"
+        else
+            echo
+        fi
+        ((i += 1))
+    done
+
+    [[ $updated_count -gt 0 ]] &&
+        echo "${updated_count} merge request$([[ $updated_count -gt 1 ]] && echo 's') updated"
+
+    rm "$menu_file"
 }
 
 mr_menu_start_line() {
@@ -1944,7 +2123,6 @@ mr_menu_replace_description() {
             else
                 # replace menu once
                 if [[ $i -eq "$menu_end" ]]; then
-                    echo_debug "Replacing menu"
                     echo "$menu_content"
                     menu_was_output=1
                 fi
@@ -1954,7 +2132,6 @@ mr_menu_replace_description() {
             echo "$mr_description_line"
             # insert menu once
             if [[ $menu_was_output -eq 0 && -z "$mr_description_line" && $i -gt 1 ]]; then
-                echo_debug "Inserting menu"
                 echo "$menu_content"
                 echo
                 menu_was_output=1
@@ -1963,10 +2140,9 @@ mr_menu_replace_description() {
 
         prev_description_line="$mr_description_line"
         ((i += 1))
-    done < <(echo "$mr_description")
+    done < <(echo "$mr_description" | tr -d '\r')
 
     if [[ $menu_was_output -eq 0 ]]; then
-        echo_debug "Inserting menu (failsafe)"
         [[ -n "$prev_description_line" ]] && echo
         echo "$menu_content"
     fi
@@ -2573,6 +2749,7 @@ mr_menu() {
         # Consume options
         up|update)   git_mr_menu_mode=update ;;
         --current)   git_mr_menu_update_all=0 ;;
+        ed|edit)     git_mr_menu_mode=edit ;;
         st|status)   git_mr_menu_mode=status ;;
         # Default: conserve argument
         *) args+=("${1}") ;;
@@ -2599,6 +2776,7 @@ mr_menu() {
         update) if [[ $git_mr_menu_update_all -eq 1 ]]
             then mr_menu_update_all "$issue_code" "$menu_items"
             else mr_menu_update     "$menu_items"; fi ;;
+        edit) mr_menu_edit "$issue_code" "$menu_items" ;;
         status) mr_menu_status "$issue_code" "$menu_items" ;;
         *) return "$ERR_MR" ;;
     esac
@@ -2724,6 +2902,7 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  merge   [BRANCH]
 
        ${u}git${r} ${u}mr${r} [OPTION...]  menu                     [SEARCH_TERM]
+       ${u}git${r} ${u}mr${r} [OPTION...]  menu edit                [SEARCH_TERM]
        ${u}git${r} ${u}mr${r} [OPTION...]  menu update [--current]  [SEARCH_TERM]
        ${u}git${r} ${u}mr${r} [OPTION...]  menu status              [SEARCH_TERM]
 

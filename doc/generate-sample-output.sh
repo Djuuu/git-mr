@@ -422,6 +422,51 @@ EOF
     echo
 }
 
+sample_mr_menu_edit() {
+    fake_prompt "git mr menu edit"
+
+    mr_description="# [XY-1234 Quisque sed](https://jira.example.net/browse/XY-1234)
+
+## Menu
+
+### Feature
+
+Lorem ipsum feature
+
+* Some Project: [Feature/XY-1234 Lorem Ipsum](https://myapp.gitlab.com/some/project/...)
+* **Other Project: [Feature/XY-1234 Quisque sed](https://myapp.gitlab.com/other/project/...)**
+
+### Documentation
+
+* Third Project: [Feature/XY-1234 Nunc vestibulum](https://myapp.gitlab.com/third/project/...)
+
+--------------------------------------------------------------------------------
+
+
+Quisque sed consectetur adipiscing elit.
+
+Pellentesque eu lectus felis. Phasellus maximus, quam quis accumsan varius,
+enim nunc egestas ante, ut venenatis nunc eros non lorem. Ut molestie elementum
+nisi in sollicitudin.
+"
+
+mr_url="https://myapp.gitlab.com/other/project/..."
+mr_title="Feature/XY-1234 Quisque sed"
+project_name="Other Project"
+
+    cat <<EOF
+
+================================================================================
+ $(terminal_link "$search_url" "$issue_code") (merge request 2/3)
+================================================================================
+EOF
+
+    mr_menu_print_description "$mr_description" "$mr_url" "$mr_title" "$project_name"
+
+    echo "$(colorize "Do you want to update the menu in the merge request description?" "lightcyan" "bold") [y/N] "
+    echo
+}
+
 sample_mr_prepare_commit_msg() {
 
     local branch="feature/xy-1234-lorem-ipsum"
@@ -454,10 +499,18 @@ if [[ "$#" -gt 0 ]]; then
                 sample_mr_update_links
                 ;;
             menu)
-#                sample_mr_menu
-                sample_mr_menu_status
-#                sample_mr_menu_update
+                sample_mr_menu
                 ;;
+            menu-status)
+                sample_mr_menu_status
+                ;;
+            menu-update)
+                sample_mr_menu_update
+                ;;
+            menu-edit)
+                sample_mr_menu_edit
+                ;;
+
             merge)
                 sample_mr_merge
                 ;;
@@ -478,6 +531,7 @@ else
     sample_mr_menu
     sample_mr_menu_status
     sample_mr_menu_update
+    sample_mr_menu_edit
 
     sample_mr_merge
 
