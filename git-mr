@@ -1739,14 +1739,16 @@ mr_menu_editable_content() {
         cat << EOF
 
 
-//!
-//!  Here you can rearrange menu items, add additional description, etc.
-//!
-//!  Individual menu items will be highlighted in the relevant merge request,
-//!  provided you keep the markdown list & link format.
-//!
-//!  If you remove everything, menu update will be aborted.
-//!
+<!------------------------------------------------------------------------->
+<!--                                                                     -->
+<!--  Here you can rearrange menu items and add additional description.  -->
+<!--                                                                     -->
+<!--  Current menu item will be highlighted in each merge request,       -->
+<!--  provided you keep the markdown list & link format.                 -->
+<!--                                                                     -->
+<!--  If you remove everything, menu update will be aborted.             -->
+<!--                                                                     -->
+<!------------------------------------------------------------------------->
 EOF
 }
 
@@ -1981,10 +1983,10 @@ mr_menu_edit_read_file() {
     local menu_file=$1
 
     # Cleanup edited menu contents:
-    # - remove comments
+    # - remove comment lines and sections
     # - remove leading blank lines and collapse multiple blank lines
     local edited_content; edited_content=$( \
-        sed -e '/^\s*\/\/!/d' "$menu_file" |
+        sed -e '/<!--.*-->/d' -e '/<!--/,/-->/d' "$menu_file" |
         sed -e '/./,$!d' -e '/^$/N;/^\n$/D' \
     )
 
@@ -2005,7 +2007,7 @@ mr_menu_edit() {
     local editor; editor=$(git_mr_editor) || exit $?
 
     # Init temporary menu file
-    local menu_file; menu_file="$(git rev-parse --git-dir)/MR_MENU_EDITMSG"
+    local menu_file; menu_file="$(git rev-parse --git-dir)/MR_MENU_EDITMSG.md"
     mr_menu_editable_content "$menu_items" > "$menu_file"
 
     # Open temporary menu file in editor

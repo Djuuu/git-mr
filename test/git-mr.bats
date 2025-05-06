@@ -2137,14 +2137,16 @@ End"
 		* Project B: [MR 21 title](https://gitlab.example.net/proj-B/-/merge_requests/21)
 
 
-		//!
-		//!  Here you can rearrange menu items, add additional description, etc.
-		//!
-		//!  Individual menu items will be highlighted in the relevant merge request,
-		//!  provided you keep the markdown list & link format.
-		//!
-		//!  If you remove everything, menu update will be aborted.
-		//!
+		<!------------------------------------------------------------------------->
+		<!--                                                                     -->
+		<!--  Here you can rearrange menu items and add additional description.  -->
+		<!--                                                                     -->
+		<!--  Current menu item will be highlighted in each merge request,       -->
+		<!--  provided you keep the markdown list & link format.                 -->
+		<!--                                                                     -->
+		<!--  If you remove everything, menu update will be aborted.             -->
+		<!--                                                                     -->
+		<!------------------------------------------------------------------------->
 		EOF
     )"
 }
@@ -2515,7 +2517,7 @@ n'
 
     assert_output --partial "2 merge requests updated"
 
-    refute [ -e '.git/MR_MENU_EDITMSG' ]
+    refute [ -e '.git/MR_MENU_EDITMSG.md' ]
 }
 
 @test "Aborts menu update when edited menu is empty" {
