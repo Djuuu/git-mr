@@ -7,6 +7,9 @@
 # Allow skipping
 case ${SKIP:-} in *prepare-commit-msg*) exit 0 ;; esac
 
+# Don't alter fixup messages
+grep -q "^fixup! " "$1" && exit 0
+
 JIRA_CODE_PATTERN=${JIRA_CODE_PATTERN:-$(git config --get mr.jira-code-pattern)}
 if [ -z "$JIRA_CODE_PATTERN" ]; then
     echo "JIRA_CODE_PATTERN not set - unable to guess issue code" >&2
@@ -20,10 +23,6 @@ issue_code=$(echo "${current_branch}" | grep -Eo "$JIRA_CODE_PATTERN" | tail -n1
 current_msg=$(cat "$1")
 msg_code=$(echo "${current_msg}" | grep -iEo "$JIRA_CODE_PATTERN" | tail -n1)
 [ -z "$msg_code" ] || exit 0 # existing issue code in message
-
-if case "$current_msg" in "fixup! "*) ;; *) false;; esac; then
-    exit 0 # don't alter fixup messages
-fi
 
 echo "Prefixing message with issue code: $issue_code" >&2
 sed -i.bak -e "1s/^/$issue_code /" "$1"
