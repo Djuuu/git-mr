@@ -2715,7 +2715,17 @@ n'
     assert_line "Prefixing message with issue code: AB-123"
     assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] AB-123 Test message 2"
 
-    git reset --hard HEAD~2
+    run git commit --allow-empty --fixup HEAD~1
+    refute_line "Prefixing message with issue code: AB-123"
+    assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] fixup! Test message 1"
+
+    run git commit --allow-empty -m "XY-456 Test message 3"
+    refute_line "Prefixing message with issue code: AB-123"
+    assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] XY-456 Test message 3"
+
+    # standard .git directory - teardown
+    git reset --hard HEAD~4
+    rm -f .git/hooks/prepare-commit-msg
 
     # submodule
 
@@ -2738,4 +2748,26 @@ n'
     run git commit --allow-empty -m "Sub message 2"
     assert_line "Prefixing message with issue code: XY-345"
     assert_line "[feature/XY-345-test $(git rev-parse --short HEAD)] XY-345 Sub message 2"
+
+    # submodule - teardown
+    cd "${BATS_TEST_DIRNAME}/data" || exit
+    cd repo; git submodule deinit -f sub; cd ..
+    rm -rf subrepo repo/sub repo/.gitmodules repo/.git/modules
+}
+
+@test "pre-commit-msg hook can be skipped" {
+    # setup
+    git-mr hook
+
+    run git commit --allow-empty -m "Test prefixed message"
+    assert_line "Prefixing message with issue code: AB-123"
+    assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] AB-123 Test prefixed message"
+
+    SKIP=aaa,prepare-commit-msg,zzz run git commit --allow-empty -m "Test unprefixed message"
+    refute_line "Prefixing message with issue code: AB-123"
+    assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] Test unprefixed message"
+
+    # teardown
+    git reset --hard HEAD~2
+    rm -f .git/hooks/prepare-commit-msg
 }
