@@ -2719,8 +2719,12 @@ n'
     refute_line "Prefixing message with issue code: AB-123"
     assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] fixup! Test message 1"
 
+    run git commit --allow-empty -m "XY-456 Test message 3"
+    refute_line "Prefixing message with issue code: AB-123"
+    assert_line "[feature/AB-123-test-feature $(git rev-parse --short HEAD)] XY-456 Test message 3"
+
     # standard .git directory - teardown
-    git reset --hard HEAD~3
+    git reset --hard HEAD~4
     rm -f .git/hooks/prepare-commit-msg
 
     # submodule
