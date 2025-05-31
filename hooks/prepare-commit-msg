@@ -4,6 +4,9 @@
 # When on a branch referring to a Jira issue,
 # ensure commit messages start with the issue reference
 
+# Allow skipping
+case ${SKIP:-} in *prepare-commit-msg*) exit 0 ;; esac
+
 JIRA_CODE_PATTERN=${JIRA_CODE_PATTERN:-$(git config --get mr.jira-code-pattern)}
 if [ -z "$JIRA_CODE_PATTERN" ]; then
     echo "JIRA_CODE_PATTERN not set - unable to guess issue code" >&2
