@@ -1203,6 +1203,9 @@ mr_print_status() {
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
+    # Updates remote references
+    $(git fetch origin 2>/dev/null)
+
     local mr_url \
         title \
         labels \
@@ -1212,7 +1215,8 @@ mr_print_status() {
         merge_status \
         pipeline_status \
         pipeline_url \
-        current_target
+        current_target \
+        source_branch
 
     eval "$(echo "$merge_request" | jq -r '
         "mr_url="          + (.web_url               | @sh) + ";\n" +
@@ -1226,7 +1230,8 @@ mr_print_status() {
                               else .merge_status end | @sh) + ";\n" +
         "pipeline_status=" + (.head_pipeline.status  | @sh) + ";\n" +
         "pipeline_url="    + (.head_pipeline.web_url | @sh) + ";\n" +
-        "current_target="  + (.target_branch         | @sh) + ";\n"
+        "current_target="  + (.target_branch         | @sh) + ";\n" +
+        "source_branch="   + (.source_branch         | @sh) + ";\n"
     ')"
 
     # Labels
@@ -1349,6 +1354,9 @@ mr_print_status() {
         fi
     fi
 
+    # Commits behind
+    local commits_behind=$(git rev-list --count "${source_branch}..origin/${current_target}" 2>/dev/null || echo "0")
+
     # Display
     echo
 
@@ -1382,7 +1390,13 @@ mr_print_status() {
     if [[ $thread_count -gt 0 ]]; then
         echo -n "       Threads: ${threads_display} "
     else
-        echo -n "                    "
+        echo -n "             "
+    fi
+    # Commits behind
+    if [[ $commits_behind -gt 0 ]]; then
+        echo -en "   Behind: $(colorize "$commits_behind" "orange" "bold") commits   "
+    else
+        echo -n "             "
     fi
     # Pipeline
     if [[ -n $ci_str ]]; then
