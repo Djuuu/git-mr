@@ -1162,6 +1162,9 @@ mr_status_block() {
     local mr_url=$6
     local mr_title=$7
 
+    local current_target
+    local source_branch
+
     local parse=()
     [[ -z $merge_request && -z $mr_iid ]] && parse+=('"mr_iid=" + (.iid | @sh) + ";\n" +')
     [[ -z $mr_url ]]                      && parse+=('"mr_url=" + (.web_url | @sh) + ";\n" +')
@@ -1183,7 +1186,14 @@ mr_status_block() {
     [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
     [[ -n $mr_threads  ]]   || gitlab_read_threads mr_threads
 
-    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
+    eval "$(echo "$merge_request" | jq -r '
+        "source_branch="   + (.source_branch         | @sh) + ";\n" +
+        "current_target="  + (.target_branch         | @sh) + ";\n"
+    ')"
+
+    local mr_commits_behind=$(git rev-list --count "${source_branch}..origin/${current_target}" 2>/dev/null || echo "0")
+
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind"
 }
 
 mr_print_title() {
@@ -1200,11 +1210,16 @@ mr_print_status() {
     local merge_request=$1
     local approvals=$2
     local threads=$3
+    local commits_behind=$4
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
+    local remote; remote=$(gitlab_remote || git_remote)
+
     # Updates remote references
-    $(git fetch origin 2>/dev/null)
+    if [[ "$GIT_MR_AUTOFETCH" == "true" ]]; then
+        git fetch "$remote" 2>/dev/null
+    fi
 
     local mr_url \
         title \
@@ -1215,8 +1230,7 @@ mr_print_status() {
         merge_status \
         pipeline_status \
         pipeline_url \
-        current_target \
-        source_branch
+        current_target
 
     eval "$(echo "$merge_request" | jq -r '
         "mr_url="          + (.web_url               | @sh) + ";\n" +
@@ -1230,8 +1244,7 @@ mr_print_status() {
                               else .merge_status end | @sh) + ";\n" +
         "pipeline_status=" + (.head_pipeline.status  | @sh) + ";\n" +
         "pipeline_url="    + (.head_pipeline.web_url | @sh) + ";\n" +
-        "current_target="  + (.target_branch         | @sh) + ";\n" +
-        "source_branch="   + (.source_branch         | @sh) + ";\n"
+        "current_target="  + (.target_branch         | @sh) + ";\n"
     ')"
 
     # Labels
@@ -1353,9 +1366,6 @@ mr_print_status() {
             spacer_chars_r=0
         fi
     fi
-
-    # Commits behind
-    local commits_behind=$(git rev-list --count "${source_branch}..origin/${current_target}" 2>/dev/null || echo "0")
 
     # Display
     echo
@@ -3135,6 +3145,7 @@ GIT_MR_MENU_STATUS_SHOW=both
 #GIT_MR_MENU_STATUS_SHOW=branch
 GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="  "
 #GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="\n   "
+GIT_MR_AUTOFETCH=${GIT_MR_AUTOFETCH:-$(git config --get mr.git-mr-autofetch || false)}
 
 ################################################################################
 # Run
