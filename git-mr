@@ -1351,12 +1351,16 @@ mr_print_status() {
         ci_str="CI: $pipeline_icon"
 
     # Merge target
+    local target_str_len=$((${#current_target} + 4))
     local target_display
     target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
     target_display="${target_display}$(colorize "$current_target" "lightpurple")"
+    if [[ $commits_behind -gt 0 ]]; then
+        target_display="${target_display} $(colorize "↓$commits_behind" "red" "bold")"
+        (( target_str_len += 4 )) # space, arrow, 2 digits
+    fi
     target_display="${target_display}$(colorize ")" "gray")"
 
-    local target_str_len=$((${#current_target} + 4))
 
     # Draft status
     local draft_str=
@@ -1415,13 +1419,7 @@ mr_print_status() {
     if [[ $thread_count -gt 0 ]]; then
         echo -n "       Threads: ${threads_display} "
     else
-        echo -n "             "
-    fi
-    # Commits behind
-    if [[ $commits_behind -gt 0 ]]; then
-        echo -en "   Behind: $(colorize "$commits_behind" "orange" "bold") commits   "
-    else
-        echo -n "             "
+        echo -n "                    "
     fi
     # Pipeline
     if [[ -n $ci_str ]]; then
