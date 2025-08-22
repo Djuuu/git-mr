@@ -1374,15 +1374,18 @@ mr_print_status() {
     # Spacers for draft & target branch indicators
     local display_width=76 # not counting 3 leading spaces
     local spacer_chars=$((display_width - labels_str_len - target_str_len - draft_str_len))
-    local spacer_chars_l=0
-    local spacer_chars_r=0
+    local draft_spacer_l=0
+    local draft_spacer_r=0
 
     if [[ $spacer_chars -gt 0 ]]; then
-        spacer_chars_l=$((43 - labels_str_len)) # 42: roughly at the same level as CI indicator
-        spacer_chars_r=$((spacer_chars - spacer_chars_l))
-        if [[ $spacer_chars_r -lt 0 ]]; then
-            spacer_chars_l=$((spacer_chars_l + spacer_chars_r))
-            spacer_chars_r=0
+        draft_spacer_l=$((43 - labels_str_len)) # 43: roughly at the same level as CI indicator
+        draft_spacer_r=$((spacer_chars - draft_spacer_l))
+        if [[ $draft_spacer_r -lt 0 ]]; then
+            draft_spacer_l=$((draft_spacer_l + draft_spacer_r))
+            draft_spacer_r=0
+        elif [[ $draft_spacer_l -lt 0 ]]; then
+            draft_spacer_r=$((draft_spacer_l + draft_spacer_r))
+            draft_spacer_l=0
         fi
     fi
 
@@ -1392,14 +1395,14 @@ mr_print_status() {
     # 1st row ------------------------------------------------------------------
     # Labels
     echo -en "   \U0001F3F7  ${labels_display}"
-    echo_spacer "$spacer_chars_l"
+    echo_spacer "$draft_spacer_l"
     # Draft status
     if [[ -n $draft_str ]]; then
         echo -en "  $(colorize "$draft_str" "orange")  "
     else
-        echo_spacer $((2 - spacer_chars_l - spacer_chars_r))
+        echo_spacer $((2 - draft_spacer_l - draft_spacer_r))
     fi
-    echo_spacer "$spacer_chars_r"
+    echo_spacer "$draft_spacer_r"
     # Target
     echo "$target_display"
 
