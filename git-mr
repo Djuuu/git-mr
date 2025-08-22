@@ -106,6 +106,22 @@ git_check_branches() {
     return 0
 }
 
+git_autofetch() {
+    [[ "$GIT_MR_AUTOFETCH" == "true" ]] ||
+        return 1 # autofetch is disabled
+
+    local git_dir; git_dir=$(git rev-parse --git-dir)
+
+    [[ -f "${git_dir}/FETCH_HEAD" &&
+       -z "$(find "${git_dir}/FETCH_HEAD" -mmin +"${GIT_MR_AUTOFETCH_INTERVAL}" 2>/dev/null)" ]] &&
+        return 1 # last fetch is recent enough
+
+    local remote; remote=${1:-$(gitlab_remote || git_remote)}
+
+    echo_debug "Fetching remote: ${remote}"
+    git fetch --quiet "${remote}" 2>/dev/null
+}
+
 git_commits() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
@@ -1181,6 +1197,10 @@ mr_status_block() {
 
     mr_print_title "$mr_title" "$mr_url"
 
+    # Update remote references
+    local remote; remote=$(gitlab_remote || git_remote)
+    git_autofetch "${remote}"
+
     # Read merge request, approvals & threads
     [[ -n $merge_request ]] || gitlab_read_mr merge_request
     [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
@@ -1191,7 +1211,9 @@ mr_status_block() {
         "current_target="  + (.target_branch         | @sh) + ";\n"
     ')"
 
-    local mr_commits_behind=$(git rev-list --count "${source_branch}..origin/${current_target}" 2>/dev/null || echo "0")
+    # Check branch lag
+    local mr_commits_behind
+    mr_commits_behind=$(git rev-list --count "${source_branch}..${remote}/${current_target}" 2>/dev/null || echo "0")
 
     mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind"
 }
@@ -1213,13 +1235,6 @@ mr_print_status() {
     local commits_behind=$4
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
-
-    local remote; remote=$(gitlab_remote || git_remote)
-
-    # Updates remote references
-    if [[ "$GIT_MR_AUTOFETCH" == "true" ]]; then
-        git fetch "$remote" 2>/dev/null
-    fi
 
     local mr_url \
         title \
@@ -3037,6 +3052,9 @@ EOF
        | mr.git-mr-required-upvotes                  | GIT_MR_REQUIRED_UPVOTES               |
        |                                             |                                       |
        | mr.git-mr-timeout                           | GIT_MR_TIMEOUT                        |
+       |                                             |                                       |
+       | mr.git-mr-autofetch                         | GIT_MR_AUTOFETCH                      |
+       | mr.git-mr-autofetch-interval                | GIT_MR_AUTOFETCH_INTERVAL             |
        +---------------------------------------------+---------------------------------------+
 
        To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
@@ -3133,19 +3151,22 @@ GIT_MR_EXTENDED=${GIT_MR_EXTENDED-$(git config --get mr.git-mr-extended || true)
 GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-$(git config --get mr.git-mr-required-upvotes || true)}
 GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-$(git config --get mr.gitlab-remove-source-branch-on-merge || true)}
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-$(git config --get mr.git-mr-timeout || true)}
+GIT_MR_AUTOFETCH=${GIT_MR_AUTOFETCH:-$(git config --get mr.git-mr-autofetch || true)}
+GIT_MR_AUTOFETCH_INTERVAL=${GIT_MR_AUTOFETCH_INTERVAL:-$(git config --get mr.git-mr-autofetch-interval || true)}
 
 # Defaults
 GITLAB_PROJECTS_LIMIT_MEMBER=${GITLAB_PROJECTS_LIMIT_MEMBER:-1}
 GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-2}
 GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-1}
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-10}
+GIT_MR_AUTOFETCH=${GIT_MR_AUTOFETCH:-false}
+GIT_MR_AUTOFETCH_INTERVAL=${GIT_MR_AUTOFETCH_INTERVAL:-5}
 
 GIT_MR_MENU_STATUS_SHOW=both
 #GIT_MR_MENU_STATUS_SHOW=title
 #GIT_MR_MENU_STATUS_SHOW=branch
 GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="  "
 #GIT_MR_MENU_STATUS_TITLE_BRANCH_SEPARATOR="\n   "
-GIT_MR_AUTOFETCH=${GIT_MR_AUTOFETCH:-$(git config --get mr.git-mr-autofetch || false)}
 
 ################################################################################
 # Run
