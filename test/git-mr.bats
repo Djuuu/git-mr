@@ -15,7 +15,8 @@ setup_file() {
           GITLAB_IP_LABELS GITLAB_CR_LABELS GITLAB_QA_LABELS GITLAB_OK_LABELS \
             JIRA_IP_ID       JIRA_CR_ID       JIRA_QA_ID       JIRA_OK_ID \
           GITLAB_PROJECTS_LIMIT_MEMBER \
-          GIT_MR_EXTENDED GIT_MR_REQUIRED_UPVOTES GIT_MR_TIMEOUT
+          GIT_MR_EXTENDED GIT_MR_REQUIRED_UPVOTES GIT_MR_TIMEOUT \
+          GIT_MR_AUTOFETCH GIT_MR_AUTOFETCH_INTERVAL
 
     export GIT_MR_NO_COLORS=1
     export GIT_MR_NO_TERMINAL_LINK=1
@@ -281,6 +282,34 @@ sha_link() {
     run git_check_branches feature/base "wrong"
     assert_failure "$ERR_GIT"
     assert_output "Branch 'wrong' does not exist"
+}
+
+@test "Auto-fetches remote" {
+    GIT_MR_VERBOSE=1
+
+    # Not fetched yet
+    [ ! -f .git/FETCH_HEAD ]
+
+    # No auto-fetch if not configured
+    GIT_MR_AUTOFETCH=false
+    run git_autofetch
+    assert_output ""
+
+    # Auto-fetch if configured
+    GIT_MR_AUTOFETCH=true
+    run git_autofetch
+    assert_output "Fetching remote: gitlab"
+
+    # Remote was fetched
+    [ -f .git/FETCH_HEAD ]
+
+    # No auto-fetch if fetch is recent enough
+    run git_autofetch
+    assert_output ""
+
+    # reset
+    GIT_MR_AUTOFETCH=false
+    GIT_MR_VERBOSE=0
 }
 
 @test "Lists current branch commits" {
