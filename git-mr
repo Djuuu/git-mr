@@ -1180,6 +1180,7 @@ mr_status_block() {
 
     local current_target
     local source_branch
+    local default_branch
 
     local parse=()
     [[ -z $merge_request && -z $mr_iid ]] && parse+=('"mr_iid=" + (.iid | @sh) + ";\n" +')
@@ -1201,6 +1202,8 @@ mr_status_block() {
     local remote; remote=$(gitlab_remote || git_remote)
     git_autofetch "${remote}"
 
+    default_branch=$(git_default_branch)
+
     # Read merge request, approvals & threads
     [[ -n $merge_request ]] || gitlab_read_mr merge_request
     [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
@@ -1212,10 +1215,14 @@ mr_status_block() {
     ')"
 
     # Check branch lag
-    local mr_commits_behind
+    local mr_commits_behind mr_commits_behind_main
     mr_commits_behind=$(git rev-list --count "${source_branch}..${remote}/${current_target}" 2>/dev/null || echo "0")
 
-    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind"
+    if [[ $current_target != "$default_branch" ]]; then
+        mr_commits_behind_main=$(git rev-list --count "${source_branch}..${remote}/${default_branch}" 2>/dev/null || echo "0")
+    fi
+
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind" "$mr_commits_behind_main"
 }
 
 mr_print_title() {
@@ -1233,6 +1240,7 @@ mr_print_status() {
     local approvals=$2
     local threads=$3
     local commits_behind=$4
+    local commits_behind_main=$5
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
@@ -1355,10 +1363,20 @@ mr_print_status() {
     local target_display
     target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
     target_display="${target_display}$(colorize "$current_target" "lightpurple")"
-    if [[ $commits_behind -gt 0 ]]; then
-        target_display="${target_display} $(colorize "↓$commits_behind" "red" "bold")"
+
+    if [[ $commits_behind -gt 0 || $commits_behind_main -gt 0 ]]; then
+        if [[ $commits_behind -gt 0 ]]
+            then target_display="${target_display} $(colorize "↓$commits_behind" "red" "bold")"
+            else target_display="${target_display} $(colorize "↓0" "green")"
+        fi
         (( target_str_len += 4 )) # space, arrow, 2 digits
     fi
+
+    if [[ $commits_behind_main -gt 0 ]]; then
+        target_display="${target_display} $(colorize "⇣$commits_behind_main" "red")"
+        (( target_str_len += 4 )) # space, arrow, 2 digits
+    fi
+
     target_display="${target_display}$(colorize ")" "gray")"
 
 
