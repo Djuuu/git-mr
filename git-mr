@@ -2422,6 +2422,9 @@ mr_update() {
         matchOldLog="^(${_git_mr_commit_prefix})(${oldSha}) ${msgSuffix}"
         matchLink="^(${_git_mr_commit_prefix})(\[${oldSha}\]\(${matchOldCommitUrl}\)) ${msgSuffix}"
 
+        #local link_icon="🔗"
+        local link_icon="\xF0\x9F\x94\x97" # Workaround for sed / is_mb_char / mbrtowc bug (Windows)
+
         local consoleShaColor
         if [[ -n $oldSha ]]; then if [[ $oldSha == "$currSha" ]]; then
             consoleShaColor="$sameColor";        else
@@ -2429,8 +2432,8 @@ mr_update() {
             consoleShaColor="$newColor";     fi
 
         local forConsole_converted forConsole_link forDescription forDescriptionNew
-        forConsole_converted="\1$(colorize "$currSha" "$consoleShaColor")🔗✔ \3\4${MD_BR}"
-        forConsole_link="\1$(colorize "$currSha" "$consoleShaColor")🔗 \3\4${MD_BR}"
+        forConsole_converted="\1$(colorize "$currSha" "$consoleShaColor")${link_icon}✔ \3\4${MD_BR}"
+        forConsole_link="\1$(colorize "$currSha" "$consoleShaColor")${link_icon} \3\4${MD_BR}"
         forDescription="\1[$currSha]($(regex_escape "$currCommitUrl")) \3\4${MD_BR}"
         forDescriptionNew="\1[$currSha]($(regex_escape "$currCommitUrl")) \3"
 
@@ -2467,7 +2470,7 @@ mr_update() {
                 new_commit_line_content="$(echo "$new_commit_line_display" | sed -r -e "s/^(\* \*\*)(${currSha}) (.*)/${forDescriptionNew}/")"
                 # shellcheck disable=SC2001
                 new_commit_line_display="$(echo "$new_commit_line_display" |
-                    sed -r -e "s/^(\* \*\*)(${currSha}) (.*)$/\1$(colorize "$currSha" "$consoleShaColor")🔗 \3/"
+                    sed -r -e "s/^(\* \*\*)(${currSha}) (.*)$/\1$(colorize "$currSha" "$consoleShaColor")${link_icon} \3/"
                 )"
             else
                 new_commit_line_display="$(colorize "$currSha" "$consoleShaColor")🔗 ${currMsg}"
