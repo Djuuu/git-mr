@@ -37,3 +37,6 @@
     git-mr-required-upvotes = 2
     gitlab-remove-source-branch-on-merge = 1
     git-mr-timeout = 1
+
+    git-mr-autofetch = false
+    git-mr-autofetch-interval = 1

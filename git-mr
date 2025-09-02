@@ -87,11 +87,12 @@ git_remote_branch_exists() {
 git_check_branches() {
     local source_branch="$1"
     local target_branch="$2"
+    local default_branch="$3"
 
     [[ -n $source_branch ]] ||
         exit_error "$ERR_GIT" "Not on any branch"
 
-    [[ $source_branch != "$(git_default_branch)" ]] ||
+    [[ $source_branch != "${default_branch:-$(git_default_branch)}" ]] ||
         exit_error "$ERR_GIT" "On default branch"
 
     git_branch_exists "$source_branch" ||
@@ -104,6 +105,22 @@ git_check_branches() {
         exit_error "$ERR_GIT" "Branch '$target_branch' does not exist"
 
     return 0
+}
+
+git_autofetch() {
+    [[ "$GIT_MR_AUTOFETCH" == "true" ]] ||
+        return 1 # autofetch is disabled
+
+    local git_dir; git_dir=$(git rev-parse --git-dir)
+
+    [[ -f "${git_dir}/FETCH_HEAD" &&
+       -z "$(find "${git_dir}/FETCH_HEAD" -mmin +"${GIT_MR_AUTOFETCH_INTERVAL}" 2>/dev/null)" ]] &&
+        return 1 # last fetch is recent enough
+
+    local remote; remote=${1:-$(gitlab_remote || git_remote)}
+
+    echo_debug "Fetching remote: ${remote}"
+    git fetch --quiet "${remote}" 2>/dev/null
 }
 
 git_commits() {
@@ -1162,6 +1179,10 @@ mr_status_block() {
     local mr_url=$6
     local mr_title=$7
 
+    local current_target
+    local source_branch
+    local default_branch
+
     local parse=()
     [[ -z $merge_request && -z $mr_iid ]] && parse+=('"mr_iid=" + (.iid | @sh) + ";\n" +')
     [[ -z $mr_url ]]                      && parse+=('"mr_url=" + (.web_url | @sh) + ";\n" +')
@@ -1178,12 +1199,31 @@ mr_status_block() {
 
     mr_print_title "$mr_title" "$mr_url"
 
+    # Update remote references
+    local remote; remote=$(gitlab_remote || git_remote)
+    git_autofetch "${remote}"
+
+    default_branch=$(git_default_branch)
+
     # Read merge request, approvals & threads
     [[ -n $merge_request ]] || gitlab_read_mr merge_request
     [[ -n $mr_approvals  ]] || gitlab_read_approvals mr_approvals
     [[ -n $mr_threads  ]]   || gitlab_read_threads mr_threads
 
-    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
+    eval "$(echo "$merge_request" | jq -r '
+        "source_branch="   + (.source_branch         | @sh) + ";\n" +
+        "current_target="  + (.target_branch         | @sh) + ";\n"
+    ')"
+
+    # Check branch lag
+    local mr_commits_behind mr_commits_behind_main
+    mr_commits_behind=$(git rev-list --count "${source_branch}..${remote}/${current_target}" 2>/dev/null || echo "0")
+
+    if [[ $current_target != "$default_branch" ]]; then
+        mr_commits_behind_main=$(git rev-list --count "${source_branch}..${remote}/${default_branch}" 2>/dev/null || echo "0")
+    fi
+
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind" "$mr_commits_behind_main"
 }
 
 mr_print_title() {
@@ -1200,6 +1240,8 @@ mr_print_status() {
     local merge_request=$1
     local approvals=$2
     local threads=$3
+    local commits_behind=$4
+    local commits_behind_main=$5
 
     [[ -n $merge_request ]] || exit_error "$ERR_MR" "merge_request not provided"
 
@@ -1318,12 +1360,26 @@ mr_print_status() {
         ci_str="CI: $pipeline_icon"
 
     # Merge target
+    local target_str_len=$((${#current_target} + 4))
     local target_display
     target_display="${target_display}$(colorize "(\U000021A3 " "gray")"
     target_display="${target_display}$(colorize "$current_target" "lightpurple")"
+
+    if [[ $commits_behind -gt 0 || $commits_behind_main -gt 0 ]]; then
+        if [[ $commits_behind -gt 0 ]]
+            then target_display="${target_display} $(colorize "↓$commits_behind" "red" "bold")"
+            else target_display="${target_display} $(colorize "↓0" "green")"
+        fi
+        (( target_str_len += 4 )) # space, arrow, 2 digits
+    fi
+
+    if [[ $commits_behind_main -gt 0 ]]; then
+        target_display="${target_display} $(colorize "⇣$commits_behind_main" "red")"
+        (( target_str_len += 4 )) # space, arrow, 2 digits
+    fi
+
     target_display="${target_display}$(colorize ")" "gray")"
 
-    local target_str_len=$((${#current_target} + 4))
 
     # Draft status
     local draft_str=
@@ -1337,15 +1393,18 @@ mr_print_status() {
     # Spacers for draft & target branch indicators
     local display_width=76 # not counting 3 leading spaces
     local spacer_chars=$((display_width - labels_str_len - target_str_len - draft_str_len))
-    local spacer_chars_l=0
-    local spacer_chars_r=0
+    local draft_spacer_l=0
+    local draft_spacer_r=0
 
     if [[ $spacer_chars -gt 0 ]]; then
-        spacer_chars_l=$((43 - labels_str_len)) # 42: roughly at the same level as CI indicator
-        spacer_chars_r=$((spacer_chars - spacer_chars_l))
-        if [[ $spacer_chars_r -lt 0 ]]; then
-            spacer_chars_l=$((spacer_chars_l + spacer_chars_r))
-            spacer_chars_r=0
+        draft_spacer_l=$((43 - labels_str_len)) # 43: roughly at the same level as CI indicator
+        draft_spacer_r=$((spacer_chars - draft_spacer_l))
+        if [[ $draft_spacer_r -lt 0 ]]; then
+            draft_spacer_l=$((draft_spacer_l + draft_spacer_r))
+            draft_spacer_r=0
+        elif [[ $draft_spacer_l -lt 0 ]]; then
+            draft_spacer_r=$((draft_spacer_l + draft_spacer_r))
+            draft_spacer_l=0
         fi
     fi
 
@@ -1355,14 +1414,14 @@ mr_print_status() {
     # 1st row ------------------------------------------------------------------
     # Labels
     echo -en "   \U0001F3F7  ${labels_display}"
-    echo_spacer "$spacer_chars_l"
+    echo_spacer "$draft_spacer_l"
     # Draft status
     if [[ -n $draft_str ]]; then
         echo -en "  $(colorize "$draft_str" "orange")  "
     else
-        echo_spacer $((2 - spacer_chars_l - spacer_chars_r))
+        echo_spacer $((2 - draft_spacer_l - draft_spacer_r))
     fi
-    echo_spacer "$spacer_chars_r"
+    echo_spacer "$draft_spacer_r"
     # Target
     echo "$target_display"
 
@@ -2321,7 +2380,9 @@ mr_update() {
 
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}
-    git_check_branches "$source_branch" "$target_branch"
+    local default_branch; default_branch=$(git_default_branch)
+
+    git_check_branches "$source_branch" "$target_branch" "$default_branch"
 
     # Search existing merge request
     local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
@@ -2615,9 +2676,22 @@ mr_update() {
     gitlab_read_approvals mr_approvals
     gitlab_read_threads mr_threads
 
+    # Re-read current_target from MR (might have changed)
+    eval "$(echo "$merge_request" | jq -r '
+        "current_target=" + (.target_branch | @sh) + ";\n"
+    ')"
+
+    # Check branch lag
+    local mr_commits_behind mr_commits_behind_main
+    mr_commits_behind=$(git rev-list --count "${source_branch}..${remote}/${current_target}" 2>/dev/null || echo "0")
+
+    if [[ $current_target != "$default_branch" ]]; then
+        mr_commits_behind_main=$(git rev-list --count "${source_branch}..${remote}/${default_branch}" 2>/dev/null || echo "0")
+    fi
+
     # --------------------------------------------------------------------------------
     mr_print_title "$mr_title" "$mr_url"
-    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads"
+    mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind" "$mr_commits_behind_main"
 }
 
 mr_merge() {
@@ -3013,6 +3087,9 @@ EOF
        | mr.git-mr-required-upvotes                  | GIT_MR_REQUIRED_UPVOTES               |
        |                                             |                                       |
        | mr.git-mr-timeout                           | GIT_MR_TIMEOUT                        |
+       |                                             |                                       |
+       | mr.git-mr-autofetch                         | GIT_MR_AUTOFETCH                      |
+       | mr.git-mr-autofetch-interval                | GIT_MR_AUTOFETCH_INTERVAL             |
        +---------------------------------------------+---------------------------------------+
 
        To create a Jira API Token, go to: https://id.atlassian.com/manage-profile/security/api-tokens
@@ -3109,12 +3186,16 @@ GIT_MR_EXTENDED=${GIT_MR_EXTENDED-$(git config --get mr.git-mr-extended || true)
 GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-$(git config --get mr.git-mr-required-upvotes || true)}
 GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-$(git config --get mr.gitlab-remove-source-branch-on-merge || true)}
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-$(git config --get mr.git-mr-timeout || true)}
+GIT_MR_AUTOFETCH=${GIT_MR_AUTOFETCH:-$(git config --get mr.git-mr-autofetch || true)}
+GIT_MR_AUTOFETCH_INTERVAL=${GIT_MR_AUTOFETCH_INTERVAL:-$(git config --get mr.git-mr-autofetch-interval || true)}
 
 # Defaults
 GITLAB_PROJECTS_LIMIT_MEMBER=${GITLAB_PROJECTS_LIMIT_MEMBER:-1}
 GIT_MR_REQUIRED_UPVOTES=${GIT_MR_REQUIRED_UPVOTES:-2}
 GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE:-1}
 GIT_MR_TIMEOUT=${GIT_MR_TIMEOUT:-10}
+GIT_MR_AUTOFETCH=${GIT_MR_AUTOFETCH:-false}
+GIT_MR_AUTOFETCH_INTERVAL=${GIT_MR_AUTOFETCH_INTERVAL:-5}
 
 GIT_MR_MENU_STATUS_SHOW=both
 #GIT_MR_MENU_STATUS_SHOW=title

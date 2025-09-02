@@ -225,6 +225,11 @@ git config --global mr.jira-ok-id "xx"
 
 # Network timeout (in seconds, defaults to 10)
 # git config --global mr.git-mr-timeout 10
+
+# Auto-fetch periodically (defaults to false)
+# git config --global mr.git-mr-autofetch true
+# Auto-fetch interval (in minutes)
+# git config --global mr.git-mr-autofetch-interval 5
 ```
 
 **Tip:**  
@@ -279,6 +284,11 @@ export JIRA_OK_ID="xx"
 
 # Network timeout (in seconds, defaults to 10)
 #export GIT_MR_TIMEOUT=10
+
+# Auto-fetch periodically (defaults to false)
+#GIT_MR_AUTOFETCH=true
+# Auto-fetch interval (in minutes)
+#GIT_MR_AUTOFETCH_INTERVAL=5
 ```
 
 Environment-only configuration:
