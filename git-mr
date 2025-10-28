@@ -726,6 +726,12 @@ gitlab_new_merge_request_url() {
         gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[label_ids][]")=${label_id}"
     done
 
+    # default reviewers
+    local reviewer_id
+    for reviewer_id in $(gitlab_default_reviewer_ids); do
+        gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[reviewer_ids][]")=${reviewer_id}"
+    done
+
     # other options
     if [[ "${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE}" -eq 1 ]]; then
         gitlab_mr_url="${gitlab_mr_url}&$(urlencode "merge_request[force_remove_source_branch]")=1"
@@ -945,6 +951,19 @@ gitlab_default_label_ids() {
     echo "$GITLAB_DEFAULT_LABELS" | jq -R -r \
         --argjson gitlab_labels "$gitlab_labels" \
         'split(",") | .[] | . as $name | $gitlab_labels | map(select(.name == $name) | .id) | .[]' |
+        tr -d '\r'
+}
+
+gitlab_default_reviewer_ids() {
+    gitlab_check_env
+
+    [[ -z $GITLAB_DEFAULT_REVIEWERS ]] && return 0
+
+    local project_members; project_members=$(gitlab_current_project_request "members/all?per_page=100")
+
+    echo "$GITLAB_DEFAULT_REVIEWERS" | jq -R -r \
+        --argjson members "$project_members" \
+        'split(",") | .[] | . as $username | $members | map(select(.username == $username) | .id) | .[]' |
         tr -d '\r'
 }
 
@@ -3069,6 +3088,7 @@ EOF
        | mr.gitlab-token                             | GITLAB_TOKEN                          |
        +---------------------------------------------+---------------------------------------+
        | mr.gitlab-default-labels                    | GITLAB_DEFAULT_LABELS                 |
+       | mr.gitlab-default-reviewers                 | GITLAB_DEFAULT_REVIEWERS              |
        |                                             |                                       |
        | mr.gitlab-ip-labels                         | GITLAB_IP_LABELS                      |
        | mr.gitlab-cr-labels                         | GITLAB_CR_LABELS                      |
@@ -3180,6 +3200,7 @@ GITLAB_QA_LABELS=${GITLAB_QA_LABELS-$(git config --get mr.gitlab-qa-labels || tr
 GITLAB_OK_LABELS=${GITLAB_OK_LABELS-$(git config --get mr.gitlab-ok-labels || true)}
 
 GITLAB_DEFAULT_LABELS=${GITLAB_DEFAULT_LABELS-$(git config --get mr.gitlab-default-labels || true)}
+GITLAB_DEFAULT_REVIEWERS=${GITLAB_DEFAULT_REVIEWERS-$(git config --get mr.gitlab-default-reviewers || true)}
 
 GIT_MR_EXTENDED=${GIT_MR_EXTENDED-$(git config --get mr.git-mr-extended || true)}
 

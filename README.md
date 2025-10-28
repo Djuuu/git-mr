@@ -196,6 +196,9 @@ git config --global mr.gitlab-token  "Zyxwvutsrqponmlkjihg"
 # Default labels for new merge requests
 git config --global mr.gitlab-default-labels "Review,My Team"
 
+# Default reviewers for new merge requests (usernames, comma-separated)
+git config --global mr.gitlab-default-reviewers "user1,user2"
+
 # Check "Delete source branch" by default (defaults to 1)
 # git config --global mr.gitlab-remove-source-branch-on-merge 1
 
@@ -254,6 +257,9 @@ export GITLAB_TOKEN="Zyxwvutsrqponmlkjihg"
 
 # Default labels for new merge requests
 export GITLAB_DEFAULT_LABELS="Review,My Team"
+
+# Default reviewers for new merge requests (usernames, comma-separated)
+export GITLAB_DEFAULT_REVIEWERS="user1,user2"
 
 # Check "Delete source branch" by default (defaults to 1)
 #export GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE=1
