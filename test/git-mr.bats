@@ -11,7 +11,7 @@ setup_file() {
 
     # Unset all git-mr environment variables (would take precedence over local configuration)
     unset JIRA_INSTANCE JIRA_USER JIRA_TOKEN JIRA_CODE_PATTERN \
-          GITLAB_DOMAIN GITLAB_TOKEN GITLAB_MR_LIMIT_GROUP GITLAB_DEFAULT_LABELS \
+          GITLAB_DOMAIN GITLAB_TOKEN GITLAB_MR_LIMIT_GROUP GITLAB_DEFAULT_LABELS GITLAB_DEFAULT_REVIEWERS \
           GITLAB_IP_LABELS GITLAB_CR_LABELS GITLAB_QA_LABELS GITLAB_OK_LABELS \
             JIRA_IP_ID       JIRA_CR_ID       JIRA_QA_ID       JIRA_OK_ID \
           GITLAB_PROJECTS_LIMIT_MEMBER \
@@ -718,9 +718,16 @@ sha_link() {
 
 @test "Determines new merge request URL" {
     GITLAB_DEFAULT_LABELS="Label A,Label C"
+    GITLAB_DEFAULT_REVIEWERS="alice,charlie"
     gitlab_current_project_request() {
-        [[ $1 == "labels" ]] &&
-            echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}]'
+        case "$1" in
+            "labels")
+                echo '[{"id":1,"name":"Label A"},{"id":2,"name":"Label B"},{"id":3,"name":"Label C"}]'
+                ;;
+            "members/all?per_page=100")
+                echo '[{"id":10,"username":"alice"},{"id":20,"username":"bob"},{"id":30,"username":"charlie"}]'
+                ;;
+        esac
     }
 
     run gitlab_new_merge_request_url
@@ -734,6 +741,7 @@ sha_link() {
     expected="${expected}?merge_request%5Bsource_branch%5D=feature/AB-123-test-feature"
     expected="${expected}&merge_request%5Btarget_branch%5D=feature/base"
     expected="${expected}&merge_request%5Blabel_ids%5D%5B%5D=1&merge_request%5Blabel_ids%5D%5B%5D=3"
+    expected="${expected}&merge_request%5Breviewer_ids%5D%5B%5D=10&merge_request%5Breviewer_ids%5D%5B%5D=30"
     expected="${expected}&merge_request%5Bforce_remove_source_branch%5D=1"
     expected="${expected}&merge_request%5Btitle%5D=Draft%3A%20Feature%2FAB-123%20Test%20feature"
     assert_output "$expected"
@@ -921,6 +929,28 @@ sha_link() {
 		4
 		EOF
     )"
+}
+
+@test "Fetches default Gitlab reviewer ids" {
+    GITLAB_DEFAULT_REVIEWERS="alice,charlie"
+    gitlab_current_project_request() {
+        [[ $1 == "members/all?per_page=100" ]] &&
+            echo '[{"id":10,"username":"alice"},{"id":20,"username":"bob"},{"id":30,"username":"charlie"},{"id":40,"username":"dave"}]'
+    }
+
+    run gitlab_default_reviewer_ids
+    assert_output "$(cat <<- EOF
+		10
+		30
+		EOF
+    )"
+}
+
+@test "Handles empty default reviewers" {
+    GITLAB_DEFAULT_REVIEWERS=""
+    run gitlab_default_reviewer_ids
+    assert_success
+    assert_output ""
 }
 
 @test "Handles draft MR titles" {
