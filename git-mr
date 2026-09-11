@@ -127,14 +127,14 @@ git_commits() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
-    git log --oneline --reverse --no-decorate "${target_branch}..${source_branch}"
+    git log --oneline --reverse --topo-order --no-decorate "${target_branch}..${source_branch}"
 }
 
 git_commits_hybrid() {
     local source_branch=${1:-$(git_current_branch)}
     local target_branch=${2:-${GIT_MR_TARGET:-$(git_base_branch "$source_branch")}}
 
-    git log --reverse --format="%H %h %s" "${target_branch}".."${source_branch}"
+    git log --reverse --topo-order --format="%H %h %s" "${target_branch}".."${source_branch}"
 }
 
 git_commits_extended() {
@@ -148,7 +148,7 @@ git_commits_extended() {
 
     local format="${prefix}%h %s${suffix}%n%b${end}"
 
-    git log --reverse --no-decorate --format="${format}" "${target_branch}".."${source_branch}" |
+    git log --reverse --topo-order --no-decorate --format="${format}" "${target_branch}".."${source_branch}" |
         grep -v "^${end}" | # remove trailing blank line
         sed -r "s/${end}$//g" # remove trailing body end for bodies without trailing blank line
 }
