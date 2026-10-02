@@ -25,10 +25,10 @@ jobs:
 
   shellcheck:
     name: ShellCheck
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Run ShellCheck
         run: |
           sudo apt-get update -y
@@ -40,10 +40,9 @@ jobs:
     strategy:
       matrix:
         os:
+          - ubuntu-26.04
           - ubuntu-24.04
-          - ubuntu-22.04
           - windows-2025
-          - windows-2022
     runs-on: ${{ matrix.os }}
     steps:
       - name: Show versions
@@ -54,10 +53,10 @@ jobs:
       - name: Setup BATS
         uses: mig4/setup-bats@v1
         with:
-          bats-version: 1.12.0
+          bats-version: 1.14.0
 
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -69,8 +68,8 @@ jobs:
     strategy:
       matrix:
         os:
+           - macos-latest
            - macos-15
-           - macos-14
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install dependencies
@@ -88,10 +87,10 @@ jobs:
       - name: Setup BATS
         uses: mig4/setup-bats@v1
         with:
-          bats-version: 1.12.0
+          bats-version: 1.14.0
 
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
