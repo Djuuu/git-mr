@@ -3,6 +3,16 @@ git_mr_mock_rebase_state="done"   # done | error | progress
 mr_status_block() { return 0; }   # Irrelevant to test
 sleep() { return 0; }             # No actual waiting
 
+git_mr_mock_pull_status=0
+git() {
+    if [[ $1 == "pull" ]]; then
+        echo "[mock] git pull"
+        return "$git_mr_mock_pull_status"
+    fi
+    command git -c include.path="${BATS_TEST_DIRNAME}/.gitconfig" "$@"
+}
+mr_update() { echo "[mock] mr_update $1"; }
+
 gitlab_request() {
     case "$1" in
         "projects/my%2Fproject/merge_requests?state=opened&view=simple&source_branch=feature/AB-123-test-feature")

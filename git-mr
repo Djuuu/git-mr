@@ -2911,7 +2911,8 @@ mr_rebase() {
                 return "$ERR_GITLAB"
             fi
             echo -e "OK\n"
-            return 0
+            mr_rebase_followup "$source_branch"
+            return $?
         fi
 
         sleep "$GIT_MR_REBASE_POLL_INTERVAL"
@@ -2920,6 +2921,26 @@ mr_rebase() {
     echo_error "Timed out. Rebase is still in progress."
     echo_error
     return "$ERR_GITLAB"
+}
+
+mr_rebase_followup() {
+    local source_branch=$1
+
+    [[ $source_branch == "$(git_current_branch)" ]] || return 0
+
+    confirm "Do you want to pull changes?" || { echo; return 0; }
+
+    echolor "git pull" "lightgray"
+    if git_mr_readonly; then
+        echo
+        return 0
+    fi
+    git pull || { echo_error; return "$ERR_GIT"; }
+    echo
+
+    confirm "Do you want to update the merge request description?" || { echo; return 0; }
+
+    mr_update "$source_branch"
 }
 
 mr_menu() {

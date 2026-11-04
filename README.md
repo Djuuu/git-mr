@@ -535,6 +535,10 @@ and if applicable, will prompt you to:
 This will ask Gitlab to rebase the merge request source branch onto its target branch,
 then wait for the rebase to complete and report any error.
 
+When the rebase completes on the current branch, it will prompt you to:
+* `git pull` the rebased branch
+* update the merge request description (`git mr update`)
+
 * `--without-pipeline`: do not create a pipeline for the rebase (`skip_ci`).
 * `--async`: only request the rebase, do not wait for its completion.
 

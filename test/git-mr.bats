@@ -2843,6 +2843,10 @@ n'
     run mr_rebase
     assert_success
     assert_output --partial "Waiting for rebase to complete... OK"
+    assert_output --partial "Do you want to pull changes? -> yes"
+    assert_output --partial "[mock] git pull"
+    assert_output --partial "Do you want to update the merge request description? -> yes"
+    assert_output --partial "[mock] mr_update feature/AB-123-test-feature"
 
     run cat mr-rebase-gitlab_request.log
     assert_line --index 0 "projects/my%2Fproject/merge_requests/1/rebase PUT"
@@ -2888,5 +2892,27 @@ n'
     run mr_rebase
     assert_failure "$ERR_GITLAB"
     assert_output --partial "Rebase failed. Please rebase locally"
+    rm -f mr-rebase-gitlab_request.log
+}
+
+@test "Rebase does not update description when pull fails" {
+    load "test_helper/gitlab-mock-rebase.bash"
+    GIT_MR_YES=1
+    git_mr_mock_pull_status=1
+
+    run mr_rebase
+    assert_failure "$ERR_GIT"
+    refute_output --partial "[mock] mr_update"
+    rm -f mr-rebase-gitlab_request.log
+}
+
+@test "Rebase --async does not suggest pulling" {
+    load "test_helper/gitlab-mock-rebase.bash"
+    GIT_MR_YES=1
+    GIT_MR_ASYNC=1
+
+    run mr_rebase
+    assert_success
+    refute_output --partial "[mock] git pull"
     rm -f mr-rebase-gitlab_request.log
 }
