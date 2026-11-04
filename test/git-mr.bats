@@ -2830,3 +2830,63 @@ n'
     git reset --hard HEAD~2
     rm -f .git/hooks/prepare-commit-msg
 }
+
+################################################################################
+# Rebase
+
+@test "Rebase requests a Gitlab rebase and waits for completion" {
+    load "test_helper/gitlab-mock-rebase.bash"
+    GIT_MR_YES=1
+    rm -f mr-rebase-gitlab_request.log mr-rebase-polled
+    git_mr_mock_rebase_state="progress"
+
+    run mr_rebase
+    assert_success
+    assert_output --partial "Waiting for rebase to complete... OK"
+
+    run cat mr-rebase-gitlab_request.log
+    assert_line --index 0 "projects/my%2Fproject/merge_requests/1/rebase PUT"
+    assert_line --index 1 "projects/my%2Fproject/merge_requests/1?include_rebase_in_progress=true"
+    assert_line --index 2 "projects/my%2Fproject/merge_requests/1?include_rebase_in_progress=true"
+    rm -f mr-rebase-gitlab_request.log mr-rebase-polled
+}
+
+@test "Rebase can skip the pipeline" {
+    load "test_helper/gitlab-mock-rebase.bash"
+    GIT_MR_YES=1
+    GIT_MR_REBASE_SKIP_CI=1
+    rm -f mr-rebase-gitlab_request.log
+
+    run mr_rebase
+    assert_success
+
+    run cat mr-rebase-gitlab_request.log
+    assert_line --index 0 "projects/my%2Fproject/merge_requests/1/rebase?skip_ci=true PUT"
+    rm -f mr-rebase-gitlab_request.log
+}
+
+@test "Rebase --async does not poll" {
+    load "test_helper/gitlab-mock-rebase.bash"
+    GIT_MR_YES=1
+    GIT_MR_ASYNC=1
+    rm -f mr-rebase-gitlab_request.log
+
+    run mr_rebase
+    assert_success
+    assert_output --partial "Rebase running in the background."
+
+    run cat mr-rebase-gitlab_request.log
+    assert_output "projects/my%2Fproject/merge_requests/1/rebase PUT"
+    rm -f mr-rebase-gitlab_request.log
+}
+
+@test "Rebase reports Gitlab rebase errors" {
+    load "test_helper/gitlab-mock-rebase.bash"
+    GIT_MR_YES=1
+    git_mr_mock_rebase_state="error"
+
+    run mr_rebase
+    assert_failure "$ERR_GITLAB"
+    assert_output --partial "Rebase failed. Please rebase locally"
+    rm -f mr-rebase-gitlab_request.log
+}

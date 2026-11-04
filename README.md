@@ -20,6 +20,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr ip|cr|qa|ok`](#git-mr-ipcrqaok)
     + [`git mr undraft`](#git-mr-undraft)
     + [`git mr merge`](#git-mr-merge)
+    + [`git mr rebase`](#git-mr-rebase)
     + [`git mr hook`](#git-mr-hook)
 * [Plumbing commands](#plumbing-commands)
   + [`git mr base`](#git-mr-base)
@@ -45,6 +46,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>(ip|cr|qa|ok)</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>undraft</b>        <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>rebase</b>         <i>[BRANCH]</i>
 
 <b>git mr</b>  <b>base</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <b>code</b>  <i>[BRANCH]</i>
@@ -102,6 +104,12 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * `git mr merge`
   * `-f`, `--force`  
     Force merge even if there are unresolved threads.
+
+* `git mr rebase`
+  * `--without-pipeline`  
+    Do not create a pipeline for the rebase.
+  * `--async`  
+    Only request the rebase, do not wait for its completion.
 
 ## Installation
 
@@ -515,6 +523,20 @@ and if applicable, will prompt you to:
 * checkout local target branch, update it and delete local merged branch
 
 ![git mr merge](doc/git-mr-merge.png)
+
+----------------------------------------------------------------
+
+### `git mr rebase`
+
+<pre>
+<b>git mr</b> <i>[OPTION...]</i> <b>rebase</b> <i>[--without-pipeline] [--async]</i> <i>[BRANCH]</i>
+</pre>
+
+This will ask Gitlab to rebase the merge request source branch onto its target branch,
+then wait for the rebase to complete and report any error.
+
+* `--without-pipeline`: do not create a pipeline for the rebase (`skip_ci`).
+* `--async`: only request the rebase, do not wait for its completion.
 
 ----------------------------------------------------------------
 
