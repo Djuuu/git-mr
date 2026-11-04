@@ -19,6 +19,7 @@ Prepares a merge request description, with link to Jira ticket and current branc
     + [`git mr menu`](#git-mr-menu)
     + [`git mr ip|cr|qa|ok`](#git-mr-ipcrqaok)
     + [`git mr undraft`](#git-mr-undraft)
+    + [`git mr rebase`](#git-mr-rebase)
     + [`git mr merge`](#git-mr-merge)
     + [`git mr hook`](#git-mr-hook)
 * [Plumbing commands](#plumbing-commands)
@@ -32,13 +33,14 @@ Prepares a merge request description, with link to Jira ticket and current branc
 ## Synopsis
 
 <pre>
-<b>git mr</b>  <i>[OPTIONS]</i>          <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>                 <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>open</b>    <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>status</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>update</b>  <i>[BRANCH]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>rebase</b>  <i>[BRANCH]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>merge</b>   <i>[BRANCH]</i>
 
-<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>                     <i>[SEARCH_TERM]</i>
+<b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b>                            <i>[SEARCH_TERM]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>update [--current]</i>  <i>[SEARCH_TERM]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>edit</i>                <i>[SEARCH_TERM]</i>
 <b>git mr</b>  <i>[OPTIONS]</i>  <b>menu</b> <i>status</i>              <i>[SEARCH_TERM]</i>
@@ -98,6 +100,12 @@ Prepares a merge request description, with link to Jira ticket and current branc
 * `git mr menu update`
   * `--current`  
     Update only current project/branch merge request.
+
+* `git mr rebase`
+  * `--without-pipeline`  
+    Do not create a pipeline for the rebase.
+  * `--async`  
+    Only request the rebase, do not wait for its completion.
 
 * `git mr merge`
   * `-f`, `--force`  
@@ -495,6 +503,20 @@ This will:
 </pre>
 
 This will resolve the Gitlab _Draft_ (_Work in Progress_) status.
+
+----------------------------------------------------------------
+
+### `git mr rebase`
+
+<pre>
+<b>git mr</b> <i>[OPTION...]</i> <b>rebase</b> <i>[--without-pipeline] [--async]</i> <i>[BRANCH]</i>
+</pre>
+
+This will ask Gitlab to rebase the merge request source branch onto its target branch,
+then wait for the rebase to complete and report any error.
+
+* `--without-pipeline`: do not create a pipeline for the rebase (`skip_ci`).
+* `--async`: only request the rebase, do not wait for its completion.
 
 ----------------------------------------------------------------
 

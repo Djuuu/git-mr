@@ -23,6 +23,7 @@ __git-mr_commands() {
 
         'undraft:remove merge request "draft" status'
         'merge:merge merge request'
+        'rebase:rebase merge request'
 
         'base:show guessed base branch'
         'code:show guessed issue code'
@@ -64,6 +65,7 @@ _git-mr() {
             up|update)   [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
             ed|edit)     [[ $mr_action == "menu" ]] && mr_action="menu-edit"   || mr_action="default" ;;
             mg|merge)    mr_action="merge" ;;
+            rebase)      mr_action="rebase" ;;
             menu)        mr_action="menu" ;;
             ip|cr|qa|ok) mr_action="transition" ;;
             IP|CR|QA|OK) mr_action="transition" ;;
@@ -91,7 +93,7 @@ _git-mr() {
         '(--no-color)'--no-color'[disable terminal colors]'
         '(--no-links)'--no-links'[disable terminal hyperlinks]'
     );; esac
-    case $mr_action in default|update|menu-update|menu-edit|transition|merge) opts+=(
+    case $mr_action in default|update|menu-update|menu-edit|transition|merge|rebase) opts+=(
          '(-y --yes)'{-y,--yes}'[bypass confirmation prompts ("yes")]'
     );; esac
     opts+=(
@@ -111,6 +113,10 @@ _git-mr() {
     );; esac
     case $mr_action in merge) opts+=(
         '(-f --force)'{-f,--force}'[force merge even if there are unresolved threads]'
+    );; esac
+    case $mr_action in rebase) opts+=(
+        '(--without-pipeline)'--without-pipeline'[do not create a pipeline for the rebase]'
+        '(--async)'--async'[do not wait for the rebase to complete]'
     );; esac
 
     # Build arguments depending on action context

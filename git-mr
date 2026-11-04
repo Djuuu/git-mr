@@ -986,6 +986,25 @@ gitlab_merge_request_merge() {
     gitlab_current_project_request "merge_requests/${mr_iid}/merge?should_remove_source_branch=${GITLAB_REMOVE_SOURCE_BRANCH_ON_MERGE}" "PUT"
 }
 
+gitlab_merge_request_rebase() {
+    gitlab_check_env
+
+    local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
+
+    local query=
+    [[ $GIT_MR_REBASE_SKIP_CI -eq 1 ]] && query="?skip_ci=true"
+
+    gitlab_current_project_request "merge_requests/${mr_iid}/rebase${query}" "PUT"
+}
+
+gitlab_merge_request_rebase_status() {
+    gitlab_check_env
+
+    local mr_iid=$1;  [[ -n $mr_iid ]] || exit_error "$ERR_MR" "No mr_iid provided"
+
+    gitlab_current_project_request "merge_requests/${mr_iid}?include_rebase_in_progress=true"
+}
+
 gitlab_title_is_draft() {
     local title=$1
     for prefix in "${GITLAB_DRAFT_PREFIXES[@]}"; do
@@ -2713,6 +2732,77 @@ mr_update() {
     mr_print_status "$merge_request" "$mr_approvals" "$mr_threads" "$mr_commits_behind" "$mr_commits_behind_main"
 }
 
+mr_rebase() {
+    git_mr_readonly show
+    gitlab_check_env
+
+    local source_branch=${1:-$(git_current_branch)}
+
+    # Search existing merge request
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+    if [[ -z $mr_summary ]]; then
+        echo_error "Merge request not found"
+        mr_print "$source_branch"
+        return "$ERR_GITLAB"
+    fi
+
+    local mr_iid mr_url mr_title mr_target
+    eval "$(echo "$mr_summary" | jq -r '
+        "mr_iid="    + (.iid           | @sh) + ";\n" +
+        "mr_url="    + (.web_url       | @sh) + ";\n" +
+        "mr_title="  + (.title         | @sh) + ";\n" +
+        "mr_target=" + (.target_branch | @sh) + ";\n"
+    ')"
+
+    echo
+    mr_status_block "$mr_summary" "" "" "" "$mr_iid" "$mr_url" "$mr_title"
+    echo "--------------------------------------------------------------------------------"
+    echo
+
+    confirm "Do you want to rebase '$source_branch' onto '$mr_target'?" || { echo; return 0; }
+
+    echo -n "Requesting rebase of '$source_branch'... "
+    local result; result=$(gitlab_merge_request_rebase "$mr_iid")
+    [[ -n $result ]] || { echo_error; return "$ERR_GITLAB"; }
+    echo "OK"
+
+    if [[ $GIT_MR_ASYNC -eq 1 ]]; then
+        echo -e "Rebase running in the background.\n"
+        return 0
+    fi
+
+    git_mr_readonly && { echo; return 0; }
+
+    echo -n "Waiting for rebase to complete... "
+    local attempt status rebase_in_progress merge_error
+    for (( attempt = 0; attempt < GIT_MR_REBASE_POLL_MAX; attempt++ )); do
+        status=$(gitlab_merge_request_rebase_status "$mr_iid")
+        [[ -n $status ]] || { echo_error; return "$ERR_GITLAB"; }
+
+        eval "$(echo "$status" | jq -r '
+            "rebase_in_progress=" + ((.rebase_in_progress // false) | tostring | @sh) + ";\n" +
+            "merge_error="        + (.merge_error // ""                        | @sh) + ";\n"
+        ')"
+
+        if [[ $rebase_in_progress != "true" ]]; then
+            if [[ -n $merge_error ]]; then
+                echo_error "FAILED"
+                echo_error "$merge_error"
+                echo_error
+                return "$ERR_GITLAB"
+            fi
+            echo -e "OK\n"
+            return 0
+        fi
+
+        sleep "$GIT_MR_REBASE_POLL_INTERVAL"
+    done
+
+    echo_error "Timed out. Rebase is still in progress."
+    echo_error
+    return "$ERR_GITLAB"
+}
+
 mr_merge() {
     git_mr_readonly show
     gitlab_check_env
@@ -2995,6 +3085,7 @@ ${b}SYNOPSIS${r}
        ${u}git${r} ${u}mr${r} [OPTION...]  open    [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  status  [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  update  [BRANCH]
+       ${u}git${r} ${u}mr${r} [OPTION...]  rebase  [BRANCH]
        ${u}git${r} ${u}mr${r} [OPTION...]  merge   [BRANCH]
 
        ${u}git${r} ${u}mr${r} [OPTION...]  menu                     [SEARCH_TERM]
@@ -3063,6 +3154,14 @@ ${b}COMMAND-SPECIFIC OPTIONS${r}
 
        --current
            Update only current project/branch merge request.
+
+   ${b}git mr rebase${r}
+
+       --without-pipeline
+           Do not create a pipeline for the rebase.
+
+       --async
+           Only request the rebase, do not wait for its completion.
 
    ${b}git mr merge${r}
 
@@ -3160,6 +3259,10 @@ MD_BR=${MD_BR="  "} # Markdown line break
 GIT_MR_MENU_START=${GIT_MR_MENU_START:-"## Menu"}
 GIT_MR_MENU_END=${GIT_MR_MENU_END:-"--------------------------------------------------------------------------------"}
 GIT_MR_MENU_UPDATE_CONTEXT_LINES=${GIT_MR_MENU_UPDATE_CONTEXT_LINES:-15}
+GIT_MR_REBASE_POLL_INTERVAL=${GIT_MR_REBASE_POLL_INTERVAL:-2}
+GIT_MR_REBASE_POLL_MAX=${GIT_MR_REBASE_POLL_MAX:-60}
+GIT_MR_REBASE_SKIP_CI=${GIT_MR_REBASE_SKIP_CI:-0}
+GIT_MR_ASYNC=${GIT_MR_ASYNC:-0}
 
 _git_mr_commit_prefix='[^0-9a-fA-F]*'
 _git_mr_commit_ref='[0-9a-fA-F]{7,}'
@@ -3258,10 +3361,14 @@ while [[ $# -gt 0 ]]; do
         # mr update
         -n|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
             case "$2" in
-                -c|--code | -t|--target | -e|--extended | -s|--short | --no-color|--no-links | -y|--yes | -v|--verbose | -r|--replace-commits | -f|--force | -h) ;;
+                -c|--code | -t|--target | -e|--extended | -s|--short | --no-color|--no-links | -y|--yes | -v|--verbose | -r|--replace-commits | -f|--force | --without-pipeline | --async | -h) ;;
                 *) GIT_MR_UPDATE_NEW_SECTION_NAME="$2"; shift ;;
             esac ;;
         -r|--replace-commits) GIT_MR_REPLACE_COMMITS=1 ;;
+
+        # mr rebase
+        --without-pipeline) GIT_MR_REBASE_SKIP_CI=1 ;;
+        --async) GIT_MR_ASYNC=1 ;;
 
         # mr merge
         -f|--force) GIT_MR_FORCE=1 ;;
@@ -3283,6 +3390,7 @@ case $1 in
     o|op|open)   mr_open   "${@:2}" ;;
     s|st|status) mr_status "${@:2}" ;;
     u|up|update) mr_update "${@:2}" ;;
+    r|rb|rebase) mr_rebase "${@:2}" ;;
     m|mg|merge)  mr_merge  "${@:2}" ;;
 
     menu) mr_menu "${@:2}" ;;
