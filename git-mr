@@ -2874,13 +2874,56 @@ mr_rebase() {
 
     local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
 
-    # The summary uses the "simple" view, which has no target branch
-    local mr_target; mr_target=$(gitlab_extract_target_branch "$merge_request")
-
     echo
     mr_status_block "$mr_summary" "$merge_request" "" "" "$mr_iid" "$mr_url" "$mr_title"
     echo "--------------------------------------------------------------------------------"
     echo
+
+    local mr_target mr_state mr_merge_status mr_detailed_merge_status mr_has_conflicts
+    eval "$(echo "$merge_request" | jq -r '
+        "mr_target="                + (.target_branch         | @sh) + ";\n" +
+        "mr_state="                 + (.state                 | @sh) + ";\n" +
+        "mr_merge_status="          + (.merge_status          | @sh) + ";\n" +
+        "mr_detailed_merge_status=" + (.detailed_merge_status | @sh) + ";\n" +
+        "mr_has_conflicts="         + (.has_conflicts         | @sh)
+    ')"
+
+    case "$mr_detailed_merge_status" in
+        mergeable)                            # The branch can merge cleanly into the target branch.
+            echo 'Merge request can be merged - no rebase necessary.'
+
+            echo_debug "  merge_status:          $mr_merge_status"
+            echo_debug "  detailed_merge_status: $mr_detailed_merge_status"
+
+            [[ $GIT_MR_FORCE -eq 1 ]] || return 0
+            ;;
+
+        conflict)                          ;; # Conflicts exist between the source and target branches.
+        need_rebase)                       ;; # The merge request must be rebased. # TODO: indicator in status block?
+        unchecked)                         ;; # Git has not yet tested if a valid merge is possible.
+
+        approvals_syncing)                 ;; # The merge request’s approvals are syncing.
+        checking)                          ;; # Git is testing if a valid merge is possible.
+        ci_must_pass)                      ;; # A CI/CD pipeline must succeed before merge.
+        ci_still_running)                  ;; # A CI/CD pipeline is still running.
+        commits_status)                    ;; # Source branch should exist, and contain commits.
+        discussions_not_resolved)          ;; # All discussions must be resolved before merge.
+        draft_status)                      ;; # Can’t merge because the merge request is a draft.
+        jira_association_missing)          ;; # The title or description must reference a Jira issue. To configure, see require associated Jira issue for merge requests to be merged.
+        merge_request_blocked)             ;; # Blocked by another merge request.
+        merge_time)                        ;; # May not be merged until after the specified time.
+        not_approved)                      ;; # Approval is required before merge.
+        not_open)                          ;; # The merge request must be open before merge.
+        preparing)                         ;; # Merge request diff is being created.
+        requested_changes)                 ;; # The merge request has reviewers who have requested changes.
+        security_policy_pipeline_check)    ;; # All pipelines for the latest commit must succeed before the merge request is merged when security policies are enforced.
+        security_policy_violations)        ;; # All security policies must be satisfied.
+        status_checks_must_pass)           ;; # All status checks must pass before merge.
+        locked_paths)                      ;; # Paths locked by other users must be unlocked before merging to default branch.
+        locked_lfs_files)                  ;; # LFS files locked by other users must be unlocked before merge.
+        title_regex)                       ;; # Checks whether the title matches the expected regex, if configured in project settings.
+        *) ;;
+    esac
 
     confirm "Do you want to rebase '$source_branch' onto '$mr_target'?" || { echo; return 0; }
 
