@@ -2746,16 +2746,20 @@ mr_rebase() {
         return "$ERR_GITLAB"
     fi
 
-    local mr_iid mr_url mr_title mr_target
+    local mr_iid mr_url mr_title
     eval "$(echo "$mr_summary" | jq -r '
         "mr_iid="    + (.iid           | @sh) + ";\n" +
         "mr_url="    + (.web_url       | @sh) + ";\n" +
-        "mr_title="  + (.title         | @sh) + ";\n" +
-        "mr_target=" + (.target_branch | @sh) + ";\n"
+        "mr_title="  + (.title         | @sh)
     ')"
 
+    local merge_request; merge_request=$(gitlab_merge_request "$mr_iid")
+
+    # The summary uses the "simple" view, which has no target branch
+    local mr_target; mr_target=$(gitlab_extract_target_branch "$merge_request")
+
     echo
-    mr_status_block "$mr_summary" "" "" "" "$mr_iid" "$mr_url" "$mr_title"
+    mr_status_block "$mr_summary" "$merge_request" "" "" "$mr_iid" "$mr_url" "$mr_title"
     echo "--------------------------------------------------------------------------------"
     echo
 
