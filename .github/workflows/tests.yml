@@ -51,9 +51,13 @@ jobs:
           git --version
 
       - name: Setup BATS
-        uses: mig4/setup-bats@v1
+        uses: bats-core/bats-action@4.0.0
         with:
-          bats-version: 1.14.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          support-install: false # submodule
+          assert-install: false # submodule
+          detik-install: false # unused
+          file-install: false # unused
 
       - name: Check out code
         uses: actions/checkout@v7
@@ -61,7 +65,8 @@ jobs:
           submodules: recursive
 
       - name: Run tests on ${{ matrix.os }}
-        run: bash -c "bats --print-output-on-failure --formatter tap ./test"
+        shell: bash
+        run: bats --print-output-on-failure --formatter tap ./test
 
   test-mac:
     name: Test (Mac)
@@ -85,9 +90,13 @@ jobs:
           git --version
 
       - name: Setup BATS
-        uses: mig4/setup-bats@v1
+        uses: bats-core/bats-action@4.0.0
         with:
-          bats-version: 1.14.0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          support-install: false # submodule
+          assert-install: false # submodule
+          detik-install: false # unused
+          file-install: false # unused
 
       - name: Check out code
         uses: actions/checkout@v7
@@ -95,4 +104,5 @@ jobs:
           submodules: recursive
 
       - name: Run tests on ${{ matrix.os }}
-        run: bash -c "bats --print-output-on-failure --formatter tap ./test"
+        shell: bash
+        run: bats --print-output-on-failure --formatter tap ./test
