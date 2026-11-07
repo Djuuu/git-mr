@@ -43,41 +43,12 @@ jobs:
           - ubuntu-26.04
           - ubuntu-24.04
           - windows-2025
+          - macos-latest
+          - macos-15
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Show versions
-        run: |
-          bash --version
-          git --version
-
-      - name: Setup BATS
-        uses: bats-core/bats-action@4.0.0
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          support-install: false # submodule
-          assert-install: false # submodule
-          detik-install: false # unused
-          file-install: false # unused
-
-      - name: Check out code
-        uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - name: Run tests on ${{ matrix.os }}
-        shell: bash
-        run: bats --print-output-on-failure --formatter tap ./test
-
-  test-mac:
-    name: Test (Mac)
-    strategy:
-      matrix:
-        os:
-           - macos-latest
-           - macos-15
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Install dependencies
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
         run: |
           brew install \
             bash \
@@ -87,6 +58,7 @@ jobs:
       - name: Show versions
         run: |
           bash --version
+          grep --version
           git --version
 
       - name: Setup BATS
