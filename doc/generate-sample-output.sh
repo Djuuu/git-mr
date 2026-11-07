@@ -235,6 +235,70 @@ $(c_question "Do you want to update the merge request description?") [y/N]
 EOF
 }
 
+sample_mr_rebase() {
+    fake_prompt "git mr rebase"
+
+    local mr='{
+        "title": "'"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["Review","My Team"], "target_branch": "main",
+        "upvotes": 1, "downvotes": 0, "merge_status": "cannot_be_merged",
+        "head_pipeline": {"status":"success", "web_url":"https://myapp.gitlab.com/my/project/pipelines/6"}
+    }'
+
+    local approvals="false 1/2"
+    local threads="1	unresolved:false	note_id:2"
+
+    local mr_after_rebase='{
+        "title": "'"$mr_title"'", "web_url":"'"$mr_url"'",
+        "labels":["Review","My Team"], "target_branch": "main",
+        "upvotes": 1, "downvotes": 0, "merge_status": "cannot_be_merged",
+        "head_pipeline": {"status":"running", "web_url":"https://myapp.gitlab.com/my/project/pipelines/7"}
+    }'
+
+    cat << EOF
+
+$(mr_status_block "$mr" "$mr" "$approvals" "$threads")
+
+--------------------------------------------------------------------------------
+
+$(c_question "Do you want to rebase 'feature/xy-1234-lorem-ipsum' onto 'main'?") [y/N] y
+Requesting rebase of 'feature/xy-1234-lorem-ipsum'... OK
+Waiting for rebase to complete... OK
+
+$(c_question "Do you want to pull changes?") [y/N] y
+$(colorize "git pull" "lightgray")
+From myapp.gitlab.com:me/my/project
+ + e9642b7...3e1c9b4 feature/xy-1234-lorem-ipsum -> origin/feature/xy-1234-lorem-ipsum  (forced update)
+Successfully rebased and updated refs/heads/feature/xy-1234-lorem-ipsum.
+
+$(c_question "Do you want to update the merge request description?") [y/N] y
+
+$(mr_print_title "$mr_title" "$mr_url")
+
+$(markdown_title "$issue_link")
+
+Vivamus venenatis tortor et neque sollicitudin, eget suscipit est malesuada.
+Suspendisse nec odio id arcu sagittis pulvinar ut nec lacus.
+
+## Commits
+
+* **$(c_updated "4d1f0a2") In vulputate quam ac ultrices volutpat**
+* **$(c_updated "b7e35c9") Curabitur vel purus sed tortor finibus posuere**
+* **$(c_updated "3e1c9b4") Aenean sed sem hendrerit ex egestas tincidunt**
+
+--------------------------------------------------------------------------------
+
+  updated commits: $(c_updated "3")
+
+$(c_question "Do you want to update the merge request description?") [y/N] y
+Updating merge request...OK
+
+--------------------------------------------------------------------------------
+$(mr_print_status "$mr_after_rebase" "$approvals" "$threads")
+
+EOF
+}
+
 sample_mr_merge() {
     fake_prompt "git mr merge"
 
@@ -511,6 +575,9 @@ if [[ "$#" -gt 0 ]]; then
                 sample_mr_menu_edit
                 ;;
 
+            rebase)
+                sample_mr_rebase
+                ;;
             merge)
                 sample_mr_merge
                 ;;
@@ -533,6 +600,7 @@ else
     sample_mr_menu_update
     sample_mr_menu_edit
 
+    sample_mr_rebase
     sample_mr_merge
 
     sample_mr_prepare_commit_msg

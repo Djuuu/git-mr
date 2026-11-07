@@ -523,6 +523,8 @@ Options:
 * `--without-pipeline`: do not create a pipeline for the rebase (`skip_ci`).
 * `--async`: only request the rebase, do not wait for its completion.
 
+![git mr rebase](doc/git-mr-rebase.png)
+
 ----------------------------------------------------------------
 
 ### `git mr merge`
