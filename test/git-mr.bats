@@ -1974,6 +1974,43 @@ End"
 }
 
 ################################################################################
+# Open
+
+@test "Open opens existing merge request, --silent skips its status" {
+    load "test_helper/gitlab-mock-open.bash"
+    git_mr_mock_summary='{"iid":1,"web_url":"https://gitlab.example.net/my/project/-/merge_requests/1","title":"My MR"}'
+
+    run mr_open
+    assert_success
+    assert_output --partial "[mock] open https://gitlab.example.net/my/project/-/merge_requests/1"
+    assert_output --partial "[mock] mr_status_block"
+
+    GIT_MR_OPEN_SILENT=1
+    run mr_open
+    assert_success
+    assert_output "[mock] open https://gitlab.example.net/my/project/-/merge_requests/1"
+}
+
+@test "Open opens creation form when there is no merge request, --silent skips description" {
+    load "test_helper/gitlab-mock-open.bash"
+
+    run mr_open
+    assert_success
+    assert_output --partial "No merge request found."
+    assert_output --partial "[mock] description"
+    assert_output --partial "Opening Merge Request creation form..."
+    assert_output --partial "[mock] open https://gitlab.example.net/my/project/-/merge_requests/new"
+
+    GIT_MR_OPEN_SILENT=1
+    run mr_open
+    assert_success
+    refute_output --partial "No merge request found."
+    refute_output --partial "[mock] description"
+    refute_output --partial "Opening Merge Request creation form..."
+    assert_output --partial "[mock] open https://gitlab.example.net/my/project/-/merge_requests/new"
+}
+
+################################################################################
 # Rebase
 
 @test "Rebase requests a Gitlab rebase and waits for completion" {
