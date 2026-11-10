@@ -91,6 +91,10 @@ Prepares a merge request description, with link to Jira ticket and current branc
 
 #### Command-specific options
 
+* `git mr open`
+  * `--silent`  
+    Do not print merge request summary or description, only open the browser.
+
 * `git mr update`
   * `-n`, `--new-section` `[NEW_SECTION_TITLE]`  
     Add new section in description for new commits.

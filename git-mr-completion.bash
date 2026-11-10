@@ -87,6 +87,9 @@ _git_mr() {
         case $mr_action in default | open)
             __gitcomp_nl_append '-c'; __gitcomp_nl_append '--code'
         ;; esac
+        case $mr_action in open)
+            __gitcomp_nl_append '--silent'
+        ;; esac
         case $mr_action in default | open | update)
             __gitcomp_nl_append '-t'; __gitcomp_nl_append '--target'
             __gitcomp_nl_append '-e'; __gitcomp_nl_append '--extended'

@@ -2351,39 +2351,50 @@ mr_open() {
     local issue_code=${GIT_MR_CODE:-$(guess_issue_code "$source_branch")}
     [[ -n $issue_code ]] || git_mr_unguessable_issue_code=1
 
-    local description;
-    if [[ -n $target_branch ]]; then
-        description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
-        cat <<EOF
+    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
+
+    if [[ -n $mr_summary ]]; then
+        local mr_url; mr_url=$(gitlab_extract_url "$mr_summary")
+        open_in_browser "$mr_url"
+
+        # Print merge request status summary
+        if [[ $GIT_MR_OPEN_SILENT -ne 1 ]]; then
+            mr_status_block "$mr_summary"
+        fi
+    else
+        local description
+        if [[ -n $target_branch ]]; then
+            description=$(mr_description "$source_branch" "$target_branch" "$issue_code")
+
+            # Print merge request commit list
+            if [[ $GIT_MR_OPEN_SILENT -ne 1 ]]; then
+                echo "No merge request found." >&2
+                cat <<EOF
 
 --------------------------------------------------------------------------------
 $description
 
 EOF
-    fi
+            fi
+        fi
 
-    local mr_summary; mr_summary=$(gitlab_merge_request_summary "$source_branch")
-    if [[ -n $mr_summary ]]; then
-        open_in_browser "$(gitlab_extract_url "$mr_summary")"
+        if [[ $GIT_MR_OPEN_SILENT -ne 1 ]]; then
+            echo "--------------------------------------------------------------------------------"
+        fi
 
-        # Print merge request status summary
-        mr_status_block "$mr_summary"
-    else
         git_check_branches "$source_branch" "$target_branch"
-
-        echo "--------------------------------------------------------------------------------"
-        echo
 
         local new_mr_url; new_mr_url=$(gitlab_new_merge_request_url "$source_branch" "$target_branch")
         [[ -n $new_mr_url ]] || return
 
-        # add description
+        if [[ $GIT_MR_OPEN_SILENT -ne 1 ]]; then
+            echo -e "\nOpening Merge Request creation form..." >&2
+        fi
+
+        # Add description to merge request creation URL
         new_mr_url="${new_mr_url}&$(urlencode "merge_request[description]")=$(urlencode "$description")"
 
-        echo_debug
-        echo_debug "Opening:"
         echo_debug "$new_mr_url"
-
         open_in_browser "$new_mr_url"
     fi
 }
@@ -3210,6 +3221,11 @@ ${b}OPTIONS${r}
 
 ${b}COMMAND-SPECIFIC OPTIONS${r}
 
+   ${b}git mr open${r}
+
+       --silent
+           Do not print merge request summary or description, only open the browser.
+
    ${b}git mr update${r}
 
        -n, --new-section [NEW_SECTION_TITLE]
@@ -3425,6 +3441,9 @@ while [[ $# -gt 0 ]]; do
         -y|--yes)     GIT_MR_YES=1 ;;
         -v|--verbose) GIT_MR_VERBOSE=1 ;;
         --no-commits) GIT_MR_NO_COMMITS=1 ;;
+
+        # mr open
+        --silent) GIT_MR_OPEN_SILENT=1 ;;
 
         # mr update
         -n|--new-section) GIT_MR_UPDATE_NEW_SECTION=1
