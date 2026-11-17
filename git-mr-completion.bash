@@ -22,6 +22,7 @@ __git-mr_commands() {
 		ok
 		undraft
 		merge
+		rebase
 		base
 		code
 		hook
@@ -58,6 +59,7 @@ _git_mr() {
             update) [[ $mr_action == "menu" ]] && mr_action="menu-update" || mr_action="update" ;;
             edit)   [[ $mr_action == "menu" ]] && mr_action="menu-edit"   || mr_action="default" ;;
             merge) mr_action="merge" ;;
+            rebase) mr_action="rebase" ;;
             menu) mr_action="menu" ;;
             ip | cr | qa | ok) mr_action="transition" ;;
             IP | CR | QA | OK) mr_action="transition" ;;
@@ -95,7 +97,7 @@ _git_mr() {
             __gitcomp_nl_append '--no-color'
             __gitcomp_nl_append '--no-links'
         ;; esac
-        case $mr_action in default | update | menu-update | menu-edit | transition | merge)
+        case $mr_action in default | update | menu-update | menu-edit | transition | merge | rebase)
             __gitcomp_nl_append '-y'; __gitcomp_nl_append '--yes'
         ;; esac
         __gitcomp_nl_append '-v'; __gitcomp_nl_append '--verbose'
@@ -113,6 +115,10 @@ _git_mr() {
         ;; esac
         case $mr_action in merge)
             __gitcomp_nl_append '-f'; __gitcomp_nl_append '--force'
+        ;; esac
+        case $mr_action in rebase)
+            __gitcomp_nl_append '--without-pipeline'
+            __gitcomp_nl_append '--async'
         ;; esac
         return
     fi
@@ -140,6 +146,7 @@ _git_mr() {
                 i|ip|c|cr|q|qa|ok |\
                 un|und|undr|undra|undraf|undraft |\
                 mer|merg|merge |\
+                r|re|reb|reba|rebas|rebase |\
                 b|ba|bas|base |\
                 co|cod|code |\
                 h|ho|hoo|hook |\
