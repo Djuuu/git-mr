@@ -83,6 +83,9 @@ _git-mr() {
     case $mr_action in default|open) opts+=(
         '(-c --code)'{-c,--code}'[force issue code]:issue code:->issue_code'
     );; esac
+    case $mr_action in open) opts+=(
+        '(--silent)'--silent'[only open browser, without printing summary]'
+    );; esac
     case $mr_action in default|open|update) opts+=(
         '(-t --target)'{-t,--target}'[force target branch]:merge request target branch:->target_branch'
         '(-e --extended)'{-e,--extended}'[use full commit messages in description]'
